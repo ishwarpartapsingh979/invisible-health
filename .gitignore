@@ -1,0 +1,17 @@
+# Mac OS
+.DS_Store
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+project.xcworkspace/
+xcuserdata/
+# Swift Package Manager
+.build/
+Packages/
+# Secrets (CRITICAL)
+Secrets.swift
+.env
+keys/
+**/*_key.json
+backend/venv/
