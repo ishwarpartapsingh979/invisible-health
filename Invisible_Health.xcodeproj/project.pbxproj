@@ -58,6 +58,8 @@
 		0D4812402EF4317F0002A0D2 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		0D4812422EF4317F0002A0D2 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		0DF543E12EF9956A00AEE292 /* NutritionWidgetExtensionDebug.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NutritionWidgetExtensionDebug.entitlements; sourceTree = "<group>"; };
+		0DF544602EFE4BC800AEE292 /* main.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = main.py; sourceTree = "<group>"; };
+		0DF544612EFE4BC800AEE292 /* requirements.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = requirements.txt; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -145,6 +147,8 @@
 		0D4811FD2EF42D540002A0D2 = {
 			isa = PBXGroup;
 			children = (
+				0DF544632EFE4C0D00AEE292 /* Views */,
+				0DF544622EFE4BC800AEE292 /* backend */,
 				0DF543E12EF9956A00AEE292 /* NutritionWidgetExtensionDebug.entitlements */,
 				0D4812082EF42D540002A0D2 /* Invisible_Health */,
 				0D48121A2EF42D550002A0D2 /* Invisible_HealthTests */,
@@ -173,6 +177,22 @@
 				0D4812422EF4317F0002A0D2 /* SwiftUI.framework */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		0DF544622EFE4BC800AEE292 /* backend */ = {
+			isa = PBXGroup;
+			children = (
+				0DF544602EFE4BC800AEE292 /* main.py */,
+				0DF544612EFE4BC800AEE292 /* requirements.txt */,
+			);
+			path = backend;
+			sourceTree = "<group>";
+		};
+		0DF544632EFE4C0D00AEE292 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Views;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
