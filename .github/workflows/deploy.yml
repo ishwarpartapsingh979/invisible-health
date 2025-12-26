@@ -1,0 +1,29 @@
+name: Deploy Backend               # 1. Name of the workflow in GitHub UI
+on:
+  push:                            # 2. Trigger: When code is pushed...
+    branches: [ main ]             # 3. ...specifically to the 'main' branch...
+    paths:
+      - 'backend/**'               # 4. ...AND only if files inside 'backend/' changed.
+jobs:
+  deploy_functions:                # 5. Name of the job
+    runs-on: ubuntu-latest         # 6. Computer to use (Linux VM provided by GitHub)
+    steps:
+      - uses: actions/checkout@v3  # 7. Action: Download your code to the VM
+      
+      - id: 'auth'
+        uses: 'google-github-actions/auth@v1'
+        with:
+          # 8. CRITICAL: Log in to Google using the SECRET key
+          credentials_json: '${{ secrets.GCP_SA_KEY }}' 
+      - name: 'Set up Cloud SDK'   # 9. Action: Install 'gcloud' command line tool
+        uses: 'google-github-actions/setup-gcloud@v1'
+      - name: 'Deploy analyze-log' # 10. The actual command
+        run: |                     # 11. Pipe (|) means "multi-line script"
+          gcloud functions deploy analyze-log \    # Deploy function named 'analyze-log'
+            --gen2 \                               # Use Generation 2 (Better/Cheaper)
+            --runtime=python311 \                  # Use Python 3.11
+            --region=us-central1 \                 # Host in US Central
+            --source=./backend \                   # Code is in 'backend' folder
+            --entry-point=analyze_log \            # Function name in main.py
+            --trigger-http \                       # Trigger via URL (POST)
+            --allow-unauthenticated                # Public URL (Secured via App Logic later)
