@@ -19,11 +19,11 @@ jobs:
         uses: 'google-github-actions/setup-gcloud@v1'
       - name: 'Deploy analyze-log' # 10. The actual command
         run: |                     # 11. Pipe (|) means "multi-line script"
-          gcloud functions deploy analyze-log \    # Deploy function named 'analyze-log'
-            --gen2 \                               # Use Generation 2 (Better/Cheaper)
-            --runtime=python311 \                  # Use Python 3.11
-            --region=us-central1 \                 # Host in US Central
-            --source=./backend \                   # Code is in 'backend' folder
-            --entry-point=analyze_log \            # Function name in main.py
-            --trigger-http \                       # Trigger via URL (POST)
-            --allow-unauthenticated                # Public URL (Secured via App Logic later)
+	gcloud functions deploy analyze-log \
+            --gen2 \
+            --runtime=python311 \
+            --region=us-central1 \
+            --source=./backend \
+            --entry-point=analyze_log \
+            --trigger-http \
+            --allow-unauthenticated
