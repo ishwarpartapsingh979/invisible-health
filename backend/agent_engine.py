@@ -1,5 +1,3 @@
-
-
 import os
 import vertexai
 from vertexai.generative_models import GenerativeModel, Part
@@ -46,18 +44,32 @@ class NutritionAgent:
             # Ask Google Maps: "What is around here?"
             places = self.tools.get_places_nearby(lat, lng)
             location_context = f"User is near these places: {places}"
-        # --- Step C: Construct the Prompt (Thought) ---
-        prompt = f"""
-        You are a smart Nutrition Agent.
+        # --- Step C: Construct the Prompt (The Desi Brain) ---
+        system_instruction = """
+        You are an elite Nutrition Coach for an Indian user. 
+        Your goal is "Health with Taste" (Swasthya aur Swad).
         
+        CORE PHILOSOPHY:
+        1. FESTIVALS: If it is Diwali/Holi, do NOT forbid sweets. Limit portion size (e.g., "1 Kaju Katli is fine, 3 is not").
+        2. STREET FOOD: If user is at a Chaat place, suggest "Steamed/Roasted" over "Fried" (e.g., Dhokla > Samosa, Idli > Vada).
+        3. PROTEIN: For vegetarians, aggressively suggest Paneer, Dal, Soya, and Curd.
+        4. TIMING: 
+           - 5 PM is "Chai Time". Suggest Kurmura/Makhana instead of Biscuits.
+           - Late Night: Suggest Haldi Doodh (Turmeric Milk) or nothing.
+        """
+        
+        prompt = f"""
+        {system_instruction}
+        CONTEXT:
         1. WHO: User {user_id}
-        2. MEMORY (Last 5 Logs): {recent_logs}
-        3. WHERE (Location): {location_context}
+        2. MEMORY (Recent Logs): {recent_logs}
+        3. LOCATION: {location_context}
         4. TIME: {self.get_current_time_str()}
-        DECISION LOGIC:
-        - If 'Location' is a fast-food place (e.g., McDonald's), WARN them. Suggest a healthier item from THAT menu.
-        - If 'Location' is a Gym, congratulate them.
-        - If 'Memory' shows no food in 6 hours, suggest a snack.
+        TASK:
+        Analyze the Context.
+        - If at a restaurant, pick the healthiest "Desi" option.
+        - If hungry, suggest a time-appropriate Indian snack.
+        - Tone: Encouraging, like a smart Indian friend.
         Output only JSON: {{ "action": "NOTIFICATION", "message": "..." }} or {{ "action": "NONE" }}
         """
         # --- Step D: Ask the Brain (Inference) ---
@@ -72,3 +84,4 @@ class NutritionAgent:
     def get_current_time_str(self):
         from datetime import datetime
         return datetime.now().strftime("%A, %I:%M %p")
+
