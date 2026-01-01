@@ -57,6 +57,7 @@
 		0D48123E2EF4317F0002A0D2 /* NutritionWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NutritionWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		0D4812402EF4317F0002A0D2 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		0D4812422EF4317F0002A0D2 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		0D64DFB02F06B4C900A85580 /* agent_engine.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = agent_engine.py; sourceTree = "<group>"; };
 		0DF543E12EF9956A00AEE292 /* NutritionWidgetExtensionDebug.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NutritionWidgetExtensionDebug.entitlements; sourceTree = "<group>"; };
 		0DF544602EFE4BC800AEE292 /* main.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = main.py; sourceTree = "<group>"; };
 		0DF544612EFE4BC800AEE292 /* requirements.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = requirements.txt; sourceTree = "<group>"; };
@@ -182,6 +183,7 @@
 		0DF544622EFE4BC800AEE292 /* backend */ = {
 			isa = PBXGroup;
 			children = (
+				0D64DFB02F06B4C900A85580 /* agent_engine.py */,
 				0DF544602EFE4BC800AEE292 /* main.py */,
 				0DF544612EFE4BC800AEE292 /* requirements.txt */,
 			);
