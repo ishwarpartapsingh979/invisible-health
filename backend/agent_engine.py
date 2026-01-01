@@ -1,9 +1,4 @@
-#
-//  agent_engine.py
-//  Invisible_Health
-//
-//  Created by Ishwar Partap Singh on 01/01/26.
-//
+
 
 import os
 import vertexai
