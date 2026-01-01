@@ -109,6 +109,11 @@
 			path = NutritionWidget;
 			sourceTree = "<group>";
 		};
+		0D64DFB12F06C40400A85580 /* tools */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = tools;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -183,6 +188,7 @@
 		0DF544622EFE4BC800AEE292 /* backend */ = {
 			isa = PBXGroup;
 			children = (
+				0D64DFB12F06C40400A85580 /* tools */,
 				0D64DFB02F06B4C900A85580 /* agent_engine.py */,
 				0DF544602EFE4BC800AEE292 /* main.py */,
 				0DF544612EFE4BC800AEE292 /* requirements.txt */,
