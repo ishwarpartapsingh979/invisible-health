@@ -1,5 +1,4 @@
 import functions_framework
-from agent_engine import NutritionAgent
 import os
 # This decorator tells Google: "This function is reachable via HTTP"
 @functions_framework.http
@@ -8,12 +7,15 @@ def run_agent(request):
     The Entry Point. 
     Cloud Scheduler hits this URL every 30 minutes.
     """
-    
-    # 1. Initialize the Brain
     try:
+        # Lazy import to prevent container crash if dependencies are missing
+        from agent_engine import NutritionAgent
+        
+        # 1. Initialize the Brain
         agent = NutritionAgent()
+    except ImportError as e:
+        return f"CRITICAL: Dependency Error. check requirements.txt. Details: {str(e)}", 500
     except Exception as e:
-        # If secrets are missing, we crash early and tell the logs why.
         return f"Error initializing Agent: {str(e)}", 500
     # 2. Get All Users (In a real app, we might paginate 1000s of users)
     # For now, we just fetch a test user ID if provided in the URL `?user_id=123`
