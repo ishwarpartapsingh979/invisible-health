@@ -19,7 +19,7 @@ jobs:
         uses: 'google-github-actions/setup-gcloud@v1'
       - name: 'Deploy run-agent'
         run: |
-          gcloud functions deploy analyze-log \
+          gcloud functions deploy run-agent \
             --gen2 \
             --runtime=python311 \
             --region=us-central1 \
