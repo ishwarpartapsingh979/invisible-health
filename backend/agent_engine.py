@@ -3,6 +3,7 @@ import vertexai
 from vertexai.generative_models import GenerativeModel, Part
 from supabase import create_client, Client
 from tools.google_tools import GoogleTools  # <--- NEW: Import the Eyes
+from langfuse.decorators import observe  # <--- NEW: Import Observer
 class NutritionAgent:
     """
     The Brain of our Application (Level 2).
@@ -25,6 +26,7 @@ class NutritionAgent:
         
         # --- 3. SETUP EYES (Tools) ---
         self.tools = GoogleTools()
+    @observe(as_type="generation")
     def check_user_status(self, user_id: str, lat: float = None, lng: float = None):
         """
         The Core Loop (Level 2).
@@ -84,4 +86,3 @@ class NutritionAgent:
     def get_current_time_str(self):
         from datetime import datetime
         return datetime.now().strftime("%A, %I:%M %p")
-

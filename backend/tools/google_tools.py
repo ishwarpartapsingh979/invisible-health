@@ -2,6 +2,7 @@ import os
 import requests
 import vertexai
 from vertexai.preview.generative_models import Tool, GroundingSource
+from langfuse.decorators import observe  # <--- NEW
 class GoogleTools:
     """
     The Eyes of the Agent.
@@ -11,6 +12,7 @@ class GoogleTools:
         self.maps_key = os.environ.get("GOOGLE_MAPS_KEY")
         if not self.maps_key:
             print("Warning: GOOGLE_MAPS_KEY not found. Maps features will fail.")
+    @observe(as_type="tool")
     def get_places_nearby(self, lat: float, lng: float, radius: int = 500, type: str = "restaurant"):
         """
         Equivalent to: mcp-google-maps
@@ -48,3 +50,4 @@ class GoogleTools:
             google_search_retrieval=vertexai.preview.generative_models.GoogleSearchRetrieval()
         )
         return tool
+
