@@ -63,23 +63,40 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
     
     func scheduleDailyWakeUp() {
         let content = UNMutableNotificationContent()
-        content.title = "Ready to start your day?"
-        content.body = "Pre-flight diagnostics complete."
+        content.title = "Good Morning! ☀️"
+        content.body = "Your Agent is ready. Initialize?"
         content.sound = .default
         content.categoryIdentifier = "WAKE_UP_CATEGORY"
         
-        // TRIGGER: 15 seconds for testing
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 15, repeats: false)
-        let request = UNNotificationRequest(identifier: "daily_wake_up", content: content, trigger: trigger)
-        UNUserNotificationCenter.current().add(request)
+        // REAL TRIGGER: 8:00 AM Daily
+        var dateComponents = DateComponents()
+        dateComponents.hour = 8
+        dateComponents.minute = 0
+        let dailyTrigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
+        let dailyRequest = UNNotificationRequest(identifier: "daily_wake_up", content: content, trigger: dailyTrigger)
+        
+        // TEST TRIGGER: 10 Seconds from now (For you to test immediately)
+        let testTrigger = UNTimeIntervalNotificationTrigger(timeInterval: 10, repeats: false)
+        let testRequest = UNNotificationRequest(identifier: "test_wake_up", content: content, trigger: testTrigger)
+        
+        UNUserNotificationCenter.current().add(dailyRequest)
+        UNUserNotificationCenter.current().add(testRequest)
+        print("⏰ Scheduled Morning Warning (8 AM) + Test Warning (10s)")
     }
     
     // MARK: - UNUserNotificationCenterDelegate
     
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
         if response.actionIdentifier == "INITIALIZE_ACTION" {
-            // ✅ Flow 3.1: User tapped "Initialize" button (Background)
-            print("User tapped Initialize Button. Starting Live Activity...")
+            // ✅ Flow 3.1: User tapped "Initialize" button
+            print("🚀 User tapped Initialize. Triggering Agent...")
+            
+            // Trigger the Agent Manager
+            // Note: We are passing nil for location for now (Agent assumes "Home/Unknown").
+            // In a real app, we would fetch location here.
+            AgentManager.shared.triggerAgentCheck()
+            
+            // Also start the Live Activity to show the status
             startLiveActivity()
         } else if response.actionIdentifier == "EDIT_ACTION" {
             // ✅ WhatsApp Style: Handle Text Input
@@ -95,6 +112,14 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
                 var updatedState = activity.content.state
                 updatedState.waterIntake = max(0, updatedState.waterIntake - 1)
                 await activity.update(ActivityContent(state: updatedState, staleDate: nil))
+            }
+            
+            // 📡 Backend Sync: Undo the log (Fire and Forget)
+            let userId = "test_user_1"
+            if let url = URL(string: "https://us-central1-gen-lang-client-0009721575.cloudfunctions.net/run-agent?action=undo_water&user_id=\(userId)") {
+                let task = URLSession.shared.dataTask(with: url)
+                task.resume()
+                print("🚀 Backend Water Undo Triggered")
             }
         } else if response.actionIdentifier == UNNotificationDefaultActionIdentifier {
             // ✅ Flow 3.1 Alternative: User tapped the Notification Body (Opens App)
@@ -162,4 +187,3 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
             }
         }
     }
-}

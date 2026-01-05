@@ -72,7 +72,14 @@ class NutritionAgent:
         - If at a restaurant, pick the healthiest "Desi" option.
         - If hungry, suggest a time-appropriate Indian snack.
         - Tone: Encouraging, like a smart Indian friend.
-        Output only JSON: {{ "action": "NOTIFICATION", "message": "..." }} or {{ "action": "NONE" }}
+        Output only JSON: 
+        { 
+            "action": "NOTIFICATION", 
+            "message": "...", 
+            "calories": 0  // If user ate something, estimate calories. Else 0.
+        } 
+        or 
+        { "action": "NONE", "calories": 0 }
         """
         # --- Step D: Ask the Brain (Inference) ---
         # We attach the Search Tool so Gemini can "Google it" if needed.
@@ -86,3 +93,41 @@ class NutritionAgent:
     def get_current_time_str(self):
         from datetime import datetime
         return datetime.now().strftime("%A, %I:%M %p")
+    def log_water(self, user_id: str):
+        """
+        Logs a standard glass of water (250ml) to Supabase.
+        """
+        try:
+            self.supabase.table("logs").insert({
+                "user_id": user_id,
+                "type": "water",
+                "content": "Drank 1L water", # Simplified for now
+                "metadata": {"amount_ml": 1000}
+            }).execute()
+            return True
+        except Exception as e:
+            print(f"Error logging water: {e}")
+            return False
+    def undo_water(self, user_id: str):
+        """
+        Removes the most recent water log for the user today.
+        """
+        try:
+            # 1. Find the latest water log
+            response = self.supabase.table("logs") \
+                .select("id") \
+                .eq("user_id", user_id) \
+                .eq("type", "water") \
+                .order("created_at", desc=True) \
+                .limit(1) \
+                .execute()
+            
+            if response.data:
+                log_id = response.data[0]['id']
+                # 2. Delete it
+                self.supabase.table("logs").delete().eq("id", log_id).execute()
+                return True
+            return False # No log to delete
+        except Exception as e:
+            print(f"Error undoing water: {e}")
+            return False

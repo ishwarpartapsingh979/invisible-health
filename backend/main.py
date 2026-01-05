@@ -22,11 +22,23 @@ def run_agent(request):
     # or default to a dummy flow for safety.
     request_args = request.args
     target_user_id = request_args.get('user_id')
+    lat = request_args.get('lat')
+    lng = request_args.get('lng')
     if not target_user_id:
         return "Please provide ?user_id=... to check a specific user.", 200
     # 3. Run the "Mind Cycle" for that user
     try:
-        decision = agent.check_user_status(target_user_id)
+        # Convert lat/lng to float if they exist
+        if lat: lat = float(lat)
+        if lng: lng = float(lng)
+        
+        if request_args.get('action') == 'log_water':
+            agent.log_water(target_user_id)
+            return "Water Logged", 200
+        if request_args.get('action') == 'undo_water':
+            agent.undo_water(target_user_id)
+            return "Water Undo Successful", 200
+        decision = agent.check_user_status(target_user_id, lat=lat, lng=lng)
         
         # 4. Return the result (Logs show what happened)
         return f"Agent Checked User {target_user_id}. Decision: {decision}", 200
