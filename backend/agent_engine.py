@@ -27,10 +27,10 @@ class NutritionAgent:
         # --- 3. SETUP EYES (Tools) ---
         self.tools = GoogleTools()
     @observe(as_type="generation")
-    def check_user_status(self, user_id: str, lat: float = None, lng: float = None):
+    def check_user_status(self, user_id: str, lat: float = None, lng: float = None, steps: int = None):
         """
         The Core Loop (Level 2).
-        Now accepts Location (lat, lng) to see where the user is.
+        Now accepts Location (lat, lng) and Steps.
         """
         # --- Step A: Get Context (Memory) ---
         response = self.supabase.table("logs") \
@@ -46,6 +46,10 @@ class NutritionAgent:
             # Ask Google Maps: "What is around here?"
             places = self.tools.get_places_nearby(lat, lng)
             location_context = f"User is near these places: {places}"
+        
+        # Phase F: Steps Context
+        steps_context = f"STEPS TODAY: {steps}" if steps is not None else "STEPS: Unknown"
+
         # --- Step C: Construct the Prompt (The Desi Brain) ---
         system_instruction = """
         You are an elite Nutrition Coach for an Indian user. 
@@ -58,6 +62,7 @@ class NutritionAgent:
         4. TIMING: 
            - 5 PM is "Chai Time". Suggest Kurmura/Makhana instead of Biscuits.
            - Late Night: Suggest Haldi Doodh (Turmeric Milk) or nothing.
+        5. ACTIVITY: Praise high steps (>8000). Encourage low steps (<3000).
         """
         
         prompt = f"""
@@ -66,11 +71,13 @@ class NutritionAgent:
         1. WHO: User {user_id}
         2. MEMORY (Recent Logs): {recent_logs}
         3. LOCATION: {location_context}
-        4. TIME: {self.get_current_time_str()}
+        4. ACTIVITY: {steps_context}
+        5. TIME: {self.get_current_time_str()}
         TASK:
         Analyze the Context.
         - If at a restaurant, pick the healthiest "Desi" option.
         - If hungry, suggest a time-appropriate Indian snack.
+        - If steps are high, congratulate them.
         - Tone: Encouraging, like a smart Indian friend.
         Output only JSON: 
         { 
@@ -133,7 +140,7 @@ class NutritionAgent:
             print(f"Error undoing water: {e}")
             return False
     # --- SESSION LOGIC (Phase B) ---
-    def wake_up(self, user_id: str, fcm_token: str = None):
+    def wake_up(self, user_id: str, fcm_token: str = None, steps: int = None):
         """
         Starts a session. Sets is_active = True.
         """
@@ -146,6 +153,9 @@ class NutritionAgent:
             }
             if fcm_token:
                 data["fcm_token"] = fcm_token
+            if steps:
+                # We could log steps here too, but for now just acknowledging receipt
+                pass
                 
             self.supabase.table("agent_sessions").upsert(data).execute()
             return True

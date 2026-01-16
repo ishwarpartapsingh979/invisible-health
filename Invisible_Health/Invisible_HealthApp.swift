@@ -18,6 +18,9 @@ struct Invisible_HealthApp: App {
                 .environmentObject(notificationManager)
                 // 3. Request permissions when app launches
                 .onAppear {
+                    // Request HealthKit Permissions (Phase F)
+                    HealthManager.shared.requestAuthorization()
+                    
                     notificationManager.requestAuthorization()
                     // Phase B: Wake Up the Agent 🔋
                     AgentManager.shared.wakeUpAgent()

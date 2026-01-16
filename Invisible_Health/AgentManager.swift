@@ -16,100 +16,81 @@ class AgentManager: ObservableObject {
     @Published var isLoading: Bool = false
     
     func triggerAgentCheck(userId: String = "test_user_1", location: CLLocationCoordinate2D? = nil) {
-        guard var components = URLComponents(string: agentURL) else { return }
-        
-        var queryItems = [URLQueryItem(name: "user_id", value: userId)]
-        
-        // Add Location if available (The "Eyes")
-        if let loc = location {
-            queryItems.append(URLQueryItem(name: "lat", value: "\(loc.latitude)"))
-            queryItems.append(URLQueryItem(name: "lng", value: "\(loc.longitude)"))
-        }
-        
-        components.queryItems = queryItems
-        
-        guard let url = components.url else { return }
-        
-        print("🤖 calling Agent: \(url.absoluteString)")
-        
-        DispatchQueue.main.async {
-            self.isLoading = true
-            self.lastDecision = "Thinking... 🧠"
-        }
-        
-        let task = URLSession.shared.dataTask(with: url) { data, response, error in
+        // Fetch Steps (Phase F)
+        HealthManager.shared.fetchTodaySteps { steps in
+            guard var components = URLComponents(string: self.agentURL) else { return }
+            
+            var queryItems = [
+                URLQueryItem(name: "user_id", value: userId),
+                URLQueryItem(name: "steps", value: "\(Int(steps))")
+            ]
+            
+            // Add Location if available (The "Eyes")
+            if let loc = location {
+                queryItems.append(URLQueryItem(name: "lat", value: "\(loc.latitude)"))
+                queryItems.append(URLQueryItem(name: "lng", value: "\(loc.longitude)"))
+            }
+            
+            components.queryItems = queryItems
+            
+            guard let url = components.url else { return }
+            
+            print("🤖 Calling Agent (Steps: \(Int(steps))): \(url.absoluteString)")
+            
             DispatchQueue.main.async {
-                self.isLoading = false
+                self.isLoading = true
+                self.lastDecision = "Thinking... 🧠"
             }
             
-            if let error = error {
+            let task = URLSession.shared.dataTask(with: url) { data, response, error in
                 DispatchQueue.main.async {
-                    self.lastDecision = "Error: \(error.localizedDescription)"
+                    self.isLoading = false
                 }
-                return
-            }
-            
-            if let data = data {
-                do {
-                    // 1. Try to decode JSON
-                    if let json = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] {
-                        let message = json["message"] as? String ?? "Done"
-                        let calories = json["calories"] as? Int ?? 0
-                        
-                        DispatchQueue.main.async {
-                            print("🤖 Agent Response: \(message) | Calories: \(calories)")
-                            self.lastDecision = message
-                        }
-                        
-                        // 2. Update Live Activity (if calories > 0)
-                        if calories > 0 {
-                            for activity in Activity<NutritionActivityAttributes>.activities {
-                                var updatedState = activity.content.state
-                                updatedState.caloriesRemaining -= calories
-                                updatedState.lastUpdated = Date()
-                                await activity.update(ActivityContent(state: updatedState, staleDate: nil))
-                                print("🔥 Live Activity Updated: - \(calories) kcal")
-                            }
-                        }
+                
+                if let error = error {
+                    DispatchQueue.main.async {
+                        self.lastDecision = "Error: \(error.localizedDescription)"
                     }
-                    // Fallback: Just String
-                    else if let responseString = String(data: data, encoding: .utf8) {
-                        DispatchQueue.main.async {
-                            self.lastDecision = responseString
-                        }
-                    }
-                } catch {
-                     print("JSON Decode Error: \(error)")
+                    return
+                }
+                
+                if let data = data {
+                    // Use Centralized Helper (Phase F)
+                    self.handleAgentResponse(data) { _ in }
                 }
             }
+            task.resume()
         }
-        task.resume()
     }
     
     // MARK: - Phase B: Session Management
     
     func wakeUpAgent(userId: String = "test_user_1", fcmToken: String? = nil) {
-        // Construct URL for 'wake_up' action
-        guard var components = URLComponents(string: agentURL) else { return }
-        var queryItems = [
-            URLQueryItem(name: "user_id", value: userId),
-            URLQueryItem(name: "action", value: "wake_up")
-        ]
-        if let token = fcmToken {
-            queryItems.append(URLQueryItem(name: "fcm_token", value: token))
-        }
-        components.queryItems = queryItems
-        
-        guard let url = components.url else { return }
-        
-        print("☀️ Waking Up Agent: \(url.absoluteString)")
-        
-        URLSession.shared.dataTask(with: url) { _, _, _ in
-            DispatchQueue.main.async {
-                self.lastDecision = "Agent is Awake & Watching 👁️"
-                print("✅ Agent Woke Up")
+        // Fetch Steps first (Phase F)
+        HealthManager.shared.fetchTodaySteps { steps in
+            // Construct URL for 'wake_up' action
+            guard var components = URLComponents(string: self.agentURL) else { return }
+            var queryItems = [
+                URLQueryItem(name: "user_id", value: userId),
+                URLQueryItem(name: "action", value: "wake_up"),
+                URLQueryItem(name: "steps", value: "\(Int(steps))") // Add Steps
+            ]
+            if let token = fcmToken {
+                queryItems.append(URLQueryItem(name: "fcm_token", value: token))
             }
-        }.resume()
+            components.queryItems = queryItems
+            
+            guard let url = components.url else { return }
+            
+            print("☀️ Waking Up Agent (Steps: \(Int(steps))): \(url.absoluteString)")
+            
+            URLSession.shared.dataTask(with: url) { _, _, _ in
+                DispatchQueue.main.async {
+                    self.lastDecision = "Agent is Awake & Watching 👁️"
+                    print("✅ Agent Woke Up")
+                }
+            }.resume()
+        }
     }
     
     func sendHeartbeat(userId: String = "test_user_1") {
@@ -192,28 +173,56 @@ class AgentManager: ObservableObject {
             }
             
             if let data = data {
-                do {
-                    if let json = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] {
-                        let message = json["message"] as? String ?? "Done"
-                        let calories = json["calories"] as? Int ?? 0
-                        
-                        DispatchQueue.main.async {
-                            // Update Live Activity if needed
-                             if calories > 0 {
-                                self.updateLiveActivity(calories: calories)
-                            }
-                        }
-                        completion(message)
-                    }
-                } catch {
-                    // Fallback to raw string
-                    let str = String(data: data, encoding: .utf8) ?? "Done"
-                    completion(str)
-                }
+                // Use Centralized Helper (Phase F)
+                self.handleAgentResponse(data, completion: completion)
             }
         }.resume()
     }
     
+    // Helper to Handle Agent Response (Centralized)
+    private func handleAgentResponse(_ data: Data, completion: @escaping (String) -> Void) {
+        do {
+            if let json = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] {
+                let message = json["message"] as? String ?? "Done"
+                let calories = json["calories"] as? Int ?? 0
+                
+                // Parse Macros (Phase F)
+                let protein = json["protein"] as? Double
+                let carbs = json["carbs"] as? Double
+                let fat = json["fats"] as? Double // Note: Backend returns 'fats'
+                
+                DispatchQueue.main.async {
+                    // Update UI
+                    self.lastDecision = message
+                    print("🤖 Agent Response: \(message) | Calories: \(calories)")
+                    
+                    // Update Live Activity
+                    if calories > 0 {
+                        self.updateLiveActivity(calories: calories)
+                    }
+                    
+                    // Sync to HealthKit (Phase F)
+                    HealthManager.shared.logDietaryData(
+                        calories: Double(calories),
+                        protein: protein,
+                        carbs: carbs,
+                        fat: fat
+                    )
+                }
+                
+                completion(message)
+            } else {
+                 // Fallback
+                 let str = String(data: data, encoding: .utf8) ?? "Done"
+                 DispatchQueue.main.async { self.lastDecision = str }
+                 completion(str)
+            }
+        } catch {
+            print("❌ JSON Decode Error: \(error)")
+            completion("Error")
+        }
+    }
+
     // Helper to update Live Activity (reused code)
     private func updateLiveActivity(calories: Int) {
          Task {

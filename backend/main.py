@@ -52,6 +52,7 @@ def run_agent(request):
     target_user_id = request_args.get('user_id')
     lat = request_args.get('lat')
     lng = request_args.get('lng')
+    steps = request_args.get('steps') # Phase F: HealthKit Steps
     
     if not target_user_id:
         return "Please provide ?user_id=... to check a specific user.", 200
@@ -60,6 +61,7 @@ def run_agent(request):
         # Convert lat/lng to float if they exist
         if lat: lat = float(lat)
         if lng: lng = float(lng)
+        if steps: steps = int(steps)
         
         if request_args.get('action') == 'log_water':
             agent.log_water(target_user_id)
@@ -72,7 +74,8 @@ def run_agent(request):
         # --- Session Routes (Phase B) ---
         if request_args.get('action') == 'wake_up':
             fcm_token = request_args.get('fcm_token')
-            agent.wake_up(target_user_id, fcm_token)
+            # Pass steps to wake_up (Phase F)
+            agent.wake_up(target_user_id, fcm_token, steps)
             return "Agent Woken Up", 200
 
         if request_args.get('action') == 'heartbeat':
@@ -95,7 +98,8 @@ def run_agent(request):
             strategies = agent.get_sos_strategies(target_user_id)
             return strategies, 200, {'Content-Type': 'application/json'}
 
-        decision = agent.check_user_status(target_user_id, lat=lat, lng=lng)
+        # Default: Check Status (Silent Guardian)
+        decision = agent.check_user_status(target_user_id, lat=lat, lng=lng, steps=steps)
         
         # 4. Return the result (Logs show what happened)
         return f"Agent Checked User {target_user_id}. Decision: {decision}", 200
