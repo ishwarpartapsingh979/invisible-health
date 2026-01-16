@@ -128,6 +128,8 @@ class NutritionAgent:
                 self.supabase.table("logs").delete().eq("id", log_id).execute()
                 return True
             return False # No log to delete
+        
+        except Exception as e:  # <--- THIS WAS MISSING
             print(f"Error undoing water: {e}")
             return False
     # --- SESSION LOGIC (Phase B) ---
