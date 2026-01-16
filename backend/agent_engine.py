@@ -192,6 +192,125 @@ class NutritionAgent:
                 count_slept += 1
                 
             return f"Slept {count_slept} users."
-        except Exception as e:
             print(f"Error in midnight check: {e}")
             return f"Error: {e}"
+
+    # --- MULTIMODAL INTELLIGENCE (Phase C) ---
+
+    @observe(as_type="generation")
+    def process_multimodal_input(self, user_id: str, text: str = None, media_data: str = None, mime_type: str = "image/jpeg"):
+        """
+        Analyzes Text + Media (Image/Audio) input.
+        """
+        try:
+            # 1. Construct the User Message Parts
+            user_parts = []
+            
+            # Add Text if present
+            if text:
+                user_parts.append(text)
+            
+            # Add Media if present
+            if media_data:
+                import base64
+                # Decode Base64 to bytes
+                media_bytes = base64.b64decode(media_data)
+                # Create Part
+                media_part = Part.from_data(data=media_bytes, mime_type=mime_type)
+                user_parts.append(media_part)
+
+            if not user_parts:
+                return "Empty Input"
+
+            # 2. Add System Context
+            system_instruction = """
+            You are an elite Nutrition AI.
+            Analyze the input (Text/Image/Audio).
+            1. Identify Food: Name, Description, Healthiness.
+            2. Estimate Calories: Be scientific but realistic.
+            3. Advice: Give Desi/Indian context if applicable.
+            4. AUDIO: If audio, transcribe it essentially and process the food/intent.
+            
+            Output JSON:
+            {
+                "message": "Start with a friendly reaction...",
+                "food_name": "...",
+                "calories": 0,
+                "protein": 0,
+                "carbs": 0,
+                "fats": 0,
+                "action": "LOG_FOOD"
+            }
+            """
+            
+            # 3. Call Gemini
+            full_prompt = [system_instruction] + user_parts
+            
+            response = self.model.generate_content(full_prompt)
+            
+            # 4. Parse Response (Expect JSON)
+            response_text = response.text
+            
+            # Sanitize (Gemini sometimes adds markdown backticks)
+            clean_json = response_text.replace("```json", "").replace("```", "").strip()
+            
+            # 5. Return
+            return clean_json
+            
+        except Exception as e:
+            print(f"Error processing multimodal: {e}")
+            return f'{{"message": "Error analyzing input: {str(e)}", "calories": 0}}'
+
+    # --- DATA FEED (Phase D) ---
+
+    def get_logs(self, user_id: str):
+        """
+        Fetches the last 20 logs for the user.
+        """
+        try:
+            response = self.supabase.table("logs") \
+                .select("*") \
+                .eq("user_id", user_id) \
+                .order("created_at", desc=True) \
+                .limit(20) \
+                .execute()
+            
+            # Helper to make datetime serializable (Supabase returns ISO strings so it's fine)
+            return response.data
+        except Exception as e:
+            print(f"Error fetching logs: {e}")
+            return []
+
+    # --- SOS INTELLIGENCE (Phase E) ---
+
+    @observe(as_type="generation")
+    def get_sos_strategies(self, user_id: str):
+        """
+        Generates 3 quick, actionable strategies to fight cravings.
+        """
+        try:
+            # Context: Can get time of day, location, or recent logs? 
+            # For MVP, just simple generation.
+            
+            prompt = """
+            User is having a craving panic (SOS).
+            Generate 3 quick, short, punchy strategies to reset their mind.
+            Format STRICT JSON:
+            [
+                {"title": "...", "description": "...", "icon": "wind", "color": "blue"},
+                {"title": "...", "description": "...", "icon": "drop.fill", "color": "cyan"},
+                {"title": "...", "description": "...", "icon": "figure.walk", "color": "green"}
+            ]
+            Keep descriptions under 10 words.
+            Icons should be valid SF Symbols names if possible (e5. wind, drop.fill, figure.walk, phone.fill, leaf.fill, flame.fill).
+            Colors: blue, red, orange, green, purple.
+            """
+            
+            response = self.model.generate_content(prompt)
+            clean_json = response.text.replace("```json", "").replace("```", "").strip()
+            return clean_json
+            
+        except Exception as e:
+            print(f"Error SOS: {e}")
+            # Fallback
+            return '[{"title": "Breathe", "description": "Inhale 4s, Hold 4s, Exhale 4s.", "icon": "lungs.fill", "color": "blue"}]'

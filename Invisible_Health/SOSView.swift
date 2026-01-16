@@ -6,17 +6,13 @@
 //
 
 import SwiftUI
+
 struct SOSView: View {
     @Environment(\.presentationMode) var presentationMode
     
-    // Placeholder Data for Cravings Fighters
-    // In the future, this will be fetched from Gemini
-    let strategies = [
-        CravingsStrategy(icon: "lungs.fill", title: "5-Minute Box Breathing", description: "Inhale 4s, Hold 4s, Exhale 4s, Hold 4s.", color: .blue),
-        CravingsStrategy(icon: "drop.fill", title: "Drink a Glass of Water", description: "Sometimes thirst is confused for hunger.", color: .cyan),
-        CravingsStrategy(icon: "figure.walk", title: "Take a Brisk Walk", description: "Change your environment to reset your mind.", color: .green),
-        CravingsStrategy(icon: "phone.fill", title: "Call a Friend", description: "Distraction is the best cure.", color: .orange)
-    ]
+    // Real Data
+    @State private var strategies: [AgentManager.AgentSOSStrategy] = []
+    @State private var isLoading = true
     
     var body: some View {
         NavigationView {
@@ -45,23 +41,18 @@ struct SOSView: View {
                     .padding(.bottom, 20)
                     
                     // List of Strategies
-                    ScrollView {
-                        VStack(spacing: 15) {
-                            ForEach(strategies) { strategy in
-                                StrategyCard(strategy: strategy)
+                    if isLoading {
+                        ProgressView("Asking AI for help...")
+                            .padding()
+                    } else {
+                        ScrollView {
+                            VStack(spacing: 15) {
+                                ForEach(strategies) { strategy in
+                                    StrategyCard(strategy: strategy)
+                                }
                             }
-                            
-                            // AI Placeholder
-                            HStack {
-                                Image(systemName: "sparkles")
-                                Text("More AI Suggestions coming soon...")
-                                    .font(.caption)
-                                    .italic()
-                            }
-                            .foregroundColor(.gray)
-                            .padding(.top, 20)
+                            .padding(.horizontal)
                         }
-                        .padding(.horizontal)
                     }
                 }
             }
@@ -69,28 +60,29 @@ struct SOSView: View {
                 presentationMode.wrappedValue.dismiss()
             })
         }
+        .onAppear {
+            AgentManager.shared.fetchSOSStrategies { fetchedStrategies in
+                self.strategies = fetchedStrategies
+                self.isLoading = false
+            }
+        }
     }
 }
-struct CravingsStrategy: Identifiable {
-    let id = UUID()
-    let icon: String
-    let title: String
-    let description: String
-    let color: Color
-}
+
+// Helper View
 struct StrategyCard: View {
-    let strategy: CravingsStrategy
+    let strategy: AgentManager.AgentSOSStrategy
     
     var body: some View {
         HStack(spacing: 20) {
             ZStack {
                 Circle()
-                    .fill(strategy.color.opacity(0.15))
+                    .fill(color(from: strategy.color).opacity(0.15))
                     .frame(width: 60, height: 60)
                 
                 Image(systemName: strategy.icon)
                     .font(.title2)
-                    .foregroundColor(strategy.color)
+                    .foregroundColor(color(from: strategy.color))
             }
             
             VStack(alignment: .leading, spacing: 4) {
@@ -113,5 +105,17 @@ struct StrategyCard: View {
         .background(Color.white)
         .cornerRadius(16)
         .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+    }
+    
+    func color(from name: String) -> Color {
+        switch name {
+        case "blue": return .blue
+        case "red": return .red
+        case "green": return .green
+        case "orange": return .orange
+        case "purple": return .purple
+        case "cyan": return .cyan
+        default: return .gray
+        }
     }
 }

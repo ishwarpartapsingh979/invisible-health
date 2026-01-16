@@ -260,7 +260,12 @@ struct ContentView: View {
         print("🛑 REAL Recording Stopped. Audio saved.")
         
         // Trigger Analysis
-        NotificationManager.shared.simulateBackendAnalysis()
+        let docPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let audioFilename = docPath.appendingPathComponent("nutrition_log.m4a")
+        
+        AgentManager.shared.sendMultimodalInput(text: "Analyze this audio log", image: nil, audioURL: audioFilename) { response in
+             print("🤖 Audio Analysis: \(response)")
+        }
     }
 }
 // Simple Image Picker Wrapper
@@ -279,18 +284,21 @@ struct ImagePicker: UIViewControllerRepresentable {
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
     }
-    final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
-        var parent: ImagePicker
-        init(_ parent: ImagePicker) { self.parent = parent }
-        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
-            if let image = info[UIImagePickerController.InfoKey.originalImage] as? UIImage {
-                parent.selectedImage = image
-                // Simulate Analysis when image is picked
-                NotificationManager.shared.simulateBackendAnalysis()
+        final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+            var parent: ImagePicker
+            init(_ parent: ImagePicker) { self.parent = parent }
+            func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
+                if let image = info[UIImagePickerController.InfoKey.originalImage] as? UIImage {
+                    parent.selectedImage = image
+                    // Real Brain Analysis 🧠
+                    AgentManager.shared.sendMultimodalInput(text: "Analyze this image", image: image) { response in
+                        print("🤖 Image Analysis: \(response)")
+                        // Note: In a real app, we'd show this in a Popover or Notification
+                    }
+                }
+                parent.presentationMode.wrappedValue.dismiss()
             }
-            parent.presentationMode.wrappedValue.dismiss()
         }
-    }
 }
 // Helper for Tab Buttons
 struct TabButton: View {

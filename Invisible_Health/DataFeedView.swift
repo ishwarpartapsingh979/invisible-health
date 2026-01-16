@@ -6,13 +6,10 @@
 //
 
 import SwiftUI
+
 struct DataFeedView: View {
-    // Sample Data
-    @State private var items = [
-        ("Salmon & Rice Bowl", "650 kcal - 45g Protein", "Today, 12:30 PM"),
-        ("Oatmeal & Berries", "320 kcal - 12g Protein", "Today, 8:00 AM"),
-        ("Protein Shake", "180 kcal - 25g Protein", "Yesterday, 9:00 PM")
-    ]
+    // Real Data
+    @State private var logs: [AgentManager.NutritionLog] = []
     
     var body: some View {
         VStack(alignment: .leading) {
@@ -24,29 +21,41 @@ struct DataFeedView: View {
             
             ScrollView {
                 VStack(spacing: 16) {
-                    ForEach(0..<items.count, id: \.self) { index in
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(items[index].0)
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.white)
-                                Text(items[index].1)
-                                    .font(.caption)
+                    if logs.isEmpty {
+                        Text("No logs yet. Try logging some food!")
+                            .foregroundColor(.gray)
+                            .padding(.top, 40)
+                    } else {
+                        ForEach(logs) { log in
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(log.food_name)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.white)
+                                    Text("\(log.calories) kcal") // Simplified format
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                }
+                                Spacer()
+                                Text(log.formattedDate)
+                                    .font(.caption2)
                                     .foregroundColor(.gray)
                             }
-                            Spacer()
-                            Text(items[index].2)
-                                .font(.caption2)
-                                .foregroundColor(.gray)
+                            .padding()
+                            .background(Color.white.opacity(0.1))
+                            .cornerRadius(12)
                         }
-                        .padding()
-                        .background(Color.white.opacity(0.1))
-                        .cornerRadius(12)
                     }
                 }
                 .padding(.horizontal)
             }
         }
         .background(Color.black)
+        .onAppear {
+            // Fetch Real Data
+            AgentManager.shared.fetchLogs { fetchedLogs in
+                self.logs = fetchedLogs
+            }
+        }
     }
 }
