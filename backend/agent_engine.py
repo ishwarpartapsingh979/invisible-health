@@ -192,6 +192,7 @@ class NutritionAgent:
                 count_slept += 1
                 
             return f"Slept {count_slept} users."
+        except Exception as e: 
             print(f"Error in midnight check: {e}")
             return f"Error: {e}"
 

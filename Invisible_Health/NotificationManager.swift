@@ -187,3 +187,4 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
             }
         }
     }
+}
