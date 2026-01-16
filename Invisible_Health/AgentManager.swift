@@ -1,10 +1,3 @@
-//
-//  AgentManager.swift
-//  Invisible_Health
-//
-//  Created by Ishwar Partap Singh on 05/01/26.
-//
-
 import Foundation
 import CoreLocation
 class AgentManager: ObservableObject {
@@ -86,5 +79,46 @@ class AgentManager: ObservableObject {
             }
         }
         task.resume()
+    }
+    
+    // MARK: - Phase B: Session Management
+    
+    func wakeUpAgent(userId: String = "test_user_1", fcmToken: String? = nil) {
+        // Construct URL for 'wake_up' action
+        guard var components = URLComponents(string: agentURL) else { return }
+        var queryItems = [
+            URLQueryItem(name: "user_id", value: userId),
+            URLQueryItem(name: "action", value: "wake_up")
+        ]
+        if let token = fcmToken {
+            queryItems.append(URLQueryItem(name: "fcm_token", value: token))
+        }
+        components.queryItems = queryItems
+        
+        guard let url = components.url else { return }
+        
+        print("☀️ Waking Up Agent: \(url.absoluteString)")
+        
+        URLSession.shared.dataTask(with: url) { _, _, _ in
+            DispatchQueue.main.async {
+                self.lastDecision = "Agent is Awake & Watching 👁️"
+                print("✅ Agent Woke Up")
+            }
+        }.resume()
+    }
+    
+    func sendHeartbeat(userId: String = "test_user_1") {
+        // Construct URL for 'heartbeat' action
+        guard var components = URLComponents(string: agentURL) else { return }
+        components.queryItems = [
+            URLQueryItem(name: "user_id", value: userId),
+            URLQueryItem(name: "action", value: "heartbeat")
+        ]
+        
+        guard let url = components.url else { return }
+        
+        print("💓 Sending Heartbeat: \(url.absoluteString)")
+        
+        URLSession.shared.dataTask(with: url).resume()
     }
 }

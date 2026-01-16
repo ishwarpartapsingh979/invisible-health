@@ -38,6 +38,18 @@ def run_agent(request):
         if request_args.get('action') == 'undo_water':
             agent.undo_water(target_user_id)
             return "Water Undo Successful", 200
+        # --- Session Routes (Phase B) ---
+        if request_args.get('action') == 'wake_up':
+            fcm_token = request_args.get('fcm_token')
+            agent.wake_up(target_user_id, fcm_token)
+            return "Agent Woken Up", 200
+        if request_args.get('action') == 'heartbeat':
+            agent.heartbeat(target_user_id)
+            return "Heartbeat Received", 200
+            
+        if request_args.get('action') == 'midnight_check':
+            result = agent.midnight_check()
+            return f"Midnight Check Complete: {result}", 200
         decision = agent.check_user_status(target_user_id, lat=lat, lng=lng)
         
         # 4. Return the result (Logs show what happened)

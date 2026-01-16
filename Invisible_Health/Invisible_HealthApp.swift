@@ -19,6 +19,8 @@ struct Invisible_HealthApp: App {
                 // 3. Request permissions when app launches
                 .onAppear {
                     notificationManager.requestAuthorization()
+                    // Phase B: Wake Up the Agent 🔋
+                    AgentManager.shared.wakeUpAgent()
                 }
         }
     }

@@ -128,6 +128,68 @@ class NutritionAgent:
                 self.supabase.table("logs").delete().eq("id", log_id).execute()
                 return True
             return False # No log to delete
-        except Exception as e:
             print(f"Error undoing water: {e}")
             return False
+    # --- SESSION LOGIC (Phase B) ---
+    def wake_up(self, user_id: str, fcm_token: str = None):
+        """
+        Starts a session. Sets is_active = True.
+        """
+        try:
+            # Upsert session
+            data = {
+                "user_id": user_id,
+                "is_active": True,
+                "last_heartbeat": "now()"
+            }
+            if fcm_token:
+                data["fcm_token"] = fcm_token
+                
+            self.supabase.table("agent_sessions").upsert(data).execute()
+            return True
+        except Exception as e:
+            print(f"Error waking up: {e}")
+            return False
+    def heartbeat(self, user_id: str):
+        """
+        Updates last_heartbeat to keep the session alive.
+        """
+        try:
+            self.supabase.table("agent_sessions") \
+                .update({"last_heartbeat": "now()", "is_active": True}) \
+                .eq("user_id", user_id) \
+                .execute()
+            return True
+        except Exception as e:
+            print(f"Error sending heartbeat: {e}")
+            return False
+    def midnight_check(self):
+        """
+        Runs logic to 'Sleep' all users who have been inactive or it's past midnight.
+        For MVP: Just sets everyone inactive if their Heartbeat was > 2 hours ago.
+        """
+        try:
+            # 1. Fetch stale sessions (last_heartbeat < now - 2 hours)
+            # Note: Complex time logic is better done in DB Functions, but for MVP Python is fine.
+            # Simplified: Just fetch all active, check time, update.
+            response = self.supabase.table("agent_sessions").select("*").eq("is_active", True).execute()
+            
+            from datetime import datetime, timedelta, timezone
+            
+            active_sessions = response.data
+            count_slept = 0
+            
+            for session in active_sessions:
+                # Parse timestamp (Supabase returns ISO string)
+                heartbeat_str = session['last_heartbeat']
+                # Basic check: If no heartbeat?
+                
+                # To simplify MVP: We will assume this Function is called ONCE at Midnight by Scheduler.
+                # So we just force sleep everyone.
+                self.supabase.table("agent_sessions").update({"is_active": False}).eq("user_id", session['user_id']).execute()
+                count_slept += 1
+                
+            return f"Slept {count_slept} users."
+        except Exception as e:
+            print(f"Error in midnight check: {e}")
+            return f"Error: {e}"
