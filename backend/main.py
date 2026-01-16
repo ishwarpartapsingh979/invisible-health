@@ -1,7 +1,7 @@
 import functions_framework
 import os
 # This decorator tells Google: "This function is reachable via HTTP"
-@functions_framework.http
+
 def run_agent(request):
     """
     The Entry Point. 
