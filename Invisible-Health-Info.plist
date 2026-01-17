@@ -1,15 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-<dict>
-    <key>NSHealthShareUsageDescription</key>
-    <string>We use your health data (Steps, Workouts) to personalize your AI nutrition coaching.</string>
-    <key>NSHealthUpdateUsageDescription</key>
-    <string>We write your food logs (Calories, Macros) to Apple Health for your records.</string>
-    <key>UIBackgroundModes</key>
-    <array>
-        <string>fetch</string>
-        <string>processing</string>
-    </array>
-</dict>
+<dict/>
 </plist>
