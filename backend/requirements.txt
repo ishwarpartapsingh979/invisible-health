@@ -8,3 +8,5 @@ supabase==2.3.0
 python-dotenv==1.0.0
 # 5. requests: For making HTTP calls (e.g., to Google Maps API later)
 requests==2.31.0
+# 6. langfuse: For Observability
+langfuse==2.16.0

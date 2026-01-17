@@ -100,6 +100,7 @@ class NutritionAgent:
     def get_current_time_str(self):
         from datetime import datetime
         return datetime.now().strftime("%A, %I:%M %p")
+    @observe()
     def log_water(self, user_id: str):
         """
         Logs a standard glass of water (250ml) to Supabase.
@@ -115,6 +116,7 @@ class NutritionAgent:
         except Exception as e:
             print(f"Error logging water: {e}")
             return False
+    @observe()
     def undo_water(self, user_id: str):
         """
         Removes the most recent water log for the user today.
@@ -140,6 +142,7 @@ class NutritionAgent:
             print(f"Error undoing water: {e}")
             return False
     # --- SESSION LOGIC (Phase B) ---
+    @observe()
     def wake_up(self, user_id: str, fcm_token: str = None, steps: int = None):
         """
         Starts a session. Sets is_active = True.
