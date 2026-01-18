@@ -15,9 +15,11 @@ def run_agent(request):
         # 1. Initialize the Brain
         agent = NutritionAgent()
     except ImportError as e:
-        return f"CRITICAL: Dependency Error. check requirements.txt. Details: {str(e)}", 500
+        import json
+        return json.dumps({"error": f"CRITICAL: Dependency Error. check requirements.txt. Details: {str(e)}"}), 500, {'Content-Type': 'application/json'}
     except Exception as e:
-        return f"Error initializing Agent: {str(e)}", 500
+        import json
+        return json.dumps({"error": f"Error initializing Agent: {str(e)}"}), 500, {'Content-Type': 'application/json'}
 
     # --- HANDLE POST (Multimodal Chat) ---
     if request.method == 'POST':
