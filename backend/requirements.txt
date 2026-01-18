@@ -1,7 +1,8 @@
 # 1. functions-framework: Google's library to run this code as a Cloud Function
 functions-framework==3.4.0
 # 2. google-cloud-aiplatform: The official SDK for Gemini (Vertex AI) on Google Cloud
-google-cloud-aiplatform>=1.38.0
+# 2. google-cloud-aiplatform: The official SDK for Gemini (Vertex AI) on Google Cloud
+google-cloud-aiplatform==1.60.0
 # 3. supabase: To talk to your database (Memory)
 supabase==2.3.0
 # 4. python-dotenv: To read secrets from .env file when testing locally
