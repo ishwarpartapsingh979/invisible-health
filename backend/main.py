@@ -16,10 +16,12 @@ def run_agent(request):
         agent = NutritionAgent()
     except ImportError as e:
         import json
-        return json.dumps({"error": f"CRITICAL: Dependency Error. check requirements.txt. Details: {str(e)}"}), 500, {'Content-Type': 'application/json'}
+        import traceback
+        return json.dumps({"error": f"ImportError: {str(e)}", "trace": traceback.format_exc()}), 500, {'Content-Type': 'application/json'}
     except Exception as e:
         import json
-        return json.dumps({"error": f"Error initializing Agent: {str(e)}"}), 500, {'Content-Type': 'application/json'}
+        import traceback
+        return json.dumps({"error": f"Error initializing Agent: {str(e)}", "trace": traceback.format_exc()}), 500, {'Content-Type': 'application/json'}
 
     # --- HANDLE POST (Multimodal Chat) ---
     if request.method == 'POST':
