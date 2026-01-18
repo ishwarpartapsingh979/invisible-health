@@ -47,7 +47,7 @@ class GoogleTools:
         The Agent passes this to the model, and the model decides when to search.
         """
         tool = Tool.from_google_search_retrieval(
-            google_search_retrieval=vertexai.preview.generative_models.GoogleSearchRetrieval()
+            google_search_retrieval=vertexai.generative_models.GoogleSearchRetrieval()
         )
         return tool
 
