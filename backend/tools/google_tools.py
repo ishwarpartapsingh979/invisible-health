@@ -1,7 +1,7 @@
 import os
 import requests
 import vertexai
-from vertexai.preview.generative_models import Tool, GroundingSource
+from vertexai.generative_models import Tool, GroundingSource
 from langfuse.decorators import observe  # <--- NEW
 class GoogleTools:
     """
