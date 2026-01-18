@@ -4,7 +4,7 @@ functions-framework==3.4.0
 # 2. google-cloud-aiplatform: The official SDK for Gemini (Vertex AI) on Google Cloud
 google-cloud-aiplatform==1.60.0
 # 3. supabase: To talk to your database (Memory)
-supabase==2.3.0
+supabase==2.13.0
 # 4. python-dotenv: To read secrets from .env file when testing locally
 python-dotenv==1.0.0
 # 5. requests: For making HTTP calls (e.g., to Google Maps API later)
