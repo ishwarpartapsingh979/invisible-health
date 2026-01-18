@@ -22,7 +22,7 @@ class NutritionAgent:
         self.supabase: Client = create_client(url, key)
         # --- 2. SETUP BRAIN (Gemini) ---
         vertexai.init()
-        self.model = GenerativeModel("gemini-1.5-pro-001")
+        self.model = GenerativeModel("gemini-2.5-pro")
         
         # --- 3. SETUP EYES (Tools) ---
         self.tools = GoogleTools()
