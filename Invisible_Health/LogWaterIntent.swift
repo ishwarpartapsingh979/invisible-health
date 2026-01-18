@@ -33,7 +33,7 @@ public struct LogWaterIntent: LiveActivityIntent {
         scheduleWaterNotification()
         
         // 3. Persist to Backend (Fire and Forget)
-        let userId = "test_user_1" // TODO: Use real ID
+        let userId = "00000000-0000-0000-0000-000000000001" // TODO: Use real ID
         if let url = URL(string: "https://us-central1-gen-lang-client-0009721575.cloudfunctions.net/run-agent?action=log_water&user_id=\(userId)") {
             let task = URLSession.shared.dataTask(with: url)
             task.resume()

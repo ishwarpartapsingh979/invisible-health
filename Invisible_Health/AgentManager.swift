@@ -15,7 +15,8 @@ class AgentManager: ObservableObject {
     @Published var lastDecision: String = "Agent is sleeping..."
     @Published var isLoading: Bool = false
     
-    func triggerAgentCheck(userId: String = "test_user_1", location: CLLocationCoordinate2D? = nil) {
+    // Use a Valid UUID for Supabase (v4 placeholder)
+    func triggerAgentCheck(userId: String = "00000000-0000-0000-0000-000000000001", location: CLLocationCoordinate2D? = nil) {
         // Fetch Steps (Phase F)
         HealthManager.shared.fetchTodaySteps { steps in
             guard var components = URLComponents(string: self.agentURL) else { return }
@@ -65,7 +66,7 @@ class AgentManager: ObservableObject {
     
     // MARK: - Phase B: Session Management
     
-    func wakeUpAgent(userId: String = "test_user_1", fcmToken: String? = nil) {
+    func wakeUpAgent(userId: String = "00000000-0000-0000-0000-000000000001", fcmToken: String? = nil) {
         // Fetch Steps first (Phase F)
         HealthManager.shared.fetchTodaySteps { steps in
             // Construct URL for 'wake_up' action
@@ -93,7 +94,7 @@ class AgentManager: ObservableObject {
         }
     }
     
-    func sendHeartbeat(userId: String = "test_user_1") {
+    func sendHeartbeat(userId: String = "00000000-0000-0000-0000-000000000001") {
         // Construct URL for 'heartbeat' action
         guard var components = URLComponents(string: agentURL) else { return }
         components.queryItems = [
@@ -114,7 +115,7 @@ class AgentManager: ObservableObject {
     
     // MARK: - Phase C: Multimodal Chat
     
-    func sendMultimodalInput(text: String?, image: UIImage?, audioURL: URL? = nil, userId: String = "test_user_1", completion: @escaping (String) -> Void) {
+    func sendMultimodalInput(text: String?, image: UIImage?, audioURL: URL? = nil, userId: String = "00000000-0000-0000-0000-000000000001", completion: @escaping (String) -> Void) {
         guard let url = URL(string: agentURL) else { return }
         
         var request = URLRequest(url: url)
@@ -219,6 +220,10 @@ class AgentManager: ObservableObject {
             }
         } catch {
             print("❌ JSON Decode Error: \(error)")
+            // Debug Raw Data (e.g. if Backend returned 500 HTML)
+            if let str = String(data: data, encoding: .utf8) {
+                print("📝 WakeUp Mismatch Raw Data: \(str)")
+            }
             completion("Error")
         }
     }
@@ -253,7 +258,7 @@ class AgentManager: ObservableObject {
         }
     }
     
-    func fetchLogs(userId: String = "test_user_1", completion: @escaping ([NutritionLog]) -> Void) {
+    func fetchLogs(userId: String = "00000000-0000-0000-0000-000000000001", completion: @escaping ([NutritionLog]) -> Void) {
         // Construct 'get_logs' action
         guard var components = URLComponents(string: agentURL) else { return }
         components.queryItems = [
@@ -301,7 +306,7 @@ class AgentManager: ObservableObject {
         }
     }
     
-    func fetchSOSStrategies(userId: String = "test_user_1", completion: @escaping ([AgentSOSStrategy]) -> Void) {
+    func fetchSOSStrategies(userId: String = "00000000-0000-0000-0000-000000000001", completion: @escaping ([AgentSOSStrategy]) -> Void) {
         // Construct 'sos' action
         guard var components = URLComponents(string: agentURL) else { return }
         components.queryItems = [

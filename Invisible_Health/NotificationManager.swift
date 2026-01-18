@@ -94,7 +94,8 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
             // Trigger the Agent Manager
             // Note: We are passing nil for location for now (Agent assumes "Home/Unknown").
             // In a real app, we would fetch location here.
-            AgentManager.shared.triggerAgentCheck()
+            // Wake up Agent on Step Change
+            AgentManager.shared.wakeUpAgent(userId: "00000000-0000-0000-0000-000000000001", fcmToken: nil)
             
             // Also start the Live Activity to show the status
             startLiveActivity()
