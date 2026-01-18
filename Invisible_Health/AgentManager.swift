@@ -322,6 +322,9 @@ class AgentManager: ObservableObject {
                     }
                 } catch {
                     print("❌ Error decoding SOS: \(error)")
+                    if let str = String(data: data, encoding: .utf8) {
+                        print("📝 JSON Mismatch Raw Data: \(str)")
+                    }
                     DispatchQueue.main.async { completion([]) }
                 }
             } else {
