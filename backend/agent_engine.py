@@ -22,7 +22,10 @@ class NutritionAgent:
         self.supabase: Client = create_client(url, key)
         # --- 2. SETUP BRAIN (Gemini) ---
         vertexai.init()
-        self.model = GenerativeModel("gemini-2.5-pro")
+        self.model = GenerativeModel(
+            "gemini-2.5-pro",
+            generation_config={"response_mime_type": "application/json"}
+        )
         
         # --- 3. SETUP EYES (Tools) ---
         self.tools = GoogleTools()
@@ -49,7 +52,6 @@ class NutritionAgent:
         
         # Phase F: Steps Context
         steps_context = f"STEPS TODAY: {steps}" if steps is not None else "STEPS: Unknown"
-
         # --- Step C: Construct the Prompt (The Desi Brain) ---
         system_instruction = """
         You are an elite Nutrition Coach for an Indian user. 
@@ -205,12 +207,10 @@ class NutritionAgent:
                 count_slept += 1
                 
             return f"Slept {count_slept} users."
-        except Exception as e: 
+        except Exception as e:
             print(f"Error in midnight check: {e}")
             return f"Error: {e}"
-
     # --- MULTIMODAL INTELLIGENCE (Phase C) ---
-
     @observe(as_type="generation")
     def process_multimodal_input(self, user_id: str, text: str = None, media_data: str = None, mime_type: str = "image/jpeg"):
         """
@@ -232,10 +232,8 @@ class NutritionAgent:
                 # Create Part
                 media_part = Part.from_data(data=media_bytes, mime_type=mime_type)
                 user_parts.append(media_part)
-
             if not user_parts:
                 return "Empty Input"
-
             # 2. Add System Context
             system_instruction = """
             You are an elite Nutrition AI.
@@ -274,9 +272,7 @@ class NutritionAgent:
         except Exception as e:
             print(f"Error processing multimodal: {e}")
             return f'{{"message": "Error analyzing input: {str(e)}", "calories": 0}}'
-
     # --- DATA FEED (Phase D) ---
-
     def get_logs(self, user_id: str):
         """
         Fetches the last 20 logs for the user.
@@ -294,16 +290,14 @@ class NutritionAgent:
         except Exception as e:
             print(f"Error fetching logs: {e}")
             return []
-
     # --- SOS INTELLIGENCE (Phase E) ---
-
     @observe(as_type="generation")
     def get_sos_strategies(self, user_id: str):
         """
         Generates 3 quick, actionable strategies to fight cravings.
         """
         try:
-            # Context: Can get time of day, location, or recent logs? 
+            # Context: Can get time of day, location, or recent logs?
             # For MVP, just simple generation.
             
             prompt = """
