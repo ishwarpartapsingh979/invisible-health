@@ -271,8 +271,12 @@ class NutritionAgent:
             try:
                 log_data = json.loads(clean_json)
                 
+                # Check Action
+                action = log_data.get("action", "").upper()
+                print(f"🕵️‍♂️ Gemini Action: {action}")
+                
                 # Only save if it's a food log
-                if log_data.get("action") == "LOG_FOOD":
+                if action == "LOG_FOOD":
                      # Handle Potential Strings in Numbers (Gemini quirks)
                      calories = log_data.get("calories", 0)
                      if isinstance(calories, str): calories = int(calories) if calories.isdigit() else 0
@@ -286,12 +290,20 @@ class NutritionAgent:
                          "fats": log_data.get("fats", 0),
                          "image_url": "placeholder" # Future: Upload image to Storage
                      }
+                     
+                     print(f"⏳ Inserting into Supabase: {record}")
+                     
                      # Fire and Forget Insert
-                     self.supabase.table("logs").insert(record).execute()
-                     print(f"✅ Saved to Supabase: {record['food_name']}")
+                     response = self.supabase.table("logs").insert(record).execute()
+                     print(f"✅ Supabase Insert Success: {response}")
+                     
+                else:
+                    print(f"⚠️ Skipping Insert. Action was: {action}")
+                    
             except Exception as e:
                 print(f"⚠️ Error saving to Supabase: {e}")
-                # Don't crash the response to user, just log error
+                import traceback
+                traceback.print_exc()
             
             # 5. Return
             return clean_json
