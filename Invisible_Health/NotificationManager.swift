@@ -75,13 +75,9 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
         let dailyTrigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
         let dailyRequest = UNNotificationRequest(identifier: "daily_wake_up", content: content, trigger: dailyTrigger)
         
-        // TEST TRIGGER: 10 Seconds from now (For you to test immediately)
-        let testTrigger = UNTimeIntervalNotificationTrigger(timeInterval: 10, repeats: false)
-        let testRequest = UNNotificationRequest(identifier: "test_wake_up", content: content, trigger: testTrigger)
-        
         UNUserNotificationCenter.current().add(dailyRequest)
-        UNUserNotificationCenter.current().add(testRequest)
-        print("⏰ Scheduled Morning Warning (8 AM) + Test Warning (10s)")
+        // Removed Test Trigger (It was spamming on every background launch)
+        print("⏰ Scheduled Morning Warning (8 AM)")
     }
     
     // MARK: - UNUserNotificationCenterDelegate

@@ -245,10 +245,10 @@ class AgentManager: ObservableObject {
     struct NutritionLog: Codable, Identifiable {
         let id: String
         let food_name: String
-        let calories: Int
-        let protein: Int
-        let carbs: Int
-        let fats: Int
+        let calories: Double? // Changed to Optional Double
+        let protein: Double?  // Changed to Optional Double
+        let carbs: Double?    // Changed to Optional Double
+        let fats: Double?     // Changed to Optional Double
         let created_at: String
         
         // Helper to format Date
