@@ -197,6 +197,11 @@ class AgentManager: ObservableObject {
                     self.lastDecision = message
                     print("🤖 Agent Response: \(message) | Calories: \(calories)")
                     
+                    // -- DEBUG: Trace Backend Logs --
+                    if let debugInfo = json["_debug"] as? String {
+                        print("📡 Backend Debug: \(debugInfo)")
+                    }
+                    
                     // Update Live Activity
                     if calories > 0 {
                         self.updateLiveActivity(calories: calories)

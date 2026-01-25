@@ -296,17 +296,20 @@ class NutritionAgent:
                      # Fire and Forget Insert
                      response = self.supabase.table("logs").insert(record).execute()
                      print(f"✅ Supabase Insert Success: {response}")
+                     log_data["_debug"] = f"Supabase SAVED: {response.data}"
                      
                 else:
                     print(f"⚠️ Skipping Insert. Action was: {action}")
+                    log_data["_debug"] = f"Supabase SKIPPED: Action was {action}"
                     
             except Exception as e:
                 print(f"⚠️ Error saving to Supabase: {e}")
                 import traceback
                 traceback.print_exc()
+                log_data["_debug"] = f"Supabase ERROR: {str(e)}"
             
-            # 5. Return
-            return clean_json
+            # 5. Return (Serialize back to JSON String with the debug info)
+            return json.dumps(log_data)
             
         except Exception as e:
             print(f"Error processing multimodal: {e}")
