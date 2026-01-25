@@ -266,6 +266,33 @@ class NutritionAgent:
             # Sanitize (Gemini sometimes adds markdown backticks)
             clean_json = response_text.replace("```json", "").replace("```", "").strip()
             
+            # --- SAVE TO MEMORY (Supabase) ---
+            import json
+            try:
+                log_data = json.loads(clean_json)
+                
+                # Only save if it's a food log
+                if log_data.get("action") == "LOG_FOOD":
+                     # Handle Potential Strings in Numbers (Gemini quirks)
+                     calories = log_data.get("calories", 0)
+                     if isinstance(calories, str): calories = int(calories) if calories.isdigit() else 0
+                     
+                     record = {
+                         "user_id": user_id,
+                         "food_name": log_data.get("food_name", "Unknown Food"),
+                         "calories": calories,
+                         "protein": log_data.get("protein", 0),
+                         "carbs": log_data.get("carbs", 0),
+                         "fats": log_data.get("fats", 0),
+                         "image_url": "placeholder" # Future: Upload image to Storage
+                     }
+                     # Fire and Forget Insert
+                     self.supabase.table("logs").insert(record).execute()
+                     print(f"✅ Saved to Supabase: {record['food_name']}")
+            except Exception as e:
+                print(f"⚠️ Error saving to Supabase: {e}")
+                # Don't crash the response to user, just log error
+            
             # 5. Return
             return clean_json
             
