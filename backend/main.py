@@ -31,6 +31,12 @@ def run_agent(request):
             if not data:
                 return "Missing JSON Body", 400
             
+            # --- HANDLE UPDATE LOG ---
+            if data.get('action') == 'update_log':
+                 success, msg = agent.update_log(data)
+                 if success: return msg, 200
+                 else: return msg, 500
+                 
             user_id = data.get('user_id')
             text = data.get('text')
             
@@ -99,7 +105,8 @@ def run_agent(request):
         # --- SOS (Phase E) ---
         if request_args.get('action') == 'sos':
             # Returns a JSON string directly from the LLM
-            strategies = agent.get_sos_strategies(target_user_id)
+            user_input = request_args.get('input')
+            strategies = agent.get_sos_strategies(target_user_id, user_input=user_input)
             return strategies, 200, {'Content-Type': 'application/json'}
 
         # Default: Check Status (Silent Guardian)

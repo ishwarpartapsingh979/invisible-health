@@ -62,22 +62,33 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
     }
     
     func scheduleDailyWakeUp() {
-        let content = UNMutableNotificationContent()
-        content.title = "Good Morning! ☀️"
-        content.body = "Your Agent is ready. Initialize?"
-        content.sound = .default
-        content.categoryIdentifier = "WAKE_UP_CATEGORY"
+        // Clear old requests
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["daily_wake_up", "morning_check", "lunch_check", "dinner_check"])
         
-        // REAL TRIGGER: 8:00 AM Daily
-        var dateComponents = DateComponents()
-        dateComponents.hour = 8
-        dateComponents.minute = 0
-        let dailyTrigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
-        let dailyRequest = UNNotificationRequest(identifier: "daily_wake_up", content: content, trigger: dailyTrigger)
+        let times = [
+            ("Good Morning! ☀️", "Time for breakfast log? 🍳", 9, "morning_check"),
+            ("Lunch Check-In 🥗", "What's on the menu today?", 13, "lunch_check"),
+            ("Dinner Time 🌙", "Don't forget to log your dinner.", 20, "dinner_check")
+        ]
         
-        UNUserNotificationCenter.current().add(dailyRequest)
-        // Removed Test Trigger (It was spamming on every background launch)
-        print("⏰ Scheduled Morning Warning (8 AM)")
+        for (title, body, hour, id) in times {
+            let content = UNMutableNotificationContent()
+            content.title = title
+            content.body = body
+            content.sound = .default
+            content.categoryIdentifier = "WAKE_UP_CATEGORY"
+            
+            var dateComponents = DateComponents()
+            dateComponents.hour = hour
+            dateComponents.minute = 0
+            
+            let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
+            let request = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
+            
+            UNUserNotificationCenter.current().add(request)
+        }
+        
+        print("⏰ Scheduled 3 Daily Check-ins (9 AM, 1 PM, 8 PM)")
     }
     
     // MARK: - UNUserNotificationCenterDelegate

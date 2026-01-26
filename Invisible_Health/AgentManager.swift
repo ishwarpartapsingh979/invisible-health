@@ -180,6 +180,48 @@ class AgentManager: ObservableObject {
         }.resume()
     }
     
+    // MARK: - Phase H: Editing Logs
+    
+    func updateLog(_ log: NutritionLog) {
+        guard let url = URL(string: agentURL) else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let body: [String: Any] = [
+            "action": "update_log",
+            "user_id": "00000000-0000-0000-0000-000000000001", // Default Session User
+            "id": log.id,
+            "food_name": log.food_name,
+            "calories": log.calories ?? 0,
+            "protein": log.protein ?? 0,
+            "carbs": log.carbs ?? 0,
+            "fats": log.fats ?? 0,
+            "message": log.message ?? ""
+        ]
+        
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
+            
+            print("✏️ Updating Log: \(log.food_name)")
+            
+            URLSession.shared.dataTask(with: request) { data, response, error in
+                if let error = error {
+                    print("❌ Error updating log: \(error)")
+                    return
+                }
+                
+                if let data = data, let str = String(data: data, encoding: .utf8) {
+                    print("✅ Backend Update Response: \(str)")
+                }
+            }.resume()
+            
+        } catch {
+            print("❌ Error encoding update: \(error)")
+        }
+    }
+    
     // Helper to Handle Agent Response (Centralized)
     private func handleAgentResponse(_ data: Data, completion: @escaping (String) -> Void) {
         do {
@@ -254,6 +296,7 @@ class AgentManager: ObservableObject {
         let protein: Double?  // Changed to Optional Double
         let carbs: Double?    // Changed to Optional Double
         let fats: Double?     // Changed to Optional Double
+        let message: String?  // AI Commentary
         let created_at: String
         
         // Helper to format Date
@@ -311,13 +354,20 @@ class AgentManager: ObservableObject {
         }
     }
     
-    func fetchSOSStrategies(userId: String = "00000000-0000-0000-0000-000000000001", completion: @escaping ([AgentSOSStrategy]) -> Void) {
+    func fetchSOSStrategies(input: String? = nil, userId: String = "00000000-0000-0000-0000-000000000001", completion: @escaping ([AgentSOSStrategy]) -> Void) {
         // Construct 'sos' action
         guard var components = URLComponents(string: agentURL) else { return }
-        components.queryItems = [
+        
+        var queryItems = [
             URLQueryItem(name: "user_id", value: userId),
             URLQueryItem(name: "action", value: "sos")
         ]
+        
+        if let input = input, !input.isEmpty {
+            queryItems.append(URLQueryItem(name: "input", value: input))
+        }
+        
+        components.queryItems = queryItems
         
         guard let url = components.url else { return }
         

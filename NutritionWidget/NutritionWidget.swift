@@ -89,18 +89,7 @@ struct NutritionLiveActivityView: View {
                             .lineLimit(1) // Prevent wrapping
                             .minimumScaleFactor(0.8)
                     }
-                    GeometryReader { geometry in
-                        ZStack(alignment: .leading) {
-                            Capsule()
-                                .fill(Color.gray.opacity(0.3))
-                                .frame(height: 6)
-                            
-                            Capsule()
-                                .fill(LinearGradient(gradient: Gradient(colors: [.orange, .red]), startPoint: .leading, endPoint: .trailing))
-                                .frame(width: max(0, min(geometry.size.width, geometry.size.width * (Double(2500 - context.state.caloriesRemaining) / 2500.0))), height: 6)
-                        }
-                    }
-                    .frame(height: 6)
+                    // Removed Progress Line as requested
                 }
             }
             .padding(.bottom, 16)

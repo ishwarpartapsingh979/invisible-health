@@ -13,6 +13,7 @@ struct SOSView: View {
     // Real Data
     @State private var strategies: [AgentManager.AgentSOSStrategy] = []
     @State private var isLoading = true
+    @State private var cravingInput: String = ""
     
     var body: some View {
         NavigationView {
@@ -38,7 +39,30 @@ struct SOSView: View {
                             .foregroundColor(.secondary)
                             .padding(.horizontal)
                     }
-                    .padding(.bottom, 20)
+                    
+                    // Cravings Input
+                    HStack {
+                        TextField("What are you craving? (e.g. Chips)", text: $cravingInput)
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                            .padding(10)
+                            .background(Color.white)
+                            .cornerRadius(8)
+                        
+                        Button(action: {
+                            fetchStrategies()
+                        }) {
+                            Text("Get Help")
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 10)
+                                .background(Color.red)
+                                .cornerRadius(8)
+                        }
+                        .disabled(isLoading)
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom, 10)
                     
                     // List of Strategies
                     if isLoading {
@@ -61,10 +85,18 @@ struct SOSView: View {
             })
         }
         .onAppear {
-            AgentManager.shared.fetchSOSStrategies { fetchedStrategies in
-                self.strategies = fetchedStrategies
-                self.isLoading = false
-            }
+            fetchStrategies()
+        }
+    }
+    
+    func fetchStrategies() {
+        self.isLoading = true
+        // Only pass input if user typed something
+        let input = cravingInput.isEmpty ? nil : cravingInput
+        
+        AgentManager.shared.fetchSOSStrategies(input: input) { fetchedStrategies in
+            self.strategies = fetchedStrategies
+            self.isLoading = false
         }
     }
 }

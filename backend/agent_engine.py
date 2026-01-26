@@ -357,17 +357,70 @@ class NutritionAgent:
             
             # Helper to make datetime serializable (Supabase returns ISO strings so it's fine)
             return response.data
-        except Exception as e:
             print(f"Error fetching logs: {e}")
             return []
+            
+    def update_log(self, log_data: dict):
+        """
+        Updates an existing log entry.
+        """
+        try:
+            log_id = log_data.get("id")
+            if not log_id: raise ValueError("Missing log_id")
+            
+            # Construct Update Payload
+            updates = {
+                "food_name": log_data.get("food_name"),
+                "calories": log_data.get("calories"),
+                "protein": log_data.get("protein"),
+                "carbs": log_data.get("carbs"),
+                "fats": log_data.get("fats"),
+                "message": log_data.get("message")
+            }
+            # Remove None values
+            updates = {k: v for k, v in updates.items() if v is not None}
+            
+            response = self.supabase.table("logs").update(updates).eq("id", log_id).execute()
+            print(f"✅ Log Updated: {response}")
+            return True, "Log Updated"
+        except Exception as e:
+            print(f"Error updating log: {e}")
+            return False, str(e)
+
     # --- SOS INTELLIGENCE (Phase E) ---
     @observe(as_type="generation")
-    def get_sos_strategies(self, user_id: str):
+    def get_sos_strategies(self, user_id: str, user_input: str = None):
         """
         Generates 3 quick, actionable strategies to fight cravings.
+        Customizes based on user_input if provided (e.g., "Craving Chips").
         """
         try:
             # Context: Can get time of day, location, or recent logs?
+            
+            prompt = """
+            You are a tough but caring nutrition coach. The user is in panic mode (SOS).
+            """
+            
+            if user_input:
+                prompt += f"\nUser says: '{user_input}'. Suggest 3 specific alternatives or strategies for this craving."
+            else:
+                prompt += "\nGenerate 3 generic, high-impact strategies to stop binge eating immediately."
+                
+            prompt += """
+            Output JSON List:
+            [
+                {"title": "...", "description": "...", "icon": "leaf.fill" (SF Symbol)}
+            ]
+            """
+            
+            response = self.model.generate_content(prompt)
+            clean_json = response.text.replace("```json", "").replace("```", "").strip()
+            
+            return clean_json
+        except Exception as e:
+            print(f"Error generating SOS: {e}")
+            # Fallback
+            return '[{"title": "Drink Water", "description": "Hydrate first.", "icon": "drop.fill"}]'
             # For MVP, just simple generation.
             
             prompt = """
