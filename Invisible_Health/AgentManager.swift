@@ -1,15 +1,13 @@
 import Foundation
 import CoreLocation
 import ActivityKit
-import SwiftUI // For Image handling maybe? No, UIImage is UIKit but SwiftUI might be needed for Activity types. Actually ActivityKit is enough but UIImage needs UIKit.
-
-import UIKit // Explicitly needed for UIImage
+import SwiftUI
+import UIKit
 
 class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     static let shared = AgentManager()
     
     // The URL of your deployed Cloud Function
-    // NOTE: In production, user_id should be dynamic. For MVP, we use a fixed ID.
     private let agentURL = "https://us-central1-gen-lang-client-0009721575.cloudfunctions.net/run-agent"
     
     @Published var lastDecision: String = "Agent is sleeping..."
@@ -30,12 +28,11 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let loc = locations.last else { return }
         self.currentLocation = loc.coordinate
-        // print("📍 Location Updated: \(loc.coordinate.latitude), \(loc.coordinate.longitude)")
     }
     
-    // Use a Valid UUID for Supabase (v4 placeholder)
+    // Use a Valid UUID for Supabase
     func triggerAgentCheck(userId: String = "00000000-0000-0000-0000-000000000001", location: CLLocationCoordinate2D? = nil) {
-        // Fetch Steps (Phase F)
+        // Fetch Steps
         HealthManager.shared.fetchTodaySteps { steps in
             guard var components = URLComponents(string: self.agentURL) else { return }
             
@@ -44,7 +41,7 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
                 URLQueryItem(name: "steps", value: "\(Int(steps))")
             ]
             
-            // Add Location if available (The "Eyes")
+            // Add Location if available
             if let loc = location {
                 queryItems.append(URLQueryItem(name: "lat", value: "\(loc.latitude)"))
                 queryItems.append(URLQueryItem(name: "lng", value: "\(loc.longitude)"))
@@ -74,7 +71,6 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
                 }
                 
                 if let data = data {
-                    // Use Centralized Helper (Phase F)
                     self.handleAgentResponse(data) { _ in }
                 }
             }
@@ -85,14 +81,12 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     // MARK: - Phase B: Session Management
     
     func wakeUpAgent(userId: String = "00000000-0000-0000-0000-000000000001", fcmToken: String? = nil) {
-        // Fetch Steps first (Phase F)
         HealthManager.shared.fetchTodaySteps { steps in
-            // Construct URL for 'wake_up' action
             guard var components = URLComponents(string: self.agentURL) else { return }
             var queryItems = [
                 URLQueryItem(name: "user_id", value: userId),
                 URLQueryItem(name: "action", value: "wake_up"),
-                URLQueryItem(name: "steps", value: "\(Int(steps))") // Add Steps
+                URLQueryItem(name: "steps", value: "\(Int(steps))")
             ]
             if let token = fcmToken {
                 queryItems.append(URLQueryItem(name: "fcm_token", value: token))
@@ -113,7 +107,6 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     }
     
     func sendHeartbeat(userId: String = "00000000-0000-0000-0000-000000000001") {
-        // Construct URL for 'heartbeat' action
         guard var components = URLComponents(string: agentURL) else { return }
         components.queryItems = [
             URLQueryItem(name: "user_id", value: userId),
@@ -121,15 +114,9 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         ]
         
         guard let url = components.url else { return }
-        
         print("💓 Sending Heartbeat: \(url.absoluteString)")
-        
-        print("💓 Sending Heartbeat: \(url.absoluteString)")
-        
         URLSession.shared.dataTask(with: url).resume()
     }
-    
-    // MARK: - Phase C: Multimodal Chat
     
     // MARK: - Phase C: Multimodal Chat
     
@@ -142,7 +129,7 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         
         var body: [String: Any] = ["user_id": userId]
         
-        // Phase 2.1: Add Location "The Eyes"
+        // Add Location
         if let loc = self.currentLocation {
             body["lat"] = loc.latitude
             body["lng"] = loc.longitude
@@ -153,7 +140,6 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         }
         
         if let image = image {
-            // Compress and Encode
             if let imageData = image.jpegData(compressionQuality: 0.7) {
                 let base64String = imageData.base64EncodedString()
                 body["image_data"] = base64String
@@ -165,9 +151,8 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             do {
                 let audioData = try Data(contentsOf: audioURL)
                 let base64String = audioData.base64EncodedString()
-                // Send as audio_data key
                 body["audio_data"] = base64String
-                body["mime_type"] = "audio/mp4" // Gemini handles m4a/aac as mp4 container usually
+                body["mime_type"] = "audio/mp4"
             } catch {
                 print("❌ Audio Read Error: \(error)")
             }
@@ -198,7 +183,6 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             }
             
             if let data = data {
-                // Use Centralized Helper (Phase F)
                 self.handleAgentResponse(data, completion: completion)
             }
         }.resume()
@@ -215,7 +199,7 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         
         let body: [String: Any] = [
             "action": "update_log",
-            "user_id": "00000000-0000-0000-0000-000000000001", // Default Session User
+            "user_id": "00000000-0000-0000-0000-000000000001",
             "id": log.id,
             "food_name": log.food_name,
             "calories": log.calories ?? 0,
@@ -246,40 +230,33 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         }
     }
     
-    // Helper to Handle Agent Response (Centralized)
+    // Helper to Handle Agent Response
     private func handleAgentResponse(_ data: Data, completion: @escaping (String) -> Void) {
         do {
             if let json = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] {
                 let message = json["message"] as? String ?? "Done"
                 let calories = json["calories"] as? Int ?? 0
                 
-                // Parse Macros (Phase F)
                 let protein = json["protein"] as? Double
                 let carbs = json["carbs"] as? Double
-                let fat = json["fats"] as? Double // Note: Backend returns 'fats'
+                let fat = json["fats"] as? Double
                 
                 DispatchQueue.main.async {
-                    // Update UI
                     self.lastDecision = message
                     print("🤖 Agent Response: \(message) | Calories: \(calories)")
                     
-                    // -- DEBUG: Trace Backend Logs --
                     if let debugInfo = json["_debug"] as? String {
                         print("📡 Backend Debug: \(debugInfo)")
                     }
                     
-                    // Update Live Activity
                     if calories > 0 {
                         self.updateLiveActivity(calories: calories)
-                        
-                        // ✅ Phase 2.1: Instant Notification
                          NotificationManager.shared.shortNotification(
                             title: "✅ Logged: \(Int(calories)) kcal",
                             body: message
                         )
                     }
                     
-                    // Sync to HealthKit (Phase F)
                     HealthManager.shared.logDietaryData(
                         calories: Double(calories),
                         protein: protein,
@@ -290,14 +267,12 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
                 
                 completion(message)
             } else {
-                 // Fallback
                  let str = String(data: data, encoding: .utf8) ?? "Done"
                  DispatchQueue.main.async { self.lastDecision = str }
                  completion(str)
             }
         } catch {
             print("❌ JSON Decode Error: \(error)")
-            // Debug Raw Data (e.g. if Backend returned 500 HTML)
             if let str = String(data: data, encoding: .utf8) {
                 print("📝 WakeUp Mismatch Raw Data: \(str)")
             }
@@ -305,7 +280,7 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         }
     }
 
-    // Helper to update Live Activity (reused code)
+    // Helper to update Live Activity
     private func updateLiveActivity(calories: Int) {
          Task {
             for activity in Activity<NutritionActivityAttributes>.activities {
@@ -322,22 +297,19 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     struct NutritionLog: Codable, Identifiable {
         let id: String
         let food_name: String
-        let calories: Double? // Changed to Optional Double
-        let protein: Double?  // Changed to Optional Double
-        let carbs: Double?    // Changed to Optional Double
-        let fats: Double?     // Changed to Optional Double
-        let message: String?  // AI Commentary
+        let calories: Double?
+        let protein: Double?
+        let carbs: Double?
+        let fats: Double?
+        let message: String?
         let created_at: String
         
-        // Helper to format Date
         var formattedDate: String {
-            // Placeholder: Parse "2023-10-27T..." or rely on String
             return created_at.prefix(10).description 
         }
     }
     
     func fetchLogs(userId: String = "00000000-0000-0000-0000-000000000001", completion: @escaping ([NutritionLog]) -> Void) {
-        // Construct 'get_logs' action
         guard var components = URLComponents(string: agentURL) else { return }
         components.queryItems = [
             URLQueryItem(name: "user_id", value: userId),
@@ -345,7 +317,6 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         ]
         
         guard let url = components.url else { return }
-        
         print("📥 Fetching Logs: \(url.absoluteString)")
         
         URLSession.shared.dataTask(with: url) { data, response, error in
@@ -357,10 +328,6 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
                     }
                 } catch {
                     print("❌ Error decoding logs: \(error)")
-                    // Debug Raw Data
-                    if let str = String(data: data, encoding: .utf8) {
-                        print("Raw Data: \(str)")
-                    }
                     DispatchQueue.main.async { completion([]) }
                 }
             } else {
@@ -372,20 +339,18 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     // MARK: - Phase E: SOS Strategies
     
     struct AgentSOSStrategy: Codable, Identifiable {
-        let id = UUID() // Local ID
+        let id = UUID()
         let title: String
         let description: String
-        let icon: String // SF Symbol
-        let color: String // "blue", "red", etc.
+        let icon: String
+        let color: String? // Optional because legacy data might not have it
         
-        // CodingKeys to ignore ID which isn't in JSON
         enum CodingKeys: String, CodingKey {
             case title, description, icon, color
         }
     }
     
     func fetchSOSStrategies(input: String? = nil, userId: String = "00000000-0000-0000-0000-000000000001", completion: @escaping ([AgentSOSStrategy]) -> Void) {
-        // Construct 'sos' action
         guard var components = URLComponents(string: agentURL) else { return }
         
         var queryItems = [
@@ -412,9 +377,6 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
                     }
                 } catch {
                     print("❌ Error decoding SOS: \(error)")
-                    if let str = String(data: data, encoding: .utf8) {
-                        print("📝 JSON Mismatch Raw Data: \(str)")
-                    }
                     DispatchQueue.main.async { completion([]) }
                 }
             } else {

@@ -1,3 +1,6 @@
+import SwiftUI
+import AVFoundation
+
 // Wrapper for Sheet
 struct AnnotatableImage: Identifiable {
     let id = UUID()
@@ -10,7 +13,7 @@ struct ContentView: View {
     // UI State
     @State private var showTextInput: Bool = false
     @State private var textInput: String = ""
-    @State private var showSOS: Bool = false // Phase 5
+    @State private var showSOS: Bool = false
     @State private var pulseEvaluate: Bool = false
     
     // Tab Selection (0: Log/Home, 1: Chat, 2: Data)
@@ -293,6 +296,7 @@ struct ContentView: View {
         }
     }
 }
+
 // Simple Image Picker Wrapper
 struct ImagePicker: UIViewControllerRepresentable {
     var sourceType: UIImagePickerController.SourceType = .photoLibrary
@@ -323,6 +327,7 @@ struct ImagePicker: UIViewControllerRepresentable {
             }
         }
 }
+
 // Helper for Tab Buttons
 struct TabButton: View {
     let icon: String
@@ -334,7 +339,6 @@ struct TabButton: View {
         Button(action: action) {
             VStack(spacing: 8) {
                 Image(systemName: icon)
-                // ... (rest is same)
                     .font(.system(size: 24))
                     .foregroundColor(isSelected ? .white : .gray)
                     .padding(12)
@@ -350,4 +354,3 @@ struct TabButton: View {
         }
     }
 }
-
