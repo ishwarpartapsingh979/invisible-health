@@ -1,5 +1,9 @@
-import SwiftUI
-import AVFoundation
+// Wrapper for Sheet
+struct AnnotatableImage: Identifiable {
+    let id = UUID()
+    let image: UIImage
+}
+
 struct ContentView: View {
     @EnvironmentObject var notificationManager: NotificationManager
     
@@ -11,6 +15,9 @@ struct ContentView: View {
     
     // Tab Selection (0: Log/Home, 1: Chat, 2: Data)
     @State private var selectedTab: Int = 0
+    
+    // Image Annotation State (Phase 2.1)
+    @State private var imageToAnnotate: AnnotatableImage?
     
     var body: some View {
         ZStack {
@@ -83,9 +90,9 @@ struct ContentView: View {
                     Button("Log It") {
                         print("Logging: \(textInput)")
                         showTextInput = false
+                        // Trigger Agent
+                        AgentManager.shared.sendMultimodalInput(text: textInput, image: nil) { _ in }
                         textInput = ""
-                        // Trigger Smart Notification Simulation
-                        NotificationManager.shared.simulateBackendAnalysis()
                     }
                     .padding()
                     .background(Color.orange)
@@ -111,15 +118,35 @@ struct ContentView: View {
                 // Just open, maybe default to Home
             }
         }
+        // SOS Sheet
         .sheet(isPresented: $showSOS) {
             SOSView()
+        }
+        // Annotation Sheet (Phase 2.1)
+        .sheet(item: $imageToAnnotate) { item in
+            ImageAnnotationView(
+                image: item.image,
+                onSend: { caption in
+                    // Close Sheet
+                    imageToAnnotate = nil
+                    
+                    // Send to Agent
+                    print("🚀 Logging Image + Caption: \(caption)")
+                    AgentManager.shared.sendMultimodalInput(text: caption, image: item.image) { response in
+                        print("✅ Image Logged: \(response)")
+                    }
+                },
+                onCancel: {
+                    imageToAnnotate = nil
+                }
+            )
         }
     }
     
     // State for Media Pickers
     @State private var showCamera = false
     @State private var showGallery = false
-    @State private var selectedImage: UIImage?
+    // We reuse imageToAnnotate to trigger flow
     
     // State for Recording
     @State private var isRecording = false
@@ -130,7 +157,6 @@ struct ContentView: View {
         HStack(spacing: 40) {
             // Gallery Button (Left)
             Button(action: {
-                print("Gallery Tapped")
                 showGallery = true
             }) {
                 Circle()
@@ -143,7 +169,7 @@ struct ContentView: View {
                     )
             }
             .sheet(isPresented: $showGallery) {
-                ImagePicker(sourceType: .photoLibrary, selectedImage: $selectedImage)
+                ImagePicker(sourceType: .photoLibrary, imageToAnnotate: $imageToAnnotate)
             }
             
             // Main Mic Button (Center)
@@ -202,7 +228,6 @@ struct ContentView: View {
             
             // Camera Button (Right)
             Button(action: {
-                 print("Camera Tapped")
                  showCamera = true
             }) {
                 Circle()
@@ -215,7 +240,7 @@ struct ContentView: View {
                     )
             }
             .sheet(isPresented: $showCamera) {
-                ImagePicker(sourceType: .camera, selectedImage: $selectedImage)
+                ImagePicker(sourceType: .camera, imageToAnnotate: $imageToAnnotate)
             }
         }
     }
@@ -271,8 +296,10 @@ struct ContentView: View {
 // Simple Image Picker Wrapper
 struct ImagePicker: UIViewControllerRepresentable {
     var sourceType: UIImagePickerController.SourceType = .photoLibrary
-    @Binding var selectedImage: UIImage?
+    @Binding var imageToAnnotate: AnnotatableImage?
+    
     @Environment(\.presentationMode) private var presentationMode
+    
     func makeUIViewController(context: UIViewControllerRepresentableContext<ImagePicker>) -> UIImagePickerController {
         let imagePicker = UIImagePickerController()
         imagePicker.allowsEditing = false
@@ -289,12 +316,8 @@ struct ImagePicker: UIViewControllerRepresentable {
             init(_ parent: ImagePicker) { self.parent = parent }
             func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
                 if let image = info[UIImagePickerController.InfoKey.originalImage] as? UIImage {
-                    parent.selectedImage = image
-                    // Real Brain Analysis 🧠
-                    AgentManager.shared.sendMultimodalInput(text: "Analyze this image", image: image) { response in
-                        print("🤖 Image Analysis: \(response)")
-                        // Note: In a real app, we'd show this in a Popover or Notification
-                    }
+                    // Set State to trigger Annotation View
+                    parent.imageToAnnotate = AnnotatableImage(image: image)
                 }
                 parent.presentationMode.wrappedValue.dismiss()
             }
@@ -311,6 +334,7 @@ struct TabButton: View {
         Button(action: action) {
             VStack(spacing: 8) {
                 Image(systemName: icon)
+                // ... (rest is same)
                     .font(.system(size: 24))
                     .foregroundColor(isSelected ? .white : .gray)
                     .padding(12)

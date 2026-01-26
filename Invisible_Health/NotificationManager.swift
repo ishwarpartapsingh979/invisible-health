@@ -174,24 +174,23 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
     }
     func simulateBackendAnalysis() {
         print("Simulating Backend Analysis...")
+        // ... (simulation code)
+    }
+    
+    // ✅ Phase 2.1: Instant Notification Helper
+    func shortNotification(title: String, body: String) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        content.categoryIdentifier = "SMART_LOG_CATEGORY"
         
-        // Schedule notification after 2 seconds to simulate AI processing time
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            let content = UNMutableNotificationContent()
-            content.title = "✅ Saved to directly log"
-            content.body = "Salmon & Rice Bowl • 650 kcal • 45g Protein"
-            content.sound = .default
-            content.categoryIdentifier = "SMART_LOG_CATEGORY" // We will use this later for actions
-            
-            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.1, repeats: false)
-            let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: trigger)
-            
-            UNUserNotificationCenter.current().add(request) { error in
-                if let error = error {
-                    print("Error scheduling smart notification: \(error.localizedDescription)")
-                } else {
-                    print("Smart notification scheduled!")
-                }
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.1, repeats: false)
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: trigger)
+        
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error = error {
+                print("Error scheduling notification: \(error.localizedDescription)")
             }
         }
     }

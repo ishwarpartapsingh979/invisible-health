@@ -12,7 +12,7 @@ struct SOSView: View {
     
     // Real Data
     @State private var strategies: [AgentManager.AgentSOSStrategy] = []
-    @State private var isLoading = true
+    @State private var isLoading = false
     @State private var cravingInput: String = ""
     
     var body: some View {
@@ -26,48 +26,52 @@ struct SOSView: View {
                         Image(systemName: "exclamationmark.shield.fill")
                             .font(.system(size: 60))
                             .foregroundColor(.red)
-                            .padding(.top, 40)
+                            .padding(.top, 20)
                         
                         Text("Cravings SOS")
                             .font(.largeTitle)
                             .fontWeight(.bold)
                             .foregroundColor(.primary)
                         
-                        Text("You are stronger than this moment.\nChoose a strategy to reset.")
+                        Text("You are stronger than this moment.")
                             .font(.body)
                             .multilineTextAlignment(.center)
                             .foregroundColor(.secondary)
-                            .padding(.horizontal)
                     }
                     
-                    // Cravings Input
-                    HStack {
-                        TextField("What are you craving? (e.g. Chips)", text: $cravingInput)
-                            .textFieldStyle(RoundedBorderTextFieldStyle())
-                            .padding(10)
-                            .background(Color.white)
-                            .cornerRadius(8)
+                    // Cravings Input (Optional)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Specific Craving? (Optional)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .padding(.leading, 4)
                         
-                        Button(action: {
-                            fetchStrategies()
-                        }) {
-                            Text("Get Help")
-                                .fontWeight(.bold)
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 10)
-                                .background(Color.red)
+                        HStack {
+                            TextField("e.g. Pizza, Chips...", text: $cravingInput)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .padding(10)
+                                .background(Color.white)
                                 .cornerRadius(8)
+                            
+                            if !cravingInput.isEmpty {
+                                Button(action: {
+                                    fetchStrategies(input: cravingInput)
+                                }) {
+                                    Image(systemName: "arrow.up.circle.fill")
+                                        .font(.title2)
+                                        .foregroundColor(.red)
+                                }
+                                .disabled(isLoading)
+                            }
                         }
-                        .disabled(isLoading)
                     }
                     .padding(.horizontal)
-                    .padding(.bottom, 10)
                     
                     // List of Strategies
                     if isLoading {
-                        ProgressView("Asking AI for help...")
-                            .padding()
+                        Spacer()
+                        ProgressView("Analyzing Strategy...")
+                        Spacer()
                     } else {
                         ScrollView {
                             VStack(spacing: 15) {
@@ -85,18 +89,19 @@ struct SOSView: View {
             })
         }
         .onAppear {
-            fetchStrategies()
+            // Load Generic Strategies immediately
+            fetchStrategies(input: nil)
         }
     }
     
-    func fetchStrategies() {
+    func fetchStrategies(input: String?) {
         self.isLoading = true
-        // Only pass input if user typed something
-        let input = cravingInput.isEmpty ? nil : cravingInput
         
         AgentManager.shared.fetchSOSStrategies(input: input) { fetchedStrategies in
-            self.strategies = fetchedStrategies
-            self.isLoading = false
+            withAnimation {
+                self.strategies = fetchedStrategies
+                self.isLoading = false
+            }
         }
     }
 }
@@ -109,12 +114,12 @@ struct StrategyCard: View {
         HStack(spacing: 20) {
             ZStack {
                 Circle()
-                    .fill(color(from: strategy.color).opacity(0.15))
+                    .fill(color(from: strategy.color ?? "blue").opacity(0.15))
                     .frame(width: 60, height: 60)
                 
                 Image(systemName: strategy.icon)
                     .font(.title2)
-                    .foregroundColor(color(from: strategy.color))
+                    .foregroundColor(color(from: strategy.color ?? "blue"))
             }
             
             VStack(alignment: .leading, spacing: 4) {
@@ -129,9 +134,6 @@ struct StrategyCard: View {
             }
             
             Spacer()
-            
-            Image(systemName: "chevron.right")
-                .foregroundColor(.gray.opacity(0.5))
         }
         .padding()
         .background(Color.white)
@@ -140,14 +142,14 @@ struct StrategyCard: View {
     }
     
     func color(from name: String) -> Color {
-        switch name {
+        switch name.lowercased() {
         case "blue": return .blue
         case "red": return .red
         case "green": return .green
         case "orange": return .orange
         case "purple": return .purple
         case "cyan": return .cyan
-        default: return .gray
+        default: return .blue
         }
     }
 }

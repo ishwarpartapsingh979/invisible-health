@@ -5,7 +5,7 @@ import SwiftUI // For Image handling maybe? No, UIImage is UIKit but SwiftUI mig
 
 import UIKit // Explicitly needed for UIImage
 
-class AgentManager: ObservableObject {
+class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     static let shared = AgentManager()
     
     // The URL of your deployed Cloud Function
@@ -14,6 +14,24 @@ class AgentManager: ObservableObject {
     
     @Published var lastDecision: String = "Agent is sleeping..."
     @Published var isLoading: Bool = false
+    
+    // Location Manager (Phase 2.1)
+    private let locationManager = CLLocationManager()
+    @Published var currentLocation: CLLocationCoordinate2D?
+    
+    override init() {
+        super.init()
+        locationManager.delegate = self
+        locationManager.requestWhenInUseAuthorization()
+        locationManager.startUpdatingLocation()
+    }
+    
+    // MARK: - CLLocationManagerDelegate
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard let loc = locations.last else { return }
+        self.currentLocation = loc.coordinate
+        // print("📍 Location Updated: \(loc.coordinate.latitude), \(loc.coordinate.longitude)")
+    }
     
     // Use a Valid UUID for Supabase (v4 placeholder)
     func triggerAgentCheck(userId: String = "00000000-0000-0000-0000-000000000001", location: CLLocationCoordinate2D? = nil) {
@@ -123,6 +141,12 @@ class AgentManager: ObservableObject {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
         var body: [String: Any] = ["user_id": userId]
+        
+        // Phase 2.1: Add Location "The Eyes"
+        if let loc = self.currentLocation {
+            body["lat"] = loc.latitude
+            body["lng"] = loc.longitude
+        }
         
         if let text = text, !text.isEmpty {
             body["text"] = text
@@ -247,6 +271,12 @@ class AgentManager: ObservableObject {
                     // Update Live Activity
                     if calories > 0 {
                         self.updateLiveActivity(calories: calories)
+                        
+                        // ✅ Phase 2.1: Instant Notification
+                         NotificationManager.shared.shortNotification(
+                            title: "✅ Logged: \(Int(calories)) kcal",
+                            body: message
+                        )
                     }
                     
                     // Sync to HealthKit (Phase F)

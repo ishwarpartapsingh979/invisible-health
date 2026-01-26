@@ -44,12 +44,18 @@ def run_agent(request):
             media_data = data.get('image_data') or data.get('audio_data')
             mime_type = data.get('mime_type', 'image/jpeg') # Client should send correct mime type
             
+            # Extract Location (Phase 2.1)
+            lat = data.get('lat')
+            lng = data.get('lng')
+            if lat: lat = float(lat)
+            if lng: lng = float(lng)
+            
             if not user_id:
                 return "Missing user_id", 400
 
             # Process Multimodal
             # Logic: If media_data is present, Gemini determines if it's audio or image based on mime_type
-            response = agent.process_multimodal_input(user_id, text, media_data, mime_type)
+            response = agent.process_multimodal_input(user_id, text, media_data, mime_type, lat=lat, lng=lng)
             
             # Return JSON directly
             return response, 200, {'Content-Type': 'application/json'}

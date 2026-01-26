@@ -212,17 +212,22 @@ class NutritionAgent:
             return f"Error: {e}"
     # --- MULTIMODAL INTELLIGENCE (Phase C) ---
     @observe(as_type="generation")
-    def process_multimodal_input(self, user_id: str, text: str = None, media_data: str = None, mime_type: str = "image/jpeg"):
+    def process_multimodal_input(self, user_id: str, text: str = None, media_data: str = None, mime_type: str = "image/jpeg", lat: float = None, lng: float = None):
         """
         Analyzes Text + Media (Image/Audio) input.
+        Now supports Location context and Observability.
         """
+        from langfuse import langfuse_context
+        
         try:
             # 1. Construct the User Message Parts
             user_parts = []
+            log_input_text = ""
             
             # Add Text if present
             if text:
                 user_parts.append(text)
+                log_input_text += f"[TEXT]: {text} "
             
             # Add Media if present
             if media_data:
@@ -232,6 +237,8 @@ class NutritionAgent:
                 # Create Part
                 media_part = Part.from_data(data=media_bytes, mime_type=mime_type)
                 user_parts.append(media_part)
+                log_input_text += "[IMAGE/MEDIA UPLOADED]"
+                
             if not user_parts:
                 return "Empty Input"
             
@@ -248,18 +255,29 @@ class NutritionAgent:
             if recent_logs:
                 context_str = "RECENTLY EATEN:\n" + "\n".join([f"- {l.get('food_name')} ({l.get('calories')} kcal)" for l in recent_logs])
             
+            # --- LOCATION CONTEXT (Phase 2.1) ---
+            location_context = "Location: Unknown"
+            if lat and lng:
+                try:
+                    places = self.tools.get_places_nearby(lat, lng)
+                    location_context = f"User Location Context: {places}"
+                except Exception as e:
+                    print(f"Failed to fetch location: {e}")
+            
             # 2. Add System Context
             system_instruction = f"""
             You are an elite Nutrition AI.
             
             CURRENT CONTEXT:
             {context_str}
+            {location_context}
             
             Analyze the input (Text/Image/Audio).
             """ + """
             1. IDENTIFY FOOD: Name, Description, Healthiness.
                - If it's a BRAND (e.g., McDonald's, Starbucks), use their official calorie counts.
                - Detect if the user says "Yesterday" or "Last Night". Parsing: date_offset should be -1.
+               - IF IMAGE + TEXT: Use the text to interpret the image (e.g. "This is a small portion").
             
             2. ESTIMATE CALORIES: Be scientific.
             
@@ -289,6 +307,21 @@ class NutritionAgent:
             
             # 4. Parse Response (Expect JSON)
             response_text = response.text
+            
+            # --- OBSERVABILITY: Log Metrics (Phase 2.1) ---
+            try:
+                usage = response.usage_metadata
+                langfuse_context.update_current_observation(
+                    input=log_input_text,
+                    output=response_text,
+                    usage={
+                        "input": usage.prompt_token_count,
+                        "output": usage.candidates_token_count,
+                        "total": usage.total_token_count
+                    }
+                )
+            except Exception as e:
+                print(f"Observability Log Failed: {e}")
             
             # Sanitize (Gemini sometimes adds markdown backticks)
             clean_json = response_text.replace("```json", "").replace("```", "").strip()
@@ -382,10 +415,46 @@ class NutritionAgent:
     def update_log(self, log_data: dict):
         """
         Updates an existing log entry.
+        Triggers RE-CALCULATION if name changes massively.
         """
         try:
             log_id = log_data.get("id")
             if not log_id: raise ValueError("Missing log_id")
+            
+            new_name = log_data.get("food_name")
+            new_cals = log_data.get("calories")
+            
+            # RECALCULATION LOGIC (Phase 2.1)
+            # If name is present, but cals are 0 or None, we MUST recalc.
+            # Ideally we check if name changed from DB, but for now we trust the client logic (Client sends 0 cals if name changed).
+            should_recalc = (new_name and (new_cals is None or new_cals == 0 or new_cals == "0"))
+            
+            if should_recalc:
+                print(f"🔄 Recalculating macros for: {new_name}")
+                # Call Gemini for just this text
+                recalc_prompt = f"""
+                You are a Nutrition AI.
+                Analyze this food: "{new_name}"
+                Return JSON:
+                {{
+                    "calories": 0,
+                    "protein": 0,
+                    "carbs": 0,
+                    "fats": 0,
+                    "message": "Updated macros for {new_name}"
+                }}
+                """
+                response = self.model.generate_content(recalc_prompt)
+                clean_json = response.text.replace("```json", "").replace("```", "").strip()
+                import json
+                ai_data = json.loads(clean_json)
+                
+                # Merge into our update payload
+                log_data["calories"] = ai_data.get("calories")
+                log_data["protein"] = ai_data.get("protein")
+                log_data["carbs"] = ai_data.get("carbs")
+                log_data["fats"] = ai_data.get("fats")
+                log_data["message"] = ai_data.get("message")
             
             # Construct Update Payload
             updates = {
@@ -428,7 +497,7 @@ class NutritionAgent:
             prompt += """
             Output JSON List:
             [
-                {"title": "...", "description": "...", "icon": "leaf.fill" (SF Symbol)}
+                {"title": "...", "description": "...", "icon": "leaf.fill" (SF Symbol), "color": "blue" (or red/green/orange/purple)}
             ]
             """
             
@@ -439,7 +508,7 @@ class NutritionAgent:
         except Exception as e:
             print(f"Error generating SOS: {e}")
             # Fallback
-            return '[{"title": "Drink Water", "description": "Hydrate first.", "icon": "drop.fill"}]'
+            return '[{"title": "Drink Water", "description": "Hydrate first.", "icon": "drop.fill", "color": "blue"}]'
             # For MVP, just simple generation.
             
             prompt = """
