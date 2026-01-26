@@ -357,6 +357,7 @@ class NutritionAgent:
             
             # Helper to make datetime serializable (Supabase returns ISO strings so it's fine)
             return response.data
+        except Exception as e:
             print(f"Error fetching logs: {e}")
             return []
             
