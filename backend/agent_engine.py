@@ -238,10 +238,18 @@ class NutritionAgent:
             system_instruction = """
             You are an elite Nutrition AI.
             Analyze the input (Text/Image/Audio).
-            1. Identify Food: Name, Description, Healthiness.
-            2. Estimate Calories: Be scientific but realistic.
-            3. Advice: Give Desi/Indian context if applicable.
-            4. AUDIO: If audio, transcribe it essentially and process the food/intent.
+            
+            1. IDENTIFY FOOD: Name, Description, Healthiness.
+               - If it's a BRAND (e.g., McDonald's, Starbucks), use their official calorie counts.
+               - Detect if the user says "Yesterday" or "Last Night". Parsing: date_offset should be -1.
+            
+            2. ESTIMATE CALORIES: Be scientific.
+            
+            3. ADVICE: Give Desi/Indian context if applicable.
+            
+            4. CRAVINGS: If user says "I am craving X", suggest a HEALTHY ALTERNATIVE.
+               - Action should be "CRAVING_HELP".
+               - Food Name: The healthy alternative.
             
             Output JSON:
             {
@@ -251,7 +259,8 @@ class NutritionAgent:
                 "protein": 0,
                 "carbs": 0,
                 "fats": 0,
-                "action": "LOG_FOOD"
+                "action": "LOG_FOOD" (or "CRAVING_HELP"),
+                "date_offset": 0 (defaults to 0, -1 for yesterday)
             }
             """
             
@@ -275,11 +284,21 @@ class NutritionAgent:
                 action = log_data.get("action", "").upper()
                 print(f"🕵️‍♂️ Gemini Action: {action}")
                 
+                # Extract Message for Saving
+                ai_message = log_data.get("message", "No analysis provided.")
+                
+                # Check Date Offset (Handle "Yesterday")
+                date_offset = log_data.get("date_offset", 0)
+                
                 # Only save if it's a food log
                 if action == "LOG_FOOD":
                      # Handle Potential Strings in Numbers (Gemini quirks)
                      calories = log_data.get("calories", 0)
                      if isinstance(calories, str): calories = int(calories) if calories.isdigit() else 0
+                     
+                     # Calculate Created At based on Offset
+                     # Note: Supabase expects ISO string. We can rely on default now() for today, but for yesterday we need to compute.
+                     # However, Python timezones are tricky. Simplest: Let Backend save "created_at" explicitly only if offset != 0.
                      
                      record = {
                          "user_id": user_id,
@@ -288,8 +307,17 @@ class NutritionAgent:
                          "protein": log_data.get("protein", 0),
                          "carbs": log_data.get("carbs", 0),
                          "fats": log_data.get("fats", 0),
-                         "image_url": "placeholder" # Future: Upload image to Storage
+                         "image_url": "placeholder",
+                         "ai_analysis_json": log_data, # Store full JSON for future proofing
+                         "message": ai_message # Store commentary for Display
                      }
+                     
+                     # Handle Yesterday logic
+                     if date_offset != 0:
+                         from datetime import datetime, timedelta
+                         # Using UTC for simplicity, in prod user timezone matters
+                         past_date = datetime.utcnow() + timedelta(days=date_offset)
+                         record["created_at"] = past_date.isoformat()
                      
                      print(f"⏳ Inserting into Supabase: {record}")
                      
