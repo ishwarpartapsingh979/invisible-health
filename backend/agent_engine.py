@@ -217,7 +217,8 @@ class NutritionAgent:
         Analyzes Text + Media (Image/Audio) input.
         Now supports Location context and Observability.
         """
-        from langfuse import langfuse_context
+        # Fix: langfuse_context is in decorators, not top level
+        from langfuse.decorators import langfuse_context
         
         try:
             # 1. Construct the User Message Parts
