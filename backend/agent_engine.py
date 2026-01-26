@@ -234,11 +234,29 @@ class NutritionAgent:
                 user_parts.append(media_part)
             if not user_parts:
                 return "Empty Input"
-            # 2. Add System Context
-            system_instruction = """
-            You are an elite Nutrition AI.
-            Analyze the input (Text/Image/Audio).
             
+            # --- CONTEXT: Fetch Recent Logs (Phase H) ---
+            recent_logs = []
+            try:
+                # Reuse existing get_logs but limited to 5
+                log_response = self.supabase.table("logs").select("food_name, calories, created_at").eq("user_id", user_id).order("created_at", desc=True).limit(5).execute()
+                recent_logs = log_response.data
+            except Exception as e:
+                print(f"Failed to fetch context: {e}")
+            
+            context_str = "No recent logs."
+            if recent_logs:
+                context_str = "RECENTLY EATEN:\n" + "\n".join([f"- {l.get('food_name')} ({l.get('calories')} kcal)" for l in recent_logs])
+            
+            # 2. Add System Context
+            system_instruction = f"""
+            You are an elite Nutrition AI.
+            
+            CURRENT CONTEXT:
+            {context_str}
+            
+            Analyze the input (Text/Image/Audio).
+            """ + """
             1. IDENTIFY FOOD: Name, Description, Healthiness.
                - If it's a BRAND (e.g., McDonald's, Starbucks), use their official calorie counts.
                - Detect if the user says "Yesterday" or "Last Night". Parsing: date_offset should be -1.
