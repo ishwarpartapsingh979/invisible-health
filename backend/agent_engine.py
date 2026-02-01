@@ -534,3 +534,141 @@ class NutritionAgent:
             print(f"Error SOS: {e}")
             # Fallback
             return '[{"title": "Breathe", "description": "Inhale 4s, Hold 4s, Exhale 4s.", "icon": "lungs.fill", "color": "blue"}]'
+    # --- PHASE 3.1: WORKOUT ANALYSIS ---
+    @observe(as_type="generation")
+    def analyze_workout(self, data: dict):
+        """
+        Analyzes elite workout metrics (Oscillation, GCT, Power).
+        """
+        try:
+            user_id = data.get('user_id')
+            w_type = data.get('workout_type', 'Workout')
+            duration = int(data.get('duration_seconds', 0)) // 60
+            cals = int(data.get('calories', 0))
+            
+            # Elite Metrics
+            osc = data.get('avg_oscillation_cm', 0)
+            gct = data.get('avg_gct_ms', 0)
+            pwr = data.get('avg_power_watts', 0)
+            
+            prompt = f"""
+            You are an Elite Sports Scientist & Biomechanics Coach.
+            
+            Analyze this {w_type}:
+            - Duration: {duration} mins
+            - Calories: {cals}
+            - Vertical Oscillation: {osc} cm (Target < 8 cm)
+            - Ground Contact Time: {gct} ms (Target < 200 ms)
+            - Power: {pwr} W
+            
+            TASK:
+            1. DEMYSTIFY: Explain what the metrics mean simply.
+            2. CRITIQUE: strict feedback on form based on Oscillation/GCT.
+            3. ADVICE: One concrete tip to improve efficiency.
+            
+            OUTPUT JSON:
+            {{ "message": "..." }}
+            """
+            
+            response = self.model.generate_content(prompt)
+            clean_json = response.text.replace("```json", "").replace("```", "").strip()
+            return clean_json
+            
+        except Exception as e:
+            return f'{{"message": "Error analyzing workout: {str(e)}"}}'
+
+    # --- PHASE 3.3: NIGHTLY REPORT ---
+    @observe(as_type="generation")
+    def generate_nightly_report(self, data: dict):
+        """
+        Synthesizes Food vs Workouts vs Bio-Readiness.
+        """
+        try:
+            steps = data.get('steps', 0)
+            workouts = data.get('workouts', "None")
+            vo2 = data.get('vo2', 0)
+            hrv = data.get('hrv', 0)
+            rhr = data.get('rhr', 0)
+            
+            # Fetch today's food logs
+            user_id = data.get('user_id')
+            today_logs = []
+            try:
+                # In real prod, filter by date. Here we take last 10, assuming they are today.
+                logs_resp = self.supabase.table("logs").select("food_name, calories").eq("user_id", user_id).order("created_at", desc=True).limit(10).execute()
+                today_logs = logs_resp.data
+            except: pass
+            
+            total_cals_in = sum([l.get('calories', 0) for l in today_logs])
+            food_summary = ", ".join([l.get('food_name') for l in today_logs])
+            
+            prompt = f"""
+            You are a Holistic Health Coach generating the 'Nightly Report'.
+            
+            DATA:
+            1. ENGINE (Output): {steps} steps. Workouts: {workouts}.
+            2. FUEL (Input): {total_cals_in} kcal. Foods: {food_summary}.
+            3. CHASSIS (Recovery): VO2Max {vo2}, HRV {hrv}ms, Resting HR {rhr}bpm.
+            
+            TASK:
+            Compare Fuel vs Engine. 
+            - If Output > Input: "Deficit Day". Warn about recovery if HRV is low.
+            - If Input > Output: "Surplus Day". Fine for building, bad for fat loss.
+            - Analyze HRV: If < 30ms (assumption), suggest sleep focus.
+            
+            OUTPUT JSON:
+            {{ "message": "..." }}
+            """
+            
+            response = self.model.generate_content(prompt)
+            clean_json = response.text.replace("```json", "").replace("```", "").strip()
+            return clean_json
+            
+        except Exception as e:
+             return f'{{"message": "Error generating report: {str(e)}"}}'
+
+    # --- PHASE 3.4: CHAT WITH CONTEXT ---
+    @observe(as_type="generation")
+    def chat_with_context(self, data: dict):
+        """
+        Chat that knows *everything*: Steps, Recent Logs, Location, HRV.
+        """
+        try:
+            user_id = data.get('user_id')
+            user_msg = data.get('message')
+            
+            # Context passed from client (or we could fetch it here)
+            # For speed, let's trust client passed critical metrics, or we fetch logs.
+            # Let's fetch logs here to be safe.
+            recent_logs = self.get_logs(user_id)[:5] # Get last 5
+            
+            steps = data.get('steps', 0)
+            hrv = data.get('hrv', 0)
+            location = data.get('location_context', "Unknown")
+            
+            prompt = f"""
+            You are the user's Intelligent Health Companion.
+            
+            CONTEXT:
+            - User: {user_msg}
+            - Recent Food: {[l['food_name'] for l in recent_logs]}
+            - Activity: {steps} steps.
+            - Recovery: HRV {hrv} ms.
+            - Location: {location}
+            
+            INSTRUCTIONS:
+            Answer the user's question accurately.
+            Use the context! 
+            - If they ask "Can I eat pizza?", check if they walked enough or have high compliance.
+            - If HRV is low, be gentle.
+            
+            OUTPUT JSON:
+            {{ "message": "..." }}
+            """
+            
+            response = self.model.generate_content(prompt)
+            clean_json = response.text.replace("```json", "").replace("```", "").strip()
+            return clean_json
+            
+        except Exception as e:
+            return f'{{"message": "I am having trouble thinking right now. ({str(e)})"}}'

@@ -384,4 +384,75 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             }
         }.resume()
     }
+    // MARK: - Phase 3.1: Workout Analysis (Elite Coach)
+    
+    func analyzeLastWorkout(completion: @escaping (String) -> Void) {
+        // 1. Fetch Last Workout
+        HealthManager.shared.fetchTodayWorkouts { workouts in
+            guard let lastWorkout = workouts.first else {
+                completion("No workouts found for today.")
+                return
+            }
+            
+            // 2. Fetch Elite Metrics for this workout
+            HealthManager.shared.fetchWorkoutMetrics(workout: lastWorkout) { osc, gct, pwr in
+                
+                // 3. Prepare Payload
+                guard var components = URLComponents(string: self.agentURL) else { return }
+                
+                // Encode basic workout stats
+                let duration = lastWorkout.duration // TimeInterval
+                let calories = lastWorkout.statistics(for: HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)!)?.sumQuantity()?.doubleValue(for: .kilocalorie()) ?? 0
+                
+                // Note: We'd typically POST this JSON, but using GET query params for consistency with existing simple endpoints unless it gets too big.
+                // Let's use POST for safety as this is data heavy.
+                
+                guard let url = URL(string: self.agentURL) else { return }
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                
+                let body: [String: Any] = [
+                    "action": "analyze_workout",
+                    "user_id": "00000000-0000-0000-0000-000000000001",
+                    "workout_type": "\(lastWorkout.workoutActivityType.rawValue)",
+                    "duration_seconds": duration,
+                    "calories": calories,
+                    "avg_oscillation_cm": osc ?? 0,
+                    "avg_gct_ms": gct ?? 0,
+                    "avg_power_watts": pwr ?? 0
+                ]
+                
+                do {
+                    request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
+                    
+                    print("🏋️ sending Analysis Request: \(body)")
+                    
+                    // 4. Send
+                    DispatchQueue.main.async { self.isLoading = true; self.lastDecision = "Analyzing Workout..." }
+                    
+                    URLSession.shared.dataTask(with: request) { data, response, error in
+                        DispatchQueue.main.async { self.isLoading = false }
+                        
+                        if let error = error {
+                            print("❌ Analysis Error: \(error)")
+                            completion("Error analyzing.")
+                            return
+                        }
+                        
+                        if let data = data, let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                            let message = json["message"] as? String ?? "Analysis complete."
+                            DispatchQueue.main.async { self.lastDecision = message }
+                            completion(message)
+                        } else {
+                             completion("Analysis received.")
+                        }
+                    }.resume()
+                    
+                } catch {
+                    print("❌ JSON Error")
+                }
+            }
+        }
+    }
 }

@@ -36,7 +36,23 @@ def run_agent(request):
                  success, msg = agent.update_log(data)
                  if success: return msg, 200
                  else: return msg, 500
+            
+            # --- PHASE 3.1: ANALYZE WORKOUT ---
+            if data.get('action') == 'analyze_workout':
+                # Pass full JSON body
+                response_json = agent.analyze_workout(data)
+                return response_json, 200, {'Content-Type': 'application/json'}
+            
+            # --- PHASE 3.3: NIGHTLY REPORT ---
+            if data.get('action') == 'nightly_report':
+                 response_json = agent.generate_nightly_report(data)
+                 return response_json, 200, {'Content-Type': 'application/json'}
                  
+            # --- PHASE 3.4: CHAT WITH CONTEXT ---
+            if data.get('action') == 'chat':
+                response_json = agent.chat_with_context(data)
+                return response_json, 200, {'Content-Type': 'application/json'}
+
             user_id = data.get('user_id')
             text = data.get('text')
             

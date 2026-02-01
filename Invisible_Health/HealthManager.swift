@@ -22,7 +22,23 @@ class HealthManager: ObservableObject {
         let readTypes: Set<HKObjectType> = [
             HKObjectType.quantityType(forIdentifier: .stepCount)!,
             HKObjectType.quantityType(forIdentifier: .activeEnergyBurned)!,
-            HKObjectType.workoutType()
+            HKObjectType.workoutType()!,
+            
+            // Phase 3.1: Elite Metrics
+            // Biomechanics
+            HKObjectType.quantityType(forIdentifier: .runningVerticalOscillation)!,
+            HKObjectType.quantityType(forIdentifier: .runningGroundContactTime)!,
+            HKObjectType.quantityType(forIdentifier: .runningPower)!,
+            HKObjectType.quantityType(forIdentifier: .runningSpeed)!,
+            
+            // Cardio
+            HKObjectType.quantityType(forIdentifier: .heartRate)!,
+            HKObjectType.quantityType(forIdentifier: .vo2Max)!,
+            HKObjectType.quantityType(forIdentifier: .heartRateRecoveryOneMinute)!,
+            
+            // CNS / Recovery
+            HKObjectType.quantityType(forIdentifier: .heartRateVariabilitySDNN)!,
+            HKObjectType.quantityType(forIdentifier: .restingHeartRate)!
         ]
         
         // WRITE Types (Nutrition)
@@ -36,7 +52,7 @@ class HealthManager: ObservableObject {
         
         healthStore.requestAuthorization(toShare: writeTypes, read: readTypes) { success, error in
             if success {
-                print("✅ HealthKit Authorized")
+                print("✅ HealthKit Authorized (Elite Mode)")
                 DispatchQueue.main.async {
                     self.isAuthorized = true
                     self.fetchTodaySteps()
@@ -58,7 +74,6 @@ class HealthManager: ObservableObject {
         
         let query = HKStatisticsQuery(quantityType: stepType, quantitySamplePredicate: predicate, options: .cumulativeSum) { _, result, error in
             guard let result = result, let sum = result.sumQuantity() else {
-                print("Steps: 0 (or error)")
                 completion?(0)
                 return
             }
@@ -73,6 +88,135 @@ class HealthManager: ObservableObject {
         
         healthStore.execute(query)
     }
+    
+    // MARK: - 2a. Elite Fetchers (Phase 3.1)
+    
+    // FETCH WORKOUTS (Last 3 Days)
+    func fetchRecentWorkouts(days: Int = 3, completion: @escaping ([HKWorkout]) -> Void) {
+        let now = Date()
+        let calendar = Calendar.current
+        let startOfToday = calendar.startOfDay(for: now)
+        // Go back (days - 1) days to include today + 2 previous days
+        let startDate = calendar.date(byAdding: .day, value: -(days - 1), to: startOfToday)!
+        
+        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: now, options: .strictStartDate)
+        let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
+        
+        let query = HKSampleQuery(sampleType: .workoutType(), predicate: predicate, limit: 100, sortDescriptors: [sortDescriptor]) { _, samples, error in
+            guard let workouts = samples as? [HKWorkout], error == nil else {
+                print("❌ Error fetching workouts: \(String(describing: error))")
+                completion([])
+                return
+            }
+            
+            print("🏋️ Found \(workouts.count) workouts (Last \(days) Days).")
+            DispatchQueue.main.async {
+                completion(workouts)
+            }
+        }
+        healthStore.execute(query)
+    }
+    
+    // GENERIC LATEST SAMPLE FETCHER (HRV, RHR, VO2)
+    func fetchLatestSample(for identifier: HKQuantityTypeIdentifier, unit: HKUnit, completion: @escaping (Double?) -> Void) {
+        guard let type = HKQuantityType.quantityType(forIdentifier: identifier) else { completion(nil); return }
+        
+        let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
+        let query = HKSampleQuery(sampleType: type, predicate: nil, limit: 1, sortDescriptors: [sortDescriptor]) { _, samples, _ in
+            guard let sample = samples?.first as? HKQuantitySample else {
+                completion(nil)
+                return
+            }
+            
+            let value = sample.quantity.doubleValue(for: unit)
+            DispatchQueue.main.async {
+                completion(value)
+            }
+        }
+        healthStore.execute(query)
+    }
+    
+    // HELPER: Fetch Biometrics for Summary
+    func fetchEliteBiometrics(completion: @escaping (Double?, Double?, Double?) -> Void) {
+        // Returns (VO2Max, HRV, RHR)
+        var vo2: Double?
+        var hrv: Double?
+        var rhr: Double?
+        
+        let group = DispatchGroup()
+        
+        // VO2 Max (ml/kg/min)
+        group.enter()
+        fetchLatestSample(for: .vo2Max, unit: HKUnit(from: "ml/kg/min")) { value in
+            vo2 = value
+            group.leave()
+        }
+        
+        // HRV (ms)
+        group.enter()
+        fetchLatestSample(for: .heartRateVariabilitySDNN, unit: .secondUnit(with: .milli)) { value in
+            hrv = value
+            group.leave()
+        }
+        
+        // Resting HR (bpm)
+        group.enter()
+        fetchLatestSample(for: .restingHeartRate, unit: HKUnit.count().unitDivided(by: .minute())) { value in
+            rhr = value
+            group.leave()
+        }
+        
+        group.notify(queue: .main) {
+            print("🫀 Elite Biometrics - VO2: \(String(describing: vo2)), HRV: \(String(describing: hrv)), RHR: \(String(describing: rhr))")
+            completion(vo2, hrv, rhr)
+        }
+    }
+    
+    // HELPER: Fetch Workout Details (Metrics for a specific workout)
+    func fetchWorkoutMetrics(workout: HKWorkout, completion: @escaping (Double?, Double?, Double?) -> Void) {
+        // Returns (Avg Oscillation, Avg GCT, Avg Power)
+        // Note: In reality, we'd query samples constrained to the workout's time window.
+        
+        let predicate = HKQuery.predicateForSamples(withStart: workout.startDate, end: workout.endDate, options: .strictStartDate)
+        
+        var avgOscillation: Double?
+        var avgGCT: Double?
+        var avgPower: Double?
+        
+        let group = DispatchGroup()
+        
+        // 1. Oscillation (cm)
+        group.enter()
+        let oscType = HKQuantityType.quantityType(forIdentifier: .runningVerticalOscillation)!
+        let oscQuery = HKStatisticsQuery(quantityType: oscType, quantitySamplePredicate: predicate, options: .discreteAverage) { _, result, _ in
+            avgOscillation = result?.averageQuantity()?.doubleValue(for: .meterUnit(with: .centi))
+            group.leave()
+        }
+        healthStore.execute(oscQuery)
+        
+        // 2. GCT (ms)
+        group.enter()
+        let gctType = HKQuantityType.quantityType(forIdentifier: .runningGroundContactTime)!
+        let gctQuery = HKStatisticsQuery(quantityType: gctType, quantitySamplePredicate: predicate, options: .discreteAverage) { _, result, _ in
+            avgGCT = result?.averageQuantity()?.doubleValue(for: .secondUnit(with: .milli))
+            group.leave()
+        }
+        healthStore.execute(gctQuery)
+        
+        // 3. Power (Watts)
+        group.enter()
+        let pwrType = HKQuantityType.quantityType(forIdentifier: .runningPower)!
+        let pwrQuery = HKStatisticsQuery(quantityType: pwrType, quantitySamplePredicate: predicate, options: .discreteAverage) { _, result, _ in
+            avgPower = result?.averageQuantity()?.doubleValue(for: .watt())
+            group.leave()
+        }
+        healthStore.execute(pwrQuery)
+        
+        group.notify(queue: .main) {
+            completion(avgOscillation, avgGCT, avgPower)
+        }
+    }
+
     
     // MARK: - 3. Write Loop (Nutrition Sync)
     func logDietaryData(calories: Double, protein: Double? = nil, carbs: Double? = nil, fat: Double? = nil, date: Date = Date()) {
