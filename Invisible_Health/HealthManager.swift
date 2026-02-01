@@ -22,7 +22,7 @@ class HealthManager: ObservableObject {
         let readTypes: Set<HKObjectType> = [
             HKObjectType.quantityType(forIdentifier: .stepCount)!,
             HKObjectType.quantityType(forIdentifier: .activeEnergyBurned)!,
-            HKObjectType.workoutType()!,
+            HKObjectType.workoutType(),
             
             // Phase 3.1: Elite Metrics
             // Biomechanics
