@@ -3,6 +3,7 @@ import CoreLocation
 import ActivityKit
 import SwiftUI
 import UIKit
+import HealthKit
 
 class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     static let shared = AgentManager()
@@ -388,7 +389,7 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     
     func analyzeLastWorkout(completion: @escaping (String) -> Void) {
         // 1. Fetch Last Workout
-        HealthManager.shared.fetchTodayWorkouts { workouts in
+        HealthManager.shared.fetchRecentWorkouts(days: 1) { workouts in
             guard let lastWorkout = workouts.first else {
                 completion("No workouts found for today.")
                 return
@@ -402,7 +403,7 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
                 
                 // Encode basic workout stats
                 let duration = lastWorkout.duration // TimeInterval
-                let calories = lastWorkout.statistics(for: HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)!)?.sumQuantity()?.doubleValue(for: .kilocalorie()) ?? 0
+                let calories = lastWorkout.statistics(for: HKQuantityType.quantityType(forIdentifier: HKQuantityTypeIdentifier.activeEnergyBurned)!)?.sumQuantity()?.doubleValue(for: .kilocalorie()) ?? 0
                 
                 // Note: We'd typically POST this JSON, but using GET query params for consistency with existing simple endpoints unless it gets too big.
                 // Let's use POST for safety as this is data heavy.
@@ -452,6 +453,88 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
                 } catch {
                     print("❌ JSON Error")
                 }
+            }
+        }
+    }
+
+    
+    // MARK: - Phase 3.3: Nightly Holistic Report
+    
+    func generateDailyReport(completion: @escaping (String) -> Void) {
+        // 1. Fetch Today's Data
+        let group = DispatchGroup()
+        
+        var steps: Double = 0
+        var workouts: [HKWorkout] = []
+        var vo2: Double?
+        var hrv: Double?
+        var rhr: Double?
+        
+        group.enter()
+        HealthManager.shared.fetchTodaySteps { s in
+            steps = s
+            group.leave()
+        }
+        
+        group.enter()
+        HealthManager.shared.fetchRecentWorkouts(days: 1) { w in
+            workouts = w
+            group.leave()
+        }
+        
+        group.enter()
+        HealthManager.shared.fetchEliteBiometrics { v, h, r in
+            vo2 = v
+            hrv = h
+            rhr = r
+            group.leave()
+        }
+        
+        group.notify(queue: .main) {
+            // 2. Build Payload
+            guard let url = URL(string: self.agentURL) else { return }
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            
+            let workoutSummary = workouts.map { $0.workoutActivityType.rawValue }.description
+            
+            let body: [String: Any] = [
+                "action": "nightly_report",
+                "user_id": "00000000-0000-0000-0000-000000000001",
+                "steps": steps,
+                "workouts": workoutSummary,
+                "vo2": vo2 ?? 0,
+                "hrv": hrv ?? 0,
+                "rhr": rhr ?? 0
+            ]
+            
+            do {
+                request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
+                print("🌙 Sending Nightly Report Request: \(body)")
+                
+                DispatchQueue.main.async { self.isLoading = true; self.lastDecision = "Generating Nightly Report..." }
+                
+                URLSession.shared.dataTask(with: request) { data, response, error in
+                    DispatchQueue.main.async { self.isLoading = false }
+                    
+                    if let error = error {
+                        print("❌ Report Error: \(error)")
+                        completion("Error generating report.")
+                        return
+                    }
+                    
+                    if let data = data, let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        let message = json["message"] as? String ?? "Report Generated."
+                        DispatchQueue.main.async { self.lastDecision = message }
+                        completion(message)
+                    } else {
+                         completion("Report received.")
+                    }
+                }.resume()
+                
+            } catch {
+                print("❌ JSON Error")
             }
         }
     }

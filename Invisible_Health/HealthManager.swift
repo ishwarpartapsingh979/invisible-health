@@ -19,26 +19,27 @@ class HealthManager: ObservableObject {
     // MARK: - 1. Authorization
     func requestAuthorization() {
         // READ Types (Sensors)
+        // READ Types (Sensors)
         let readTypes: Set<HKObjectType> = [
-            HKObjectType.quantityType(forIdentifier: .stepCount)!,
-            HKObjectType.quantityType(forIdentifier: .activeEnergyBurned)!,
+            HKObjectType.quantityType(forIdentifier: HKQuantityTypeIdentifier.stepCount)!,
+            HKObjectType.quantityType(forIdentifier: HKQuantityTypeIdentifier.activeEnergyBurned)!,
             HKObjectType.workoutType(),
             
             // Phase 3.1: Elite Metrics
             // Biomechanics
-            HKObjectType.quantityType(forIdentifier: .runningVerticalOscillation)!,
-            HKObjectType.quantityType(forIdentifier: .runningGroundContactTime)!,
-            HKObjectType.quantityType(forIdentifier: .runningPower)!,
-            HKObjectType.quantityType(forIdentifier: .runningSpeed)!,
+            HKObjectType.quantityType(forIdentifier: HKQuantityTypeIdentifier.runningVerticalOscillation)!,
+            HKObjectType.quantityType(forIdentifier: HKQuantityTypeIdentifier.runningGroundContactTime)!,
+            HKObjectType.quantityType(forIdentifier: HKQuantityTypeIdentifier.runningPower)!,
+            HKObjectType.quantityType(forIdentifier: HKQuantityTypeIdentifier.runningSpeed)!,
             
             // Cardio
-            HKObjectType.quantityType(forIdentifier: .heartRate)!,
-            HKObjectType.quantityType(forIdentifier: .vo2Max)!,
-            HKObjectType.quantityType(forIdentifier: .heartRateRecoveryOneMinute)!,
+            HKObjectType.quantityType(forIdentifier: HKQuantityTypeIdentifier.heartRate)!,
+            HKObjectType.quantityType(forIdentifier: HKQuantityTypeIdentifier.vo2Max)!,
+            HKObjectType.quantityType(forIdentifier: HKQuantityTypeIdentifier.heartRateRecoveryOneMinute)!,
             
             // CNS / Recovery
-            HKObjectType.quantityType(forIdentifier: .heartRateVariabilitySDNN)!,
-            HKObjectType.quantityType(forIdentifier: .restingHeartRate)!
+            HKObjectType.quantityType(forIdentifier: HKQuantityTypeIdentifier.heartRateVariabilitySDNN)!,
+            HKObjectType.quantityType(forIdentifier: HKQuantityTypeIdentifier.restingHeartRate)!
         ]
         
         // WRITE Types (Nutrition)
