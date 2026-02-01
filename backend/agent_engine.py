@@ -538,37 +538,69 @@ class NutritionAgent:
     @observe(as_type="generation")
     def analyze_workout(self, data: dict):
         """
-        Analyzes elite workout metrics (Oscillation, GCT, Power).
+        Analyzes workout metrics. Differentiates between Running (Biomechanics) and Strength (Cardio Load + Context).
         """
         try:
             user_id = data.get('user_id')
-            w_type = data.get('workout_type', 'Workout')
-            duration = int(data.get('duration_seconds', 0)) // 60
-            cals = int(data.get('calories', 0))
+            w_type_raw = str(data.get('workout_type', 'Workout'))
+            duration = int(float(data.get('duration_seconds', 0))) // 60
+            cals = int(float(data.get('calories', 0)))
+            logs_context = data.get('logs', "No notes found.")
             
-            # Elite Metrics
+            # Metrics
             osc = data.get('avg_oscillation_cm', 0)
             gct = data.get('avg_gct_ms', 0)
             pwr = data.get('avg_power_watts', 0)
+            avg_hr = data.get('avg_hr', 0)
+            max_hr = data.get('max_hr', 0)
             
-            prompt = f"""
-            You are an Elite Sports Scientist & Biomechanics Coach.
+            # Detect Type
+            # HKWorkoutActivityType: 52 = Running, 20 = Functional Strength, 37 = Traditional Strength
+            is_running = "52" in w_type_raw or "running" in w_type_raw.lower()
             
-            Analyze this {w_type}:
-            - Duration: {duration} mins
-            - Calories: {cals}
-            - Vertical Oscillation: {osc} cm (Target < 8 cm)
-            - Ground Contact Time: {gct} ms (Target < 200 ms)
-            - Power: {pwr} W
-            
-            TASK:
-            1. DEMYSTIFY: Explain what the metrics mean simply.
-            2. CRITIQUE: strict feedback on form based on Oscillation/GCT.
-            3. ADVICE: One concrete tip to improve efficiency.
-            
-            OUTPUT JSON:
-            {{ "message": "..." }}
-            """
+            if is_running:
+                prompt = f"""
+                You are an Elite Sports Scientist & Biomechanics Coach.
+                
+                Analyze this RUNNING Session:
+                - Duration: {duration} mins
+                - Calories: {cals}
+                - Vertical Oscillation: {osc} cm (Target < 8 cm)
+                - Ground Contact Time: {gct} ms (Target < 200 ms)
+                - Power: {pwr} W
+                - Heart Rate: Avg {avg_hr} bpm, Max {max_hr} bpm
+                - Context Notes: "{logs_context}"
+                
+                TASK:
+                1. DEMYSTIFY: Explain metrics simply.
+                2. CRITIQUE: Form feedback based on Oscillation/GCT.
+                3. CONTEXT: If user notes say "Tired" or "Intervals", relate it to the data.
+                
+                OUTPUT JSON:
+                {{ "message": "..." }}
+                """
+            else:
+                # Strength / General Prompt
+                prompt = f"""
+                You are an Elite Strength & Conditioning Coach.
+                
+                Analyze this STRENGTH/GYM Session:
+                - Duration: {duration} mins
+                - Calories: {cals}
+                - Heart Rate: Avg {avg_hr} bpm, Max {max_hr} bpm
+                - Context Notes (User Logs): "{logs_context}"
+                
+                TASK:
+                1. ANALYZE INTENSITY: Based on HR & Duration. (e.g. "Hypertrophy zone" vs "Endurance").
+                2. LOG CORRELATION: Look at the 'Context Notes'. 
+                   - If user logged "Chest Day", "Legs", or specific lifts, USE THAT.
+                   - Example: "Good intensity for a Leg Day. Your HR spike of {max_hr} suggests heavy squat sets."
+                   - If notes are empty, ask user to log specific lifts next time for better feedback.
+                3. RECOVERY TIP: Based on the session load.
+                
+                OUTPUT JSON:
+                {{ "message": "..." }}
+                """
             
             response = self.model.generate_content(prompt)
             clean_json = response.text.replace("```json", "").replace("```", "").strip()
@@ -576,7 +608,7 @@ class NutritionAgent:
             
         except Exception as e:
             return f'{{"message": "Error analyzing workout: {str(e)}"}}'
-
+        
     # --- PHASE 3.3: NIGHTLY REPORT ---
     @observe(as_type="generation")
     def generate_nightly_report(self, data: dict):

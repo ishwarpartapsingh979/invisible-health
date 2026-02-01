@@ -148,7 +148,8 @@ class HealthManager: ObservableObject {
         
         // VO2 Max (ml/kg/min)
         group.enter()
-        fetchLatestSample(for: .vo2Max, unit: HKUnit(from: "ml/kg/min")) { value in
+        let vo2Unit = HKUnit.literUnit(with: .milli).unitDivided(by: HKUnit.gramUnit(with: .kilo)).unitDivided(by: HKUnit.minute())
+        fetchLatestSample(for: .vo2Max, unit: vo2Unit) { value in
             vo2 = value
             group.leave()
         }
@@ -174,15 +175,16 @@ class HealthManager: ObservableObject {
     }
     
     // HELPER: Fetch Workout Details (Metrics for a specific workout)
-    func fetchWorkoutMetrics(workout: HKWorkout, completion: @escaping (Double?, Double?, Double?) -> Void) {
-        // Returns (Avg Oscillation, Avg GCT, Avg Power)
-        // Note: In reality, we'd query samples constrained to the workout's time window.
+    func fetchWorkoutMetrics(workout: HKWorkout, completion: @escaping (Double?, Double?, Double?, Double?, Double?) -> Void) {
+        // Returns (Avg Oscillation, Avg GCT, Avg Power, Avg HR, Max HR)
         
         let predicate = HKQuery.predicateForSamples(withStart: workout.startDate, end: workout.endDate, options: .strictStartDate)
         
         var avgOscillation: Double?
         var avgGCT: Double?
         var avgPower: Double?
+        var avgHR: Double?
+        var maxHR: Double?
         
         let group = DispatchGroup()
         
@@ -213,8 +215,18 @@ class HealthManager: ObservableObject {
         }
         healthStore.execute(pwrQuery)
         
+        // 4. Heart Rate (Avg & Max)
+        group.enter()
+        let hrType = HKQuantityType.quantityType(forIdentifier: .heartRate)!
+        let hrQuery = HKStatisticsQuery(quantityType: hrType, quantitySamplePredicate: predicate, options: [.discreteAverage, .discreteMax]) { _, result, _ in
+            avgHR = result?.averageQuantity()?.doubleValue(for: HKUnit.count().unitDivided(by: .minute()))
+            maxHR = result?.maximumQuantity()?.doubleValue(for: HKUnit.count().unitDivided(by: .minute()))
+            group.leave()
+        }
+        healthStore.execute(hrQuery)
+        
         group.notify(queue: .main) {
-            completion(avgOscillation, avgGCT, avgPower)
+            completion(avgOscillation, avgGCT, avgPower, avgHR, maxHR)
         }
     }
 

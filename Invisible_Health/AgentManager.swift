@@ -387,16 +387,65 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     }
     // MARK: - Phase 3.1: Workout Analysis (Elite Coach)
     
-    func analyzeLastWorkout(completion: @escaping (String) -> Void) {
-        // 1. Fetch Last Workout
-        HealthManager.shared.fetchRecentWorkouts(days: 1) { workouts in
-            guard let lastWorkout = workouts.first else {
-                completion("No workouts found for today.")
-                return
+    func analyzeWorkout(workout: HKWorkout? = nil, completion: @escaping (String) -> Void) {
+        
+        // Internal helper to process valid workout
+        func process(_ targetWorkout: HKWorkout) {
+             let group = DispatchGroup()
+             
+             // Metrics
+             var osc: Double?; var gct: Double?; var pwr: Double?
+             var avgHR: Double?; var maxHR: Double?
+             
+             // Logs
+             var workoutLogs: String = ""
+             
+             group.enter()
+             HealthManager.shared.fetchWorkoutMetrics(workout: targetWorkout) { o, g, p, a, m in
+                 osc = o; gct = g; pwr = p; avgHR = a; maxHR = m
+                 group.leave()
+             }
+             
+             group.enter()
+             self.fetchLogs { allLogs in
+                 // Filter logs created on the same day as the workout
+                 let calendar = Calendar.current
+                 let workoutDate = targetWorkout.startDate
+                 let relevant = allLogs.filter { log in
+                     let formatter = ISO8601DateFormatter()
+                     if let logDate = formatter.date(from: log.created_at) {
+                         return calendar.isDate(logDate, inSameDayAs: workoutDate)
+                     }
+                     return false
+                 }
+                 if !relevant.isEmpty {
+                     workoutLogs = relevant.map { "\($0.food_name) (\($0.message ?? ""))" }.joined(separator: "; ")
+                 }
+                 group.leave()
+             }
+             
+             group.notify(queue: .main) {
+                 self.sendWorkoutToBackend(workout: targetWorkout, osc: osc, gct: gct, pwr: pwr, avgHR: avgHR, maxHR: maxHR, logs: workoutLogs, completion: completion)
+             }
+        }
+        
+        if let w = workout {
+            process(w)
+        } else {
+            // Fallback: Fetch Last Workout (Today)
+            HealthManager.shared.fetchRecentWorkouts(days: 1) { workouts in
+                guard let lastWorkout = workouts.first else {
+                    completion("No workouts found for today.")
+                    return
+                }
+                process(lastWorkout)
             }
-            
-            // 2. Fetch Elite Metrics for this workout
-            HealthManager.shared.fetchWorkoutMetrics(workout: lastWorkout) { osc, gct, pwr in
+        }
+    }
+    
+    // Extracted Backend Call
+    private func sendWorkoutToBackend(workout: HKWorkout, osc: Double?, gct: Double?, pwr: Double?, avgHR: Double?, maxHR: Double?, logs: String, completion: @escaping (String) -> Void) {
+        let lastWorkout = workout
                 
                 // 3. Prepare Payload
                 guard var components = URLComponents(string: self.agentURL) else { return }
@@ -421,7 +470,10 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
                     "calories": calories,
                     "avg_oscillation_cm": osc ?? 0,
                     "avg_gct_ms": gct ?? 0,
-                    "avg_power_watts": pwr ?? 0
+                    "avg_power_watts": pwr ?? 0,
+                    "avg_hr": avgHR ?? 0,
+                    "max_hr": maxHR ?? 0,
+                    "logs": logs
                 ]
                 
                 do {
@@ -453,8 +505,6 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
                 } catch {
                     print("❌ JSON Error")
                 }
-            }
-        }
     }
 
     
@@ -469,6 +519,7 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         var vo2: Double?
         var hrv: Double?
         var rhr: Double?
+        var recentLogs: [NutritionLog] = []
         
         group.enter()
         HealthManager.shared.fetchTodaySteps { s in
@@ -490,7 +541,22 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             group.leave()
         }
         
+        group.enter()
+        self.fetchLogs { logs in
+            recentLogs = logs
+            group.leave()
+        }
+        
         group.notify(queue: .main) {
+            // Filter Logs for TODAY
+            let todayLogs = recentLogs.filter { log in
+                let formatter = ISO8601DateFormatter()
+                if let date = formatter.date(from: log.created_at) {
+                    return Calendar.current.isDateInToday(date)
+                }
+                return false
+            }
+            
             // 2. Build Payload
             guard let url = URL(string: self.agentURL) else { return }
             var request = URLRequest(url: url)
@@ -499,6 +565,9 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             
             let workoutSummary = workouts.map { $0.workoutActivityType.rawValue }.description
             
+            // Simplify logs for payload to save tokens
+            let logSummary = todayLogs.map { "\($0.food_name): \($0.calories ?? 0) kcal" }.joined(separator: ", ")
+            
             let body: [String: Any] = [
                 "action": "nightly_report",
                 "user_id": "00000000-0000-0000-0000-000000000001",
@@ -506,7 +575,8 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
                 "workouts": workoutSummary,
                 "vo2": vo2 ?? 0,
                 "hrv": hrv ?? 0,
-                "rhr": rhr ?? 0
+                "rhr": rhr ?? 0,
+                "logs": logSummary // Context for calories in
             ]
             
             do {

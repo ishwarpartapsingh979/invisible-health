@@ -6,6 +6,8 @@ struct WorkoutDetailView: View {
     @State private var oscillation: Double?
     @State private var gct: Double?
     @State private var power: Double?
+    @State private var avgHR: Double? // New
+    @State private var maxHR: Double? // New
     
     @State private var analysis: String = "Tap to Analyze"
     
@@ -37,7 +39,7 @@ struct WorkoutDetailView: View {
                         .cornerRadius(10)
                         
                     Button("Analyze with Agent") {
-                         AgentManager.shared.analyzeLastWorkout { result in
+                         AgentManager.shared.analyzeWorkout(workout: self.workout) { result in
                              self.analysis = result
                          }
                     }
@@ -71,8 +73,8 @@ struct WorkoutDetailView: View {
                 SectionHeader(title: "Cardio Engine", icon: "heart.fill")
                 
                 HStack(spacing: 15) {
-                    MetricCard(title: "Avg Heart Rate", value: "-- bpm", target: "Zone 2")
-                    MetricCard(title: "HR Recovery", value: "-- bpm", target: "> 20 bpm")
+                    MetricCard(title: "Avg Heart Rate", value: avgHR != nil ? String(format: "%.0f bpm", avgHR!) : "--", target: "Zone 2")
+                    MetricCard(title: "Max Heart Rate", value: maxHR != nil ? String(format: "%.0f bpm", maxHR!) : "--", target: "Peak")
                 }
                 .padding(.horizontal)
                 
@@ -81,10 +83,12 @@ struct WorkoutDetailView: View {
             .padding(.top)
         }
         .onAppear {
-            HealthManager.shared.fetchWorkoutMetrics(workout: workout) { osc, gct, pwr in
+            HealthManager.shared.fetchWorkoutMetrics(workout: workout) { osc, gct, pwr, ahr, mhr in
                 self.oscillation = osc
                 self.gct = gct
                 self.power = pwr
+                self.avgHR = ahr
+                self.maxHR = mhr
             }
         }
     }

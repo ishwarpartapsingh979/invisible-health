@@ -16,7 +16,8 @@ struct ContentView: View {
     @State private var showSOS: Bool = false
     @State private var pulseEvaluate: Bool = false
     
-    // Tab Selection (0: Log/Home, 1: Chat, 2: Data)
+    // Tab Selection
+    // 0: Log, 1: Chat, 2: Data, 3: SOS, 4: Workout, 5: Summary
     @State private var selectedTab: Int = 0
     
     // Image Annotation State (Phase 2.1)
@@ -48,6 +49,12 @@ struct ContentView: View {
                     ChatView()
                 case 2:
                     DataFeedView()
+                case 3:
+                     SOSView() // Tab 3
+                case 4:
+                     WorkoutView() // Tab 4
+                case 5:
+                     SummaryView() // Tab 5
                 default:
                     // Tab 0: Home / Mic Screen
                     micView
@@ -55,25 +62,35 @@ struct ContentView: View {
                 
                 Spacer()
                 
-                // MARK: - Bottom Tab Bar
-                HStack(spacing: 30) {
-                    TabButton(icon: "keyboard", text: "LOG", isSelected: selectedTab == 0) {
-                        if selectedTab == 0 {
-                            // If already on Log tab, toggle Text Input
-                            withAnimation { showTextInput = true }
-                        } else {
-                            selectedTab = 0
+                // MARK: - Bottom Tab Bar (Scrollable)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 25) {
+                         // Spacer for left padding
+                         Spacer().frame(width: 10)
+                         
+                        TabButton(icon: "keyboard", text: "LOG", isSelected: selectedTab == 0) {
+                            if selectedTab == 0 {
+                                withAnimation { showTextInput = true }
+                            } else {
+                                selectedTab = 0
+                            }
                         }
+                        TabButton(icon: "message", text: "CHAT", isSelected: selectedTab == 1) { selectedTab = 1 }
+                        TabButton(icon: "chart.bar", text: "DATA", isSelected: selectedTab == 2) { selectedTab = 2 }
+                        
+                        // New Tabs
+                        TabButton(icon: "exclamationmark.circle.fill", text: "SOS", isSelected: selectedTab == 3) { selectedTab = 3 }
+                        
+                        TabButton(icon: "figure.run", text: "WORKOUT", isSelected: selectedTab == 4) { selectedTab = 4 }
+                        
+                        TabButton(icon: "brain.head.profile", text: "SUMMARY", isSelected: selectedTab == 5) { selectedTab = 5 }
+                        
+                        // Spacer for right padding
+                        Spacer().frame(width: 10)
                     }
-                    TabButton(icon: "message", text: "CHAT", isSelected: selectedTab == 1) { selectedTab = 1 }
-                    TabButton(icon: "chart.bar", text: "DATA", isSelected: selectedTab == 2) { selectedTab = 2 }
-                    
-                    // SOS Button
-                    TabButton(icon: "exclamationmark.circle.fill", text: "SOS", isSelected: false) {
-                        showSOS = true
-                    }
+                    .padding(.bottom, 40)
+                    .padding(.top, 10)
                 }
-                .padding(.bottom, 40)
             }
             
             // MARK: - Text Input Overlay
@@ -116,14 +133,12 @@ struct ContentView: View {
             } else if url.absoluteString.contains("data") {
                 selectedTab = 2
             } else if url.absoluteString.contains("sos") {
-                showSOS = true
-            } else if url.absoluteString.contains("open") {
-                // Just open, maybe default to Home
+                selectedTab = 3
+            } else if url.absoluteString.contains("workout") {
+                selectedTab = 4
+            } else if url.absoluteString.contains("summary") {
+                selectedTab = 5
             }
-        }
-        // SOS Sheet
-        .sheet(isPresented: $showSOS) {
-            SOSView()
         }
         // Annotation Sheet (Phase 2.1)
         .sheet(item: $imageToAnnotate) { item in
