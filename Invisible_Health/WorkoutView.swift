@@ -82,8 +82,8 @@ struct WorkoutView: View {
     }
     
     func fetchWorkouts() {
-        // Fetch last 3 days
-        HealthManager.shared.fetchRecentWorkouts(days: 3) { fetchedWorkouts in
+        // Fetch last 7 days (Today + 6 previous days)
+        HealthManager.shared.fetchRecentWorkouts(days: 7) { fetchedWorkouts in
             self.workouts = fetchedWorkouts
         }
     }

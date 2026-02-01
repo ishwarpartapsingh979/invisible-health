@@ -46,15 +46,15 @@ struct ContentView: View {
                 // MARK: - Main Content Switcher
                 switch selectedTab {
                 case 1:
-                    ChatView()
+                    DataFeedView() // Tab 1
                 case 2:
-                    DataFeedView()
+                    WorkoutView() // Tab 2
                 case 3:
-                     SOSView() // Tab 3
+                     SummaryView() // Tab 3
                 case 4:
-                     WorkoutView() // Tab 4
+                     ChatView() // Tab 4
                 case 5:
-                     SummaryView() // Tab 5
+                     SOSView() // Tab 5
                 default:
                     // Tab 0: Home / Mic Screen
                     micView
@@ -75,15 +75,16 @@ struct ContentView: View {
                                 selectedTab = 0
                             }
                         }
-                        TabButton(icon: "message", text: "CHAT", isSelected: selectedTab == 1) { selectedTab = 1 }
-                        TabButton(icon: "chart.bar", text: "DATA", isSelected: selectedTab == 2) { selectedTab = 2 }
                         
-                        // New Tabs
-                        TabButton(icon: "exclamationmark.circle.fill", text: "SOS", isSelected: selectedTab == 3) { selectedTab = 3 }
+                        TabButton(icon: "chart.bar", text: "DATA", isSelected: selectedTab == 1) { selectedTab = 1 }
                         
-                        TabButton(icon: "figure.run", text: "WORKOUT", isSelected: selectedTab == 4) { selectedTab = 4 }
+                        TabButton(icon: "figure.run", text: "WORKOUT", isSelected: selectedTab == 2) { selectedTab = 2 }
                         
-                        TabButton(icon: "brain.head.profile", text: "SUMMARY", isSelected: selectedTab == 5) { selectedTab = 5 }
+                        TabButton(icon: "brain.head.profile", text: "SUMMARY", isSelected: selectedTab == 3) { selectedTab = 3 }
+                        
+                        TabButton(icon: "message", text: "CHAT", isSelected: selectedTab == 4) { selectedTab = 4 }
+                        
+                        TabButton(icon: "exclamationmark.circle.fill", text: "SOS", isSelected: selectedTab == 5) { selectedTab = 5 }
                         
                         // Spacer for right padding
                         Spacer().frame(width: 10)
@@ -129,15 +130,15 @@ struct ContentView: View {
         .onOpenURL { url in
             print("🔗 Deep Link: \(url.absoluteString)")
             if url.absoluteString.contains("chat") {
-                selectedTab = 1
-            } else if url.absoluteString.contains("data") {
-                selectedTab = 2
-            } else if url.absoluteString.contains("sos") {
-                selectedTab = 3
-            } else if url.absoluteString.contains("workout") {
                 selectedTab = 4
-            } else if url.absoluteString.contains("summary") {
+            } else if url.absoluteString.contains("data") {
+                selectedTab = 1
+            } else if url.absoluteString.contains("sos") {
                 selectedTab = 5
+            } else if url.absoluteString.contains("workout") {
+                selectedTab = 2
+            } else if url.absoluteString.contains("summary") {
+                selectedTab = 3
             }
         }
         // Annotation Sheet (Phase 2.1)
