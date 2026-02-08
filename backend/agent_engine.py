@@ -647,14 +647,14 @@ class NutritionAgent:
         """
         Specialized Olympic Coach Logic based on Workout Type.
         """
-        # --- VIDEO LIBRARY (Curated Shorts) ---
+        # --- VIDEO LIBRARY (Curated Searches) ---
         VIDEO_LIBRARY = {
-            "run_cadence_drill": "https://www.youtube.com/shorts/5X6pY4u5s_I", # Cadence 170-180 Visual
-            "run_overstriding_fix": "https://www.youtube.com/shorts/t4JgMhCgS0E", # Overstriding Drills
-            "strength_rest_periods": "https://www.youtube.com/shorts/0r5Q8a8b8c8", # Rest Period Science
-            "strength_eccentric_loading": "https://www.youtube.com/shorts/mH2S4b6f7q8", # Tempo/TUT
-            "hiit_box_breathing": "https://www.youtube.com/shorts/v7AYKMP6rOE", # Recovery Breathing
-            "warmup_dynamic": "https://www.youtube.com/shorts/xP6f4z5s6a8" # General Warmup
+            "run_cadence_drill": "https://www.youtube.com/results?search_query=running+cadence+180+spm+drill+shorts", # Robust Search
+            "run_overstriding_fix": "https://www.youtube.com/results?search_query=fix+running+overstriding+drill+shorts",
+            "strength_rest_periods": "https://www.youtube.com/results?search_query=strength+training+rest+periods+science+shorts",
+            "strength_eccentric_loading": "https://www.youtube.com/results?search_query=time+under+tension+hypertrophy+shorts",
+            "hiit_box_breathing": "https://www.youtube.com/results?search_query=box+breathing+technique+shorts",
+            "warmup_dynamic": "https://www.youtube.com/results?search_query=dynamic+warmup+runner+shorts"
         }
         
         # Parse Type from Explicit Name if available, else fallback to raw
