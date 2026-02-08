@@ -237,8 +237,9 @@ class HealthManager: ObservableObject {
         }
         healthStore.execute(hrQuery)
         
-        // 2. Running Specifics
-        if workout.workoutActivityType == .running {
+        // 2. Sport-Specific Metrics
+        switch workout.workoutActivityType {
+        case .running:
             // Cadence (Steps per Minute)
             group.enter()
             let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount)!
@@ -279,7 +280,7 @@ class HealthManager: ObservableObject {
             }
             healthStore.execute(gctQuery)
             
-            // Power
+            // Power (Running)
             group.enter()
             let pwrType = HKQuantityType.quantityType(forIdentifier: .runningPower)!
             let pwrQuery = HKStatisticsQuery(quantityType: pwrType, quantitySamplePredicate: predicate, options: .discreteAverage) { _, result, _ in
@@ -287,32 +288,86 @@ class HealthManager: ObservableObject {
                 group.leave()
             }
             healthStore.execute(pwrQuery)
-        }
-        
-        // 3. Energy
-        group.enter()
-        let energyType = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)!
-        let energyQuery = HKStatisticsQuery(quantityType: energyType, quantitySamplePredicate: predicate, options: .cumulativeSum) { _, result, _ in
-            if let cal = result?.sumQuantity()?.doubleValue(for: .kilocalorie()) { metrics["active_calories"] = cal }
-            group.leave()
-        }
-        healthStore.execute(energyQuery)
-        
-        // 4. Distance
-        group.enter()
-        // Try common distance types
-        let distType: HKQuantityType?
-        if workout.workoutActivityType == .cycling { distType = HKQuantityType.quantityType(forIdentifier: .distanceCycling) }
-        else if workout.workoutActivityType == .swimming { distType = HKQuantityType.quantityType(forIdentifier: .distanceSwimming) }
-        else { distType = HKQuantityType.quantityType(forIdentifier: .distanceWalkingRunning) }
-        
-        if let type = distType {
-            let distQuery = HKStatisticsQuery(quantityType: type, quantitySamplePredicate: predicate, options: .cumulativeSum) { _, result, _ in
+            
+        case .cycling:
+            // Distance Cycling
+            group.enter()
+            let distType = HKQuantityType.quantityType(forIdentifier: .distanceCycling)!
+            let distQuery = HKStatisticsQuery(quantityType: distType, quantitySamplePredicate: predicate, options: .cumulativeSum) { _, result, _ in
                 if let dist = result?.sumQuantity()?.doubleValue(for: .meter()) { metrics["distance_meters"] = dist }
                 group.leave()
             }
             healthStore.execute(distQuery)
-        } else { group.leave() }
+            
+            // Power (Cycling - if available)
+            group.enter()
+            if let pwrType = HKQuantityType.quantityType(forIdentifier: .cyclingPower) {
+                let pwrQuery = HKStatisticsQuery(quantityType: pwrType, quantitySamplePredicate: predicate, options: .discreteAverage) { _, result, _ in
+                    if let pwr = result?.averageQuantity()?.doubleValue(for: .watt()) { metrics["avg_power_watts"] = pwr }
+                    group.leave()
+                }
+                healthStore.execute(pwrQuery)
+            } else { group.leave() }
+            
+            // Cadence (Cycling - RPM)
+            group.enter()
+            if let cadType = HKQuantityType.quantityType(forIdentifier: .cyclingCadence) {
+                let cadQuery = HKStatisticsQuery(quantityType: cadType, quantitySamplePredicate: predicate, options: .discreteAverage) { _, result, _ in
+                    if let cad = result?.averageQuantity()?.doubleValue(for: HKUnit.count().unitDivided(by: .minute())) { metrics["avg_cadence"] = cad }
+                    group.leave()
+                }
+                healthStore.execute(cadQuery)
+            } else { group.leave() }
+
+        case .swimming:
+            // Distance Swimming
+            group.enter()
+            let distType = HKQuantityType.quantityType(forIdentifier: .distanceSwimming)!
+            let distQuery = HKStatisticsQuery(quantityType: distType, quantitySamplePredicate: predicate, options: .cumulativeSum) { _, result, _ in
+                if let dist = result?.sumQuantity()?.doubleValue(for: .meter()) { metrics["distance_meters"] = dist }
+                group.leave()
+            }
+            healthStore.execute(distQuery)
+            
+            // Stroke Count
+            group.enter()
+            let strokeType = HKQuantityType.quantityType(forIdentifier: .swimmingStrokeCount)!
+            let strokeQuery = HKStatisticsQuery(quantityType: strokeType, quantitySamplePredicate: predicate, options: .cumulativeSum) { _, result, _ in
+                if let strokes = result?.sumQuantity()?.doubleValue(for: .count()) { metrics["total_strokes"] = strokes }
+                group.leave()
+            }
+            healthStore.execute(strokeQuery)
+            
+        case .soccer, .football, .rugby:
+            // Team Sports: Distance Calculation (Walking/Running)
+            group.enter()
+            let distType = HKQuantityType.quantityType(forIdentifier: .distanceWalkingRunning)!
+            let distQuery = HKStatisticsQuery(quantityType: distType, quantitySamplePredicate: predicate, options: .cumulativeSum) { _, result, _ in
+                if let dist = result?.sumQuantity()?.doubleValue(for: .meter()) { metrics["distance_meters"] = dist }
+                group.leave()
+            }
+            healthStore.execute(distQuery)
+            
+        case .downhillSkiing, .snowboarding:
+            // Snow Sports: Distance Downhill
+            group.enter()
+            let distType = HKQuantityType.quantityType(forIdentifier: .distanceDownhillSnowSports)!
+            let distQuery = HKStatisticsQuery(quantityType: distType, quantitySamplePredicate: predicate, options: .cumulativeSum) { _, result, _ in
+                if let dist = result?.sumQuantity()?.doubleValue(for: .meter()) { metrics["distance_meters"] = dist }
+                group.leave()
+            }
+            healthStore.execute(distQuery)
+            
+        default:
+            // Generic: Try to get distance if it exists (Walking/Running default)
+            group.enter()
+            let distType = HKQuantityType.quantityType(forIdentifier: .distanceWalkingRunning)!
+            let distQuery = HKStatisticsQuery(quantityType: distType, quantitySamplePredicate: predicate, options: .cumulativeSum) { _, result, _ in
+                if let dist = result?.sumQuantity()?.doubleValue(for: .meter()) { metrics["distance_meters"] = dist }
+                group.leave()
+            }
+            healthStore.execute(distQuery)
+        }
 
         group.notify(queue: .main) {
             completion(metrics)

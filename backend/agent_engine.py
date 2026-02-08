@@ -679,6 +679,61 @@ class NutritionAgent:
         elif "57" in w_type or "yoga" in w_type.lower():
             persona = "The Mindfulness Guide"
             guidelines = "Focus on Heart Rate variability and calmness. Lower HR is better."
+
+        # 5. SOCCER / TEAM SPORTS
+        elif "soccer" in w_type.lower() or "football" in w_type.lower() or "rugby" in w_type.lower():
+            persona = "The Team Trophy Scout"
+            guidelines = """
+            Focus on WORK RATE (Volume) vs INTENSITY (Bursts).
+            - Distance: Relate total meters to position (e.g. Midfielders run more).
+            - Heart Rate: High Avg HR means high engagement.
+            - Fade: Did they maintain intensity?
+            """
+            
+        # 6. RACKET SPORTS (Table Tennis, Tennis)
+        elif "tennis" in w_type.lower() or "squash" in w_type.lower() or "badminton" in w_type.lower():
+            persona = "The Reflex Coach"
+            guidelines = """
+            Focus on AGILITY and READINESS.
+            - Active Calories: High burn means good footwork.
+            - HR Variability in session: Jagged is good (rallies). Flat is lazy.
+            """
+            
+        # 7. CYCLING
+        elif "13" in w_type or "cycling" in w_type.lower():
+            persona = "The Tour Directuer"
+            guidelines = """
+            Focus on POWER (Watts) and EFFICIENCY.
+            - If Power exists: Calculate Watts/Kg (guess weight if unknown or generic).
+            - Cadence: Ideal is 80-90RPM. If lower, suggest gearing down.
+            """
+            
+        # 8. SWIMMING
+        elif "46" in w_type or "swimming" in w_type.lower():
+            persona = "The Aquatics Director"
+            guidelines = """
+            Focus on HYDRODYNAMICS.
+            - Stroke Count: Lower is better (more distance per stroke).
+            - Pace: Consistency across laps (if dist available).
+            """
+            
+        # 9. SNOW SPORTS
+        elif "skiing" in w_type.lower() or "snowboarding" in w_type.lower():
+            persona = "The Alpine Guide"
+            guidelines = """
+            Focus on VERTICAL and SPEED.
+            - Descent: Total distance downhill.
+            - HR: Adrenaline spikes vs steady cardio.
+            """
+            
+        # 10. GOLF
+        elif "golf" in w_type.lower():
+            persona = "The Caddie"
+            guidelines = """
+            Focus on WALKING FITNESS and FOCUS.
+            - Distance: Did they walk the course? Good cardio base.
+            - HR: Should be low/steady for focus. Spikes might mean stress/bad shots.
+            """
             
         # Construct the Olympic Prompt
         prompt = f"""
