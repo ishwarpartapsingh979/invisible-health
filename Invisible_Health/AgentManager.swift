@@ -603,6 +603,13 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         }
         
         group.notify(queue: .main) {
+            completion("Daily Report Generated") // Placeholder for now
+        }
+    }
+    
+
+        
+        group.notify(queue: .main) {
             // Filter Logs for TODAY
             let todayLogs = recentLogs.filter { log in
                 let formatter = ISO8601DateFormatter()
@@ -661,6 +668,48 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             } catch {
                 print("❌ JSON Error")
             }
+        }
+    }
+    }
+    
+    // MARK: - Phase 6.3: Contextual Chat
+    
+    struct ChatMessage {
+        let role: String // "user" or "model"
+        let text: String
+    }
+    
+    func chatWithCoach(workout: HKWorkout, history: [[String: String]], completion: @escaping (String) -> Void) {
+        HealthManager.shared.fetchComprehensiveWorkoutData(workout: workout) { metrics in
+            
+            var body: [String: Any] = [
+                "action": "chat_with_coach",
+                "user_id": "00000000-0000-0000-0000-000000000001",
+                "history": history,
+                "metrics": metrics
+            ]
+            
+            guard let url = URL(string: self.agentURL) else { return }
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            
+            do {
+                request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
+            } catch {
+                print("❌ JSON Error: \(error)")
+                completion("Error encoding.")
+                return 
+            }
+            
+            URLSession.shared.dataTask(with: request) { data, _, error in
+                if let data = data, let json = try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] {
+                    let message = json["message"] as? String ?? "I'm not sure."
+                    DispatchQueue.main.async { completion(message) }
+                } else {
+                    DispatchQueue.main.async { completion("Coach is unresponsive.") }
+                }
+            }.resume()
         }
     }
 }

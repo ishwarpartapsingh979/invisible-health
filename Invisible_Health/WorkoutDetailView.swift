@@ -21,6 +21,7 @@ struct WorkoutDetailView: View {
     @State private var analysis: String = "Tap to Analyze"
     @State private var videoURL: String? = nil
     @State private var isLoading: Bool = false
+    @State private var showChat: Bool = false
     
     var body: some View {
         ScrollView {
@@ -89,6 +90,21 @@ struct WorkoutDetailView: View {
                     .foregroundColor(.white)
                     .cornerRadius(8)
                     
+                    // Ask Coach Button
+                    if analysis != "Tap to Analyze" && !isLoading {
+                        Button(action: { showChat = true }) {
+                            Label("Ask Coach 💬", systemImage: "bubble.left.and.bubble.right.fill")
+                                .font(.subheadline)
+                                .bold()
+                                .padding()
+                                .frame(maxWidth: .infinity)
+                                .background(Color.green)
+                                .foregroundColor(.white)
+                                .cornerRadius(10)
+                        }
+                        .padding(.top, 5)
+                    }
+                    
                     // New Video Button
                     if let urlString = videoURL, let url = URL(string: urlString) {
                          Button(action: { UIApplication.shared.open(url) }) {
@@ -126,6 +142,9 @@ struct WorkoutDetailView: View {
                 Spacer()
             }
             .padding(.top)
+        }
+        .sheet(isPresented: $showChat) {
+             CoachChatView(workout: workout, initialAnalysis: analysis)
         }
         .onAppear {
             HealthManager.shared.fetchComprehensiveWorkoutData(workout: workout) { data in
