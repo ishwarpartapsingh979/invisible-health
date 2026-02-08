@@ -269,6 +269,16 @@ class HealthManager: ObservableObject {
         }
         healthStore.execute(hrQuery)
         
+        // Active Calories
+        group.enter()
+        if let calType = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned) {
+             let calQuery = HKStatisticsQuery(quantityType: calType, quantitySamplePredicate: predicate, options: .cumulativeSum) { _, result, _ in
+                 if let cals = result?.sumQuantity()?.doubleValue(for: .kilocalorie()) { metrics["active_calories"] = cals }
+                 group.leave()
+             }
+             healthStore.execute(calQuery)
+        } else { group.leave() }
+        
         // 2. Sport-Specific Metrics
         switch workout.workoutActivityType {
         case .running:

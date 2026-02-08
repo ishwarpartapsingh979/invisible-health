@@ -167,7 +167,9 @@ struct WorkoutDetailView: View {
     
     func generateCoachReport() -> String {
         let durationMin = Int(workout.duration / 60)
-        let cals = metrics["active_calories"] as? Double ?? 0
+        let metricCals = metrics["active_calories"] as? Double ?? 0
+        let hkCals = workout.totalEnergyBurned?.doubleValue(for: .kilocalorie()) ?? 0
+        let cals = metricCals > 0 ? metricCals : hkCals
         
         var report = """
         🏅 \(workout.workoutActivityType.name) Session
