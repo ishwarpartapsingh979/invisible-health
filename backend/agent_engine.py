@@ -1,4 +1,5 @@
 import os
+import json
 import vertexai
 from vertexai.generative_models import GenerativeModel, Part
 from supabase import create_client, Client
