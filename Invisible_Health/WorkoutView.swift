@@ -218,63 +218,169 @@ extension HKWorkoutActivityType {
     }
 }
 
+// MARK: - Goal Models
+struct Goal: Identifiable, Codable {
+    let id: UUID
+    let title: String
+    let targetDate: Date? // Optional deadline
+    let createdDate: Date
+    
+    // Computed property for "Days Left"
+    var daysLeft: Int? {
+        guard let target = targetDate else { return nil }
+        let diff = Calendar.current.dateComponents([.day], from: Date(), to: target)
+        return diff.day
+    }
+}
+
+// MARK: - Goal Manager (Simple UserDefaults Wrapper)
+class GoalManager: ObservableObject {
+    @Published var goals: [Goal] = []
+    
+    init() {
+        loadGoals()
+    }
+    
+    func addGoal(title: String, date: Date?) {
+        let newGoal = Goal(id: UUID(), title: title, targetDate: date, createdDate: Date())
+        goals.append(newGoal)
+        saveGoals()
+    }
+    
+    func deleteGoal(at offsets: IndexSet) {
+        goals.remove(atOffsets: offsets)
+        saveGoals()
+    }
+    
+    private func saveGoals() {
+        if let encoded = try? JSONEncoder().encode(goals) {
+            UserDefaults.standard.set(encoded, forKey: "user_goals")
+        }
+    }
+    
+    private func loadGoals() {
+        if let data = UserDefaults.standard.data(forKey: "user_goals"),
+           let decoded = try? JSONDecoder().decode([Goal].self, from: data) {
+            self.goals = decoded
+        } else {
+            // Migration: Check for old single goal
+            if let oldName = UserDefaults.standard.string(forKey: "goal_name") {
+                let oldDate = UserDefaults.standard.object(forKey: "goal_date") as? Date
+                // Add as new goal
+                let migrated = Goal(id: UUID(), title: oldName, targetDate: oldDate, createdDate: Date())
+                self.goals = [migrated]
+                saveGoals() // Persist in new format
+                
+                // Clean up old keys
+                UserDefaults.standard.removeObject(forKey: "goal_name")
+                UserDefaults.standard.removeObject(forKey: "goal_date")
+            }
+        }
+    }
+}
+
 struct GoalSettingView: View {
     @Environment(\.dismiss) var dismiss
-    @State private var eventName: String = ""
-    @State private var eventDate: Date = Date()
+    @StateObject private var goalManager = GoalManager()
+    @State private var showingAddSheet = false
+    
+    var body: some View {
+        NavigationView {
+            List {
+                if goalManager.goals.isEmpty {
+                    VStack(alignment: .center, spacing: 10) {
+                        Image(systemName: "target")
+                            .font(.largeTitle)
+                            .foregroundColor(.gray)
+                        Text("No goals set yet.")
+                            .foregroundColor(.gray)
+                        Text("Add a goal to give your AI Coach context.")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 150)
+                    .listRowBackground(Color.clear)
+                } else {
+                    ForEach(goalManager.goals) { goal in
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text(goal.title)
+                                    .font(.headline)
+                                
+                                if let days = goal.daysLeft {
+                                    Text(days >= 0 ? "\(days) days left" : "Event passed")
+                                        .font(.caption)
+                                        .foregroundColor(days >= 0 ? .blue : .red)
+                                } else {
+                                    Text("Ongoing Goal")
+                                        .font(.caption)
+                                        .foregroundColor(.green)
+                                }
+                            }
+                            Spacer()
+                            if let date = goal.targetDate {
+                                Text(date.formatted(date: .abbreviated, time: .omitted))
+                                    .font(.caption)
+                                    .foregroundColor(.gray)
+                            }
+                        }
+                    }
+                    .onDelete(perform: goalManager.deleteGoal)
+                }
+            }
+            .navigationTitle("Your Goals 🎯")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: { showingAddSheet = true }) {
+                        Image(systemName: "plus")
+                    }
+                }
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Done") { dismiss() }
+                }
+            }
+            .sheet(isPresented: $showingAddSheet) {
+                 AddGoalView(goalManager: goalManager)
+            }
+        }
+    }
+}
+
+struct AddGoalView: View {
+    @ObservedObject var goalManager: GoalManager
+    @Environment(\.dismiss) var dismiss
+    
+    @State private var title: String = ""
+    @State private var hasDeadline: Bool = false
+    @State private var deadline: Date = Date()
     
     var body: some View {
         NavigationView {
             Form {
-                Section(header: Text("Target Event")) {
-                    TextField("Event Name (e.g. Marathon)", text: $eventName)
-                        .autocorrectionDisabled(true)
+                Section(header: Text("Goal Details")) {
+                    TextField("Goal (e.g. Lose 5kg, Marathon)", text: $title)
                         .submitLabel(.done)
-                    DatePicker("Date", selection: $eventDate, displayedComponents: .date)
-                }
-                
-                Section {
-                    Button("Save Goal") {
-                        saveGoal()
-                        dismiss()
-                    }
-                    .disabled(eventName.isEmpty)
                     
-                    Button("Clear Goal") {
-                        clearGoal()
-                        dismiss()
+                    Toggle("Has Deadline?", isOn: $hasDeadline)
+                    
+                    if hasDeadline {
+                        DatePicker("Deadline", selection: $deadline, displayedComponents: .date)
                     }
-                    .foregroundColor(.red)
                 }
                 
-                Section(footer: Text("The AI Coach will analyze your workouts based on this goal.")) {
-                    EmptyView()
+                Button("Add Goal") {
+                    goalManager.addGoal(title: title, date: hasDeadline ? deadline : nil)
+                    dismiss()
+                }
+                .disabled(title.isEmpty)
+            }
+            .navigationTitle("New Goal")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") { dismiss() }
                 }
             }
-            .navigationTitle("Set Goal 🎯")
-            .scrollDismissesKeyboard(.interactively)
-            .onAppear {
-                loadGoal()
-            }
         }
-    }
-    
-    func saveGoal() {
-        UserDefaults.standard.set(eventName, forKey: "goal_name")
-        UserDefaults.standard.set(eventDate, forKey: "goal_date")
-    }
-    
-    func loadGoal() {
-        if let name = UserDefaults.standard.string(forKey: "goal_name") {
-            eventName = name
-        }
-        if let date = UserDefaults.standard.object(forKey: "goal_date") as? Date {
-            eventDate = date
-        }
-    }
-    
-    func clearGoal() {
-        UserDefaults.standard.removeObject(forKey: "goal_name")
-        UserDefaults.standard.removeObject(forKey: "goal_date")
     }
 }

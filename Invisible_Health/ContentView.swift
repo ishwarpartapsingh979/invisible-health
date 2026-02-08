@@ -18,7 +18,7 @@ struct ContentView: View {
     
     // Tab Selection
     // 0: Log, 1: Chat, 2: Data, 3: SOS, 4: Workout, 5: Summary
-    @State private var selectedTab: Int = 0
+    @State private var selectedTab: Int = 2
     
     // Image Annotation State (Phase 2.1)
     @State private var imageToAnnotate: AnnotatableImage?
@@ -68,6 +68,7 @@ struct ContentView: View {
                          // Spacer for left padding
                          Spacer().frame(width: 10)
                          
+                        /*
                         TabButton(icon: "keyboard", text: "LOG", isSelected: selectedTab == 0) {
                             if selectedTab == 0 {
                                 withAnimation { showTextInput = true }
@@ -77,14 +78,17 @@ struct ContentView: View {
                         }
                         
                         TabButton(icon: "chart.bar", text: "DATA", isSelected: selectedTab == 1) { selectedTab = 1 }
+                        */
                         
                         TabButton(icon: "figure.run", text: "WORKOUT", isSelected: selectedTab == 2) { selectedTab = 2 }
                         
+                        /*
                         TabButton(icon: "brain.head.profile", text: "SUMMARY", isSelected: selectedTab == 3) { selectedTab = 3 }
                         
                         TabButton(icon: "message", text: "CHAT", isSelected: selectedTab == 4) { selectedTab = 4 }
                         
                         TabButton(icon: "exclamationmark.circle.fill", text: "SOS", isSelected: selectedTab == 5) { selectedTab = 5 }
+                        */
                         
                         // Spacer for right padding
                         Spacer().frame(width: 10)

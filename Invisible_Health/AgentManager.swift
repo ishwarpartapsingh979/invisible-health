@@ -438,15 +438,25 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
                  if !relevant.isEmpty {
                      combinedLogs = relevant.map { "\($0.food_name) (\($0.message ?? ""))" }.joined(separator: "; ")
                  }
-                 
-                 // Inject Goal Context
-                 if let goalName = UserDefaults.standard.string(forKey: "goal_name"),
-                    let goalDate = UserDefaults.standard.object(forKey: "goal_date") as? Date {
-                     let formatter = DateFormatter()
-                     formatter.dateStyle = .medium
-                     let dateStr = formatter.string(from: goalDate)
-                     combinedLogs += "\n[GOAL_CONTEXT]: Target Event: \(goalName) on \(dateStr)."
-                 }
+                                  // Inject Goal Context
+                  if let data = UserDefaults.standard.data(forKey: "user_goals"),
+                     let goals = try? JSONDecoder().decode([Goal].self, from: data), !goals.isEmpty {
+                      
+                      let goalDescriptions = goals.map { goal -> String in
+                          if let target = goal.targetDate {
+                               let formatter = DateFormatter()
+                               formatter.dateStyle = .medium
+                               return "\(goal.title) (Deadline: \(formatter.string(from: target)))"
+                          } else {
+                              return "\(goal.title) (Ongoing)"
+                          }
+                      }.joined(separator: "; ")
+                      
+                      combinedLogs += "\n[GOAL_CONTEXT]: Active Goals: \(goalDescriptions)."
+                  } else if let goalName = UserDefaults.standard.string(forKey: "goal_name") {
+                      // Fallback for migration if not yet run
+                      combinedLogs += "\n[GOAL_CONTEXT]: Target Event: \(goalName)."
+                  }
                  
                  workoutLogs = combinedLogs
                  group.leave()
