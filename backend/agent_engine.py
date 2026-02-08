@@ -646,69 +646,51 @@ class NutritionAgent:
         """
         Specialized Olympic Coach Logic based on Workout Type.
         """
-        # Parse Type
-        # Common HKWorkoutActivityType Raw Values:
-        # 52: Running, 37: Traditional Strength, 20: Functional Strength, 
-        # 46: Swimming, 13: Cycling, 63: HIIT, 57: Yoga, 24: Hiking, 52: Walking? No Walking is 52?? No Running is 52. Walking is 52? Wait.
-        # Running: 52
-        # Walking: 52?? No. 
-        # Let's rely on string matching if raw values are ambiguous or just use general buckets.
+        # Parse Type from Explicit Name if available, else fallback to raw
+        w_name = metrics.get("workout_name", "Workout")
+        is_indoor = metrics.get("is_indoor", False)
         
-        # Determine Persona
+        # Determine Persona based on Name/Indoor status
         persona = "General Coach"
         guidelines = "Analyze Heart Rate and Effort."
         
-        # 1. RUNNING (Outdoor vs Indoor)
-        if "52" in w_type or "running" in w_type.lower():
-            # Check for GPS/Biomechanics signals
-            has_gps = metrics.get('avg_stride_len', 0) > 0 or metrics.get('distance_meters', 0) > 0
-            has_biomech = metrics.get('avg_oscillation_cm', 0) > 0
-            
-            if has_biomech:
-                persona = "The Biomechanist (Olympic Running Coach)"
-                guidelines = """
-                Focus deeply on FORM efficiency.
-                - Vertical Oscillation: < 8cm is elite. > 10cm is bouncing.
-                - GCT: < 200ms is elite. > 250ms is plodding.
-                - Power: Relate watts to pace.
-                """
-            else:
+        # 1. RUNNING
+        if "Running" in w_name:
+            if is_indoor:
                 persona = "The Pacer (Indoor Run Specialist)"
                 guidelines = """
+                User ran INDOORS (likely Treadmill).
                 Focus on EFFICIENCY and METABOLIC COST.
-                - Cadence Audit: Target 170-180 spm. If lower, suggest shorter strides to reduce impact.
+                - DATA CHECK: You have Cadence inside 'DEEP METRICS'. Use it.
+                - Cadence Audit: Target 170-180 spm. If lower, suggest shorter strides.
                 - Cardiac Drift: Compare Avg HR vs Max HR. If HR climbed steadily, it's 'Drift'.
                 - Intensity Check: Compare 'Active Calories' vs 'Duration'. Is the burn rate > 12kcal/min?
-                - RECOVERY: Check Heart Rate Drop (Max - Avg). A small drop means high sustained effort (Threshold).
                 - TREADMILL TIP: Remind them that 0% incline is easier than road. Suggest 1% for realism.
                 """
-                
-        # 2. STRENGTH (Traditional/Functional)
-        elif "37" in w_type or "20" in w_type or "strength" in w_type.lower():
-            # DETECT MISCLASSIFICATION: High Cadence usually means Running/Elliptical/Circuit
-            avg_cad = metrics.get('avg_cadence', 0)
-            avg_dist = metrics.get('distance_meters', 0)
-            
-            if avg_cad > 120 or avg_dist > 500: # Clearly cardio
-                persona = "The Hybrid Athlete"
-                guidelines = """
-                The user logged 'Strength', but the data shows substantial CARDIO output (High Cadence/Distance).
-                1. Acknowledge the mismatch: "You logged this as Strength, but your cadence suggests high-intensity cardio or a run."
-                2. FOCUS: Analyze this as a METABOLIC CONDITIONING session, not a lift.
-                3. DO NOT: Do not give advice about 'heavy lifting' or 'hypertrophy' unless logs mention weights.
-                4. CRITIQUE: Look at Heart Rate Recovery.
-                """
             else:
-                persona = "The Hypertrophy Expert"
+                persona = "The Biomechanist (Olympic Running Coach)"
                 guidelines = """
-                Focus on INTENSITY and TIME UNDER TENSION.
-                - Analyze HR Peaks: Do they match sets (spikes) vs rest (drops)?
-                - Rest Intervals: If HR stays high, it's Circuit/Endurance. If it drops, it's Strength/Power.
-                - Context: Use the user's logs (e.g. "Leg Day") to validate the HR spikes.
+                User ran OUTDOORS.
+                Focus deeply on FORM efficiency and CARDIO.
+                - Vertical Oscillation: < 8cm is elite. > 10cm is bouncing.
+                - GCT: < 200ms is elite. > 250ms is plodding.
+                - Power: Relate watts to pace (if available).
                 """
-            
+
+        # 2. STRENGTH
+        elif "Strength" in w_name or "Functional" in w_name or "Cross" in w_name:
+            persona = "The Hypertrophy Expert"
+            guidelines = """
+            Focus on INTENSITY and TIME UNDER TENSION.
+            IMPORTANT: We do NOT know the weight lifted. Do not guess.
+            1. Analyze HR Peaks: Do they match sets (spikes) vs rest (drops)?
+            2. Rest Intervals: If HR stays high, it's Circuit/Endurance. If it drops, it's Strength/Power.
+            3. Context: Use the user's logs (e.g. "Leg Day") to validate the HR spikes.
+            4. ADVICE: If HR graph is flat, suggest they might not be resting enough to lift heavy.
+            """
+
         # 3. HIIT
-        elif "63" in w_type or "hiit" in w_type.lower():
+        elif "HIIT" in w_name:
             persona = "The Metabolic Conditioning Coach"
             guidelines = """
             Focus on RECOVERY RATE.
@@ -717,67 +699,46 @@ class NutritionAgent:
             - Sustain: Did they crash at the end?
             """
             
-        # 4. YOGA / MIND
-        elif "57" in w_type or "yoga" in w_type.lower():
+        # 4. YOGA
+        elif "Yoga" in w_name:
             persona = "The Mindfulness Guide"
             guidelines = "Focus on Heart Rate variability and calmness. Lower HR is better."
-
-        # 5. SOCCER / TEAM SPORTS
-        elif "soccer" in w_type.lower() or "football" in w_type.lower() or "rugby" in w_type.lower():
-            persona = "The Team Trophy Scout"
-            guidelines = """
-            Focus on WORK RATE (Volume) vs INTENSITY (Bursts).
-            - Distance: Relate total meters to position (e.g. Midfielders run more).
-            - Heart Rate: High Avg HR means high engagement.
-            - Fade: Did they maintain intensity?
-            """
             
-        # 6. RACKET SPORTS (Table Tennis, Tennis)
-        elif "tennis" in w_type.lower() or "squash" in w_type.lower() or "badminton" in w_type.lower():
-            persona = "The Reflex Coach"
-            guidelines = """
-            Focus on AGILITY and READINESS.
-            - Active Calories: High burn means good footwork.
-            - HR Variability in session: Jagged is good (rallies). Flat is lazy.
-            """
-            
-        # 7. CYCLING
-        elif "13" in w_type or "cycling" in w_type.lower():
-            persona = "The Tour Directuer"
-            guidelines = """
-            Focus on POWER (Watts) and EFFICIENCY.
-            - If Power exists: Calculate Watts/Kg (guess weight if unknown or generic).
-            - Cadence: Ideal is 80-90RPM. If lower, suggest gearing down.
-            """
-            
-        # 8. SWIMMING
-        elif "46" in w_type or "swimming" in w_type.lower():
+        # 5. CYCLING
+        elif "Cycling" in w_name:
+            if is_indoor:
+                persona = "The Peloton Pro"
+                guidelines = """
+                Focus on POWER CONSISTENCY.
+                - If Power (Watts) is available, use it.
+                - If not, use HR Zones.
+                """
+            else:
+                persona = "The Tour Directuer"
+                guidelines = """
+                Focus on AEROBIC BASE.
+                - Distance vs Time.
+                - Cadence: Ideal is 80-90RPM.
+                """
+        
+        # 6. SWIMMING
+        elif "Swimming" in w_name:
             persona = "The Aquatics Director"
             guidelines = """
             Focus on HYDRODYNAMICS.
             - Stroke Count: Lower is better (more distance per stroke).
-            - Pace: Consistency across laps (if dist available).
+            - Pace: Consistency across laps.
             """
-            
-        # 9. SNOW SPORTS
-        elif "skiing" in w_type.lower() or "snowboarding" in w_type.lower():
-            persona = "The Alpine Guide"
+
+        # 7. SPORTS (Soccer/Tennis etc)
+        elif "Soccer" in w_name or "Football" in w_name or "Tennis" in w_name:
+            persona = "The Performance Analyst"
             guidelines = """
-            Focus on VERTICAL and SPEED.
-            - Descent: Total distance downhill.
-            - HR: Adrenaline spikes vs steady cardio.
+            Focus on AGILITY and WORK RATE.
+            - HR Variability: Jagged graph = Good (Sprints/Rallies).
+            - Fade: Did they maintain intensity?
             """
             
-        # 10. GOLF
-        elif "golf" in w_type.lower():
-            persona = "The Caddie"
-            guidelines = """
-            Focus on WALKING FITNESS and FOCUS.
-            - Distance: Did they walk the course? Good cardio base.
-            - HR: Should be low/steady for focus. Spikes might mean stress/bad shots.
-            """
-            
-        
         # Goal Context Injection
         goal_instruction = ""
         if "[GOAL_CONTEXT]" in logs:
@@ -793,7 +754,7 @@ class NutritionAgent:
         You are {persona}.
         
         SESSION DATA:
-        - Type: {w_type}
+        - Workout: {w_name} ({'Indoor' if is_indoor else 'Outdoor'})
         - Duration: {duration} min
         - Calories: {cals}
         - User Notes: "{logs}"

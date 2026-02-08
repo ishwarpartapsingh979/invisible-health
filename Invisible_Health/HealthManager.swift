@@ -219,9 +219,41 @@ class HealthManager: ObservableObject {
         }
     }
     
+    private func getWorkoutName(type: HKWorkoutActivityType) -> String {
+        switch type {
+        case .running: return "Running"
+        case .cycling: return "Cycling"
+        case .walking: return "Walking"
+        case .swimming: return "Swimming"
+        case .traditionalStrengthTraining: return "Strength Training"
+        case .functionalStrengthTraining: return "Functional Strength"
+        case .highIntensityIntervalTraining: return "HIIT"
+        case .yoga: return "Yoga"
+        case .hiking: return "Hiking"
+        case .crossTraining: return "Cross Training"
+        case .elliptical: return "Elliptical"
+        case .rowing: return "Rowing"
+        case .stairClimbing: return "Stair Climbing"
+        case .soccer: return "Soccer"
+        case .americanFootball: return "American Football"
+        case .tennis: return "Tennis"
+        default: return "Workout"
+        }
+    }
+
     // MARK: - Olympic Level Data Fetcher (New)
     func fetchComprehensiveWorkoutData(workout: HKWorkout, completion: @escaping ([String: Any]) -> Void) {
         var metrics: [String: Any] = [:]
+        
+        // 0. Metadata & Type
+        metrics["workout_name"] = getWorkoutName(type: workout.workoutActivityType)
+        if let isIndoor = workout.metadata?[HKMetadataKeyIndoorWorkout] as? Bool {
+            metrics["is_indoor"] = isIndoor
+        } else {
+            // Fallback: Infer from type if needed, or assume outdoor for GPS sports
+            metrics["is_indoor"] = false
+        }
+        
         let group = DispatchGroup()
         let predicate = HKQuery.predicateForSamples(withStart: workout.startDate, end: workout.endDate, options: .strictStartDate)
         
