@@ -769,6 +769,9 @@ class NutritionAgent:
         2. USE THE DATA: Cite specific numbers from the 'DEEP METRICS' block.
            - E.g. "Your Cadence of {metrics.get('avg_cadence', 'N/A')} was too low for this pace."
         3. BE SPECIFIC: Give one actionable correction for next time.
+        
+        OUTPUT JSON:
+        { "message": "Your detailed analysis here..." }
         """
         
         response = self.model.generate_content(prompt)

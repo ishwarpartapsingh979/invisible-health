@@ -159,7 +159,7 @@ struct WorkoutCard: View {
         case .cycling: return "bicycle"
         case .swimming: return "figure.pool.swim"
         case .yoga: return "figure.yoga"
-        case .dancing: return "figure.dance"
+        case .dance: return "figure.dance"
         case .hiking: return "figure.hiking"
         case .rowing: return "figure.rower"
         case .soccer: return "sportscourt.fill"
@@ -202,7 +202,7 @@ extension HKWorkoutActivityType {
         case .swimming: return "Swimming"
         case .hiking: return "Hiking"
         case .rowing: return "Rowing"
-        case .dancing: return "Dance"
+        case .dance: return "Dance"
         case .soccer: return "Football"
         case .tableTennis: return "Table Tennis"
         case .tennis: return "Tennis"
@@ -215,5 +215,63 @@ extension HKWorkoutActivityType {
         case .snowboarding: return "Snowboarding"
         default: return "Workout"
         }
+    }
+}
+
+struct GoalSettingView: View {
+    @Environment(\.dismiss) var dismiss
+    @State private var eventName: String = ""
+    @State private var eventDate: Date = Date()
+    
+    var body: some View {
+        NavigationView {
+            Form {
+                Section(header: Text("Target Event")) {
+                    TextField("Event Name (e.g. Marathon)", text: $eventName)
+                    DatePicker("Date", selection: $eventDate, displayedComponents: .date)
+                }
+                
+                Section {
+                    Button("Save Goal") {
+                        saveGoal()
+                        dismiss()
+                    }
+                    .disabled(eventName.isEmpty)
+                    
+                    Button("Clear Goal") {
+                        clearGoal()
+                        dismiss()
+                    }
+                    .foregroundColor(.red)
+                }
+                
+                Section(footer: Text("The AI Coach will analyze your workouts based on this goal.")) {
+                    EmptyView()
+                }
+            }
+            .navigationTitle("Set Goal 🎯")
+            .onAppear {
+                loadGoal()
+            }
+        }
+    }
+    
+    func saveGoal() {
+        UserDefaults.standard.set(eventName, forKey: "goal_name")
+        UserDefaults.standard.set(eventDate, forKey: "goal_date")
+    }
+    
+    func loadGoal() {
+        if let name = UserDefaults.standard.string(forKey: "goal_name") {
+            eventName = name
+        }
+        if let date = UserDefaults.standard.object(forKey: "goal_date") as? Date {
+            eventDate = date
+        }
+    }
+    
+    func clearGoal() {
+        UserDefaults.standard.removeObject(forKey: "goal_name")
+        UserDefaults.standard.removeObject(forKey: "goal_date")
     }
 }

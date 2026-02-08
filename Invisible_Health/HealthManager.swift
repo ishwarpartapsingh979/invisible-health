@@ -338,7 +338,7 @@ class HealthManager: ObservableObject {
             }
             healthStore.execute(strokeQuery)
             
-        case .soccer, .football, .rugby:
+        case .soccer, .americanFootball, .rugby:
             // Team Sports: Distance Calculation (Walking/Running)
             group.enter()
             let distType = HKQuantityType.quantityType(forIdentifier: .distanceWalkingRunning)!
