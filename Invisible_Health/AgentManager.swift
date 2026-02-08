@@ -541,7 +541,13 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
                             DispatchQueue.main.async { self.lastDecision = message }
                             completion(message)
                         } else {
-                             completion("Analysis received.")
+                             // Fallback: Return raw string if JSON parsing fails
+                             if let data = data, let rawResponse = String(data: data, encoding: .utf8) {
+                                 print("⚠️ Analysis JSON Parse Failed. Raw: \(rawResponse)")
+                                 completion(rawResponse)
+                             } else {
+                                 completion("Analysis received (No Data).")
+                             }
                         }
                     }.resume()
                     

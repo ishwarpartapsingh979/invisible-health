@@ -535,6 +535,28 @@ class NutritionAgent:
             # Fallback
             return '[{"title": "Breathe", "description": "Inhale 4s, Hold 4s, Exhale 4s.", "icon": "lungs.fill", "color": "blue"}]'
     # --- PHASE 3.1: WORKOUT ANALYSIS ---
+    def _clean_and_validate_json(self, raw_text: str):
+        import json
+        try:
+            # 1. Strip Code Blocks
+            clean = raw_text.replace("```json", "").replace("```", "").strip()
+            # 2. Try Parse
+            parsed = json.loads(clean)
+            return json.dumps(parsed)
+        except:
+            # 3. Fuzzy Find JSON
+            try:
+                start = raw_text.find('{')
+                end = raw_text.rfind('}') + 1
+                if start != -1 and end > start:
+                    clean = raw_text[start:end]
+                    parsed = json.loads(clean)
+                    return json.dumps(parsed)
+            except: pass
+            
+            # 4. Fail Safe: Wrap as Message
+            return json.dumps({"message": raw_text})
+
     @observe(as_type="generation")
     def analyze_workout(self, data: dict):
         """
@@ -553,65 +575,69 @@ class NutritionAgent:
             # Check for New "Olympic" Metrics
             metrics_dict = data.get("metrics")
             
+            raw_response = ""
+            
             if metrics_dict:
                 # --- OLYMPIC LEVEL ANALYSIS ---
-                return self._analyze_workout_olympic(w_type_raw, duration, cals, logs_context, metrics_dict)
+                raw_response = self._analyze_workout_olympic(w_type_raw, duration, cals, logs_context, metrics_dict)
             
-            # --- LEGACY FALLBACK (Existing Logic) ---
-            osc = data.get('avg_oscillation_cm', 0)
-            gct = data.get('avg_gct_ms', 0)
-            pwr = data.get('avg_power_watts', 0)
-            avg_hr = data.get('avg_hr', 0)
-            max_hr = data.get('max_hr', 0)
-            
-            is_running_legacy = "52" in w_type_raw or "running" in w_type_raw.lower()
-            
-            if is_running_legacy:
-                prompt = f"""
-                You are an Elite Sports Scientist & Biomechanics Coach.
-                
-                Analyze this RUNNING Session:
-                - Duration: {duration} mins
-                - Calories: {cals}
-                - Vertical Oscillation: {osc} cm (Target < 8 cm)
-                - Ground Contact Time: {gct} ms (Target < 200 ms)
-                - Power: {pwr} W
-                - Heart Rate: Avg {avg_hr} bpm, Max {max_hr} bpm
-                - Context Notes: "{logs_context}"
-                
-                TASK:
-                1. DEMYSTIFY: Explain metrics simply.
-                2. CRITIQUE: Form feedback based on Oscillation/GCT.
-                3. CONTEXT: If user notes say "Tired" or "Intervals", relate it to the data.
-                
-                OUTPUT JSON:
-                {{ "message": "..." }}
-                """
             else:
-                prompt = f"""
-                You are an Elite Strength & Conditioning Coach.
+                # --- LEGACY FALLBACK (Existing Logic) ---
+                osc = data.get('avg_oscillation_cm', 0)
+                gct = data.get('avg_gct_ms', 0)
+                pwr = data.get('avg_power_watts', 0)
+                avg_hr = data.get('avg_hr', 0)
+                max_hr = data.get('max_hr', 0)
                 
-                Analyze this STRENGTH/GYM Session:
-                - Duration: {duration} mins
-                - Calories: {cals}
-                - Heart Rate: Avg {avg_hr} bpm, Max {max_hr} bpm
-                - Context Notes (User Logs): "{logs_context}"
+                is_running_legacy = "52" in w_type_raw or "running" in w_type_raw.lower()
                 
-                TASK:
-                1. ANALYZE INTENSITY: Based on HR & Duration. (e.g. "Hypertrophy zone" vs "Endurance").
-                2. LOG CORRELATION: Look at the 'Context Notes'. 
-                   - If user logged "Chest Day", "Legs", or specific lifts, USE THAT.
-                   - Example: "Good intensity for a Leg Day. Your HR spike of {max_hr} suggests heavy squat sets."
-                   - If notes are empty, ask user to log specific lifts next time for better feedback.
-                3. RECOVERY TIP: Based on the session load.
+                if is_running_legacy:
+                    prompt = f"""
+                    You are an Elite Sports Scientist & Biomechanics Coach.
+                    
+                    Analyze this RUNNING Session:
+                    - Duration: {duration} mins
+                    - Calories: {cals}
+                    - Vertical Oscillation: {osc} cm (Target < 8 cm)
+                    - Ground Contact Time: {gct} ms (Target < 200 ms)
+                    - Power: {pwr} W
+                    - Heart Rate: Avg {avg_hr} bpm, Max {max_hr} bpm
+                    - Context Notes: "{logs_context}"
+                    
+                    TASK:
+                    1. DEMYSTIFY: Explain metrics simply.
+                    2. CRITIQUE: Form feedback based on Oscillation/GCT.
+                    3. CONTEXT: If user notes say "Tired" or "Intervals", relate it to the data.
+                    
+                    OUTPUT JSON:
+                    {{ "message": "..." }}
+                    """
+                else:
+                    prompt = f"""
+                    You are an Elite Strength & Conditioning Coach.
+                    
+                    Analyze this STRENGTH/GYM Session:
+                    - Duration: {duration} mins
+                    - Calories: {cals}
+                    - Heart Rate: Avg {avg_hr} bpm, Max {max_hr} bpm
+                    - Context Notes (User Logs): "{logs_context}"
+                    
+                    TASK:
+                    1. ANALYZE INTENSITY: Based on HR & Duration. (e.g. "Hypertrophy zone" vs "Endurance").
+                    2. LOG CORRELATION: Look at the 'Context Notes'. 
+                       - If user logged "Chest Day", "Legs", or specific lifts, USE THAT.
+                       - Example: "Good intensity for a Leg Day. Your HR spike of {max_hr} suggests heavy squat sets."
+                       - If notes are empty, ask user to log specific lifts next time for better feedback.
+                    3. RECOVERY TIP: Based on the session load.
+                    
+                    OUTPUT JSON:
+                    {{ "message": "..." }}
+                    """
                 
-                OUTPUT JSON:
-                {{ "message": "..." }}
-                """
-            
-            response = self.model.generate_content(prompt)
-            clean_json = response.text.replace("```json", "").replace("```", "").strip()
-            return clean_json
+                response = self.model.generate_content(prompt)
+                raw_response = response.text
+                
+            return self._clean_and_validate_json(raw_response)
             
         except Exception as e:
             return f'{{"message": "Error analyzing workout: {str(e)}"}}'
