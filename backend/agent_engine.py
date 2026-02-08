@@ -797,7 +797,7 @@ class NutritionAgent:
         3. BE SPECIFIC: Give one actionable correction for next time.
         
         OUTPUT JSON:
-        { "message": "Your detailed analysis here..." }
+        {{ "message": "Your detailed analysis here..." }}
         """
         
         response = self.model.generate_content(prompt)
