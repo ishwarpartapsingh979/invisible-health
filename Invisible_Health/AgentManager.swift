@@ -12,6 +12,7 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     private let agentURL = "https://us-central1-gen-lang-client-0009721575.cloudfunctions.net/run-agent"
     
     @Published var lastDecision: String = "Agent is sleeping..."
+    @Published var lastVideoURL: String? = nil
     @Published var isLoading: Bool = false
     
     // Location Manager (Phase 2.1)
@@ -536,9 +537,14 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
                             return
                         }
                         
-                        if let data = data, let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        if let data = data, let json = try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] {
                             let message = json["message"] as? String ?? "Analysis complete."
-                            DispatchQueue.main.async { self.lastDecision = message }
+                            let video = json["video_url"] as? String
+                            
+                            DispatchQueue.main.async { 
+                                self.lastDecision = message 
+                                self.lastVideoURL = video
+                            }
                             completion(message)
                         } else {
                              // Fallback: Return raw string if JSON parsing fails

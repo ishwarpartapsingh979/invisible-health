@@ -228,6 +228,8 @@ struct GoalSettingView: View {
             Form {
                 Section(header: Text("Target Event")) {
                     TextField("Event Name (e.g. Marathon)", text: $eventName)
+                        .autocorrectionDisabled(true)
+                        .submitLabel(.done)
                     DatePicker("Date", selection: $eventDate, displayedComponents: .date)
                 }
                 
@@ -250,6 +252,7 @@ struct GoalSettingView: View {
                 }
             }
             .navigationTitle("Set Goal 🎯")
+            .scrollDismissesKeyboard(.interactively)
             .onAppear {
                 loadGoal()
             }

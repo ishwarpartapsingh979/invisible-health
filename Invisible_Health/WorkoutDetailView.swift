@@ -19,6 +19,7 @@ struct WorkoutDetailView: View {
     let workout: HKWorkout
     @State private var metrics: [String: Any] = [:]
     @State private var analysis: String = "Tap to Analyze"
+    @State private var videoURL: String? = nil
     @State private var isLoading: Bool = false
     
     var body: some View {
@@ -78,6 +79,7 @@ struct WorkoutDetailView: View {
                          self.isLoading = true
                          AgentManager.shared.analyzeWorkout(workout: self.workout) { result in
                              self.analysis = result
+                             self.videoURL = AgentManager.shared.lastVideoURL
                              self.isLoading = false
                          }
                     }
@@ -86,6 +88,21 @@ struct WorkoutDetailView: View {
                     .background(Color.blue)
                     .foregroundColor(.white)
                     .cornerRadius(8)
+                    
+                    // New Video Button
+                    if let urlString = videoURL, let url = URL(string: urlString) {
+                         Button(action: { UIApplication.shared.open(url) }) {
+                             Label("Watch Visual Drill 🎥", systemImage: "play.circle.fill")
+                                 .font(.subheadline)
+                                 .bold()
+                                 .padding()
+                                 .frame(maxWidth: .infinity)
+                                 .background(Color.red)
+                                 .foregroundColor(.white)
+                                 .cornerRadius(10)
+                         }
+                         .padding(.top, 10)
+                    }
                 }
                 .padding()
                 .background(Color(UIColor.secondarySystemBackground))

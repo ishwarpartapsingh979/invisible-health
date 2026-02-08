@@ -646,6 +646,16 @@ class NutritionAgent:
         """
         Specialized Olympic Coach Logic based on Workout Type.
         """
+        # --- VIDEO LIBRARY (Curated Shorts) ---
+        VIDEO_LIBRARY = {
+            "run_cadence_drill": "https://www.youtube.com/shorts/5X6pY4u5s_I", # Cadence 170-180 Visual
+            "run_overstriding_fix": "https://www.youtube.com/shorts/t4JgMhCgS0E", # Overstriding Drills
+            "strength_rest_periods": "https://www.youtube.com/shorts/0r5Q8a8b8c8", # Rest Period Science
+            "strength_eccentric_loading": "https://www.youtube.com/shorts/mH2S4b6f7q8", # Tempo/TUT
+            "hiit_box_breathing": "https://www.youtube.com/shorts/v7AYKMP6rOE", # Recovery Breathing
+            "warmup_dynamic": "https://www.youtube.com/shorts/xP6f4z5s6a8" # General Warmup
+        }
+        
         # Parse Type from Explicit Name if available, else fallback to raw
         w_name = metrics.get("workout_name", "Workout")
         is_indoor = metrics.get("is_indoor", False)
@@ -767,14 +777,21 @@ class NutritionAgent:
         
         {goal_instruction}
         
+        VIDEO LIBRARY (Select One if Applicable):
+        {json.dumps(VIDEO_LIBRARY, indent=2)}
+        
         TASK:
         1. DEEP DIVE: Don't just summarize. Find the 'One Big Thing' they did wrong or right.
         2. USE THE DATA: Cite specific numbers from the 'DEEP METRICS' block.
            - E.g. "Your Cadence of {metrics.get('avg_cadence', 'N/A')} was too low for this pace."
         3. BE SPECIFIC: Give one actionable correction for next time.
+        4. VIDEO: Select the SINGLE best URL from the library above that matches your advice. If none fit, return null.
         
         OUTPUT JSON:
-        {{ "message": "Your detailed analysis here..." }}
+        {{
+            "message": "Your detailed analysis here...",
+            "video_url": "https://www.youtube.com/shorts/..."
+        }}
         """
         
         response = self.model.generate_content(prompt)
