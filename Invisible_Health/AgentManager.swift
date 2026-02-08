@@ -544,8 +544,8 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
                             DispatchQueue.main.async { 
                                 self.lastDecision = message 
                                 self.lastVideoURL = video
+                                completion(message)
                             }
-                            completion(message)
                         } else {
                              // Fallback: Return raw string if JSON parsing fails
                              if let data = data, let rawResponse = String(data: data, encoding: .utf8) {
