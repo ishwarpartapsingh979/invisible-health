@@ -894,3 +894,61 @@ class NutritionAgent:
             
         except Exception as e:
             return f'{{"message": "I am having trouble thinking right now. ({str(e)})"}}'
+
+    # --- PHASE 6.3: CONTEXTUAL CHAT ---
+    @observe(as_type="generation")
+    def chat_with_coach(self, data: dict):
+        """
+        Maintains a persona-driven conversation about a specific workout.
+        """
+        try:
+            metrics = data.get("metrics", {})
+            history = data.get("history", []) # List of {role:user/model, text:msg}
+            w_name = metrics.get("workout_name", "Workout")
+            
+            # Determine Persona (Reuse Logic)
+            is_indoor = metrics.get("is_indoor", False)
+            persona = "General Coach"
+            if "Running" in w_name:
+                 if is_indoor: persona = "The Pacer (Indoor Run Specialist)"
+                 else: persona = "The Biomechanist (Olympic Running Coach)"
+            elif "Strength" in w_name: persona = "The Hypertrophy Expert"
+            elif "HIIT" in w_name: persona = "The Metabolic Coach"
+            elif "Cycling" in w_name: persona = "The Tour Directuer"
+            elif "Swimming" in w_name: persona = "The Aquatics Director"
+            elif "Soccer" in w_name or "Football" in w_name: persona = "The Performance Analyst"
+            
+            # Construct Conversation History
+            conversation_text = ""
+            for msg in history:
+                role = msg.get("role", "user").upper()
+                text = msg.get("text", "")
+                conversation_text += f"{role}: {text}\n"
+                
+            # Final Prompt (Stateless)
+            final_prompt = f"""
+            You are {persona}.
+            You are chatting with an athlete about their recent {w_name} session.
+            
+            CONTEXT (Workout Data):
+            {json.dumps(metrics, indent=2)}
+            
+            INSTRUCTIONS:
+            - Keep answers short (under 3 sentences), punchy, and motivating.
+            - Use the specific metrics provided above to back up your points.
+            - If they ask "How do I fix X?", give a specific drill.
+            - Call them 'Athlete'.
+            
+            CONVERSATION SO FAR:
+            {conversation_text}
+            
+            (You are replying to the last USER message above. Do NOT use markdown. Just plain text.)
+            YOUR RESPONSE:
+            """
+            
+            response = self.model.generate_content(final_prompt)
+            clean_text = response.text.replace('"', "'").strip() # Escape double quotes for JSON
+            return f'{{"message": "{clean_text}"}}'
+            
+        except Exception as e:
+            return f'{{"message": "I am having trouble replying. ({str(e)})"}}'

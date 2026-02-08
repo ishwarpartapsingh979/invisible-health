@@ -52,6 +52,11 @@ def run_agent(request):
             if data.get('action') == 'chat':
                 response_json = agent.chat_with_context(data)
                 return response_json, 200, {'Content-Type': 'application/json'}
+            
+            # --- PHASE 6.3: COACH CHAT ---
+            if data.get('action') == 'chat_with_coach':
+                 response_json = agent.chat_with_coach(data)
+                 return response_json, 200, {'Content-Type': 'application/json'}
 
             user_id = data.get('user_id')
             text = data.get('text')

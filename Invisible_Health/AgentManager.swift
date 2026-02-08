@@ -603,13 +603,6 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         }
         
         group.notify(queue: .main) {
-            completion("Daily Report Generated") // Placeholder for now
-        }
-    }
-    
-
-        
-        group.notify(queue: .main) {
             // Filter Logs for TODAY
             let todayLogs = recentLogs.filter { log in
                 let formatter = ISO8601DateFormatter()
@@ -670,14 +663,10 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             }
         }
     }
-    }
     
     // MARK: - Phase 6.3: Contextual Chat
     
-    struct ChatMessage {
-        let role: String // "user" or "model"
-        let text: String
-    }
+
     
     func chatWithCoach(workout: HKWorkout, history: [[String: String]], completion: @escaping (String) -> Void) {
         HealthManager.shared.fetchComprehensiveWorkoutData(workout: workout) { metrics in
