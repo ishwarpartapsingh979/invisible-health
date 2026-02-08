@@ -947,8 +947,7 @@ class NutritionAgent:
             """
             
             response = self.model.generate_content(final_prompt)
-            clean_text = response.text.replace('"', "'").strip() # Escape double quotes for JSON
-            return f'{{"message": "{clean_text}"}}'
+            return json.dumps({"message": response.text})
             
         except Exception as e:
-            return f'{{"message": "I am having trouble replying. ({str(e)})"}}'
+            return json.dumps({"message": f"I am having trouble replying. ({str(e)})"})

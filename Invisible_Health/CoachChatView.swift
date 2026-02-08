@@ -102,25 +102,34 @@ struct CoachChatView: View {
         guard !text.isEmpty else { return }
         
         let userMsg = ChatMessageModel(role: "user", text: text)
+        
+        // Snapshot history for background processing
+        let currentMessages = messages
+        
+        // UI Update (Immediate)
         messages.append(userMsg)
         inputText = ""
         isTyping = true
         
-        // Prepare History for Backend
-        // We include the initial analysis as the first "model" message for context
-        var historyPayload: [[String: String]] = [
-            ["role": "model", "text": initialAnalysis]
-        ]
-        
-        for m in messages {
-            historyPayload.append(["role": m.role, "text": m.text])
-        }
-        
-        // Call Agent
-        AgentManager.shared.chatWithCoach(workout: workout, history: historyPayload) { response in
-            let coachMsg = ChatMessageModel(role: "model", text: response)
-            messages.append(coachMsg)
-            isTyping = false
+        // Offload O(N) history building to background
+        DispatchQueue.global(qos: .userInitiated).async {
+            var historyPayload: [[String: String]] = [
+                ["role": "model", "text": self.initialAnalysis]
+            ]
+            
+            for m in currentMessages {
+                historyPayload.append(["role": m.role, "text": m.text])
+            }
+            historyPayload.append(["role": "user", "text": text])
+            
+            // Call Agent
+            AgentManager.shared.chatWithCoach(workout: self.workout, history: historyPayload) { response in
+                DispatchQueue.main.async { // Back to Main for UI update
+                    let coachMsg = ChatMessageModel(role: "model", text: response)
+                    self.messages.append(coachMsg)
+                    self.isTyping = false
+                }
+            }
         }
     }
 }
