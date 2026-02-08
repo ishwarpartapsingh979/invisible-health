@@ -675,21 +675,37 @@ class NutritionAgent:
             else:
                 persona = "The Pacer (Indoor Run Specialist)"
                 guidelines = """
-                Focus on EFFICIENCY and CARDIAC DRIFT.
-                - Cadence: Target 170-180 spm. If lower, suggest shorter strides.
-                - HR vs Pace: If HR rose but pace stayed same, note 'Cardiac Drift'.
-                - Since no GPS/Biomechanics, assume Treadmill.
+                Focus on EFFICIENCY and METABOLIC COST.
+                - Cadence Audit: Target 170-180 spm. If lower, suggest shorter strides to reduce impact.
+                - Cardiac Drift: Compare Avg HR vs Max HR. If HR climbed steadily, it's 'Drift'.
+                - Intensity Check: Compare 'Active Calories' vs 'Duration'. Is the burn rate > 12kcal/min?
+                - RECOVERY: Check Heart Rate Drop (Max - Avg). A small drop means high sustained effort (Threshold).
+                - TREADMILL TIP: Remind them that 0% incline is easier than road. Suggest 1% for realism.
                 """
                 
         # 2. STRENGTH (Traditional/Functional)
         elif "37" in w_type or "20" in w_type or "strength" in w_type.lower():
-            persona = "The Hypertrophy Expert"
-            guidelines = """
-            Focus on INTENSITY and TIME UNDER TENSION.
-            - Analyze HR Peaks: Do they match sets (spikes) vs rest (drops)?
-            - Rest Intervals: If HR stays high, it's Circuit/Endurance. If it drops, it's Strength/Power.
-            - Context: Use the user's logs (e.g. "Leg Day") to validate the HR spikes.
-            """
+            # DETECT MISCLASSIFICATION: High Cadence usually means Running/Elliptical/Circuit
+            avg_cad = metrics.get('avg_cadence', 0)
+            avg_dist = metrics.get('distance_meters', 0)
+            
+            if avg_cad > 120 or avg_dist > 500: # Clearly cardio
+                persona = "The Hybrid Athlete"
+                guidelines = """
+                The user logged 'Strength', but the data shows substantial CARDIO output (High Cadence/Distance).
+                1. Acknowledge the mismatch: "You logged this as Strength, but your cadence suggests high-intensity cardio or a run."
+                2. FOCUS: Analyze this as a METABOLIC CONDITIONING session, not a lift.
+                3. DO NOT: Do not give advice about 'heavy lifting' or 'hypertrophy' unless logs mention weights.
+                4. CRITIQUE: Look at Heart Rate Recovery.
+                """
+            else:
+                persona = "The Hypertrophy Expert"
+                guidelines = """
+                Focus on INTENSITY and TIME UNDER TENSION.
+                - Analyze HR Peaks: Do they match sets (spikes) vs rest (drops)?
+                - Rest Intervals: If HR stays high, it's Circuit/Endurance. If it drops, it's Strength/Power.
+                - Context: Use the user's logs (e.g. "Leg Day") to validate the HR spikes.
+                """
             
         # 3. HIIT
         elif "63" in w_type or "hiit" in w_type.lower():
