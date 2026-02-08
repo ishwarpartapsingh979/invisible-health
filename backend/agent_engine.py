@@ -735,6 +735,17 @@ class NutritionAgent:
             - HR: Should be low/steady for focus. Spikes might mean stress/bad shots.
             """
             
+        
+        # Goal Context Injection
+        goal_instruction = ""
+        if "[GOAL_CONTEXT]" in logs:
+            goal_instruction = """
+            SPECIAL INSTRUCTION: GOAL TRAJECTORY
+            The user has a defined Goal (see User Notes). You MUST add a section called '🎯 Goal Trajectory' with two distinct paths based on this workout's data:
+            1. The Finisher Path: Are they on track to finish safely? If not, what is the minimum fix?
+            2. The Winner/PB Path: What SPECIFICALLY needs to improve to Win or Personal Best? (e.g. 'To win, you need to increase Avg Power by 20W').
+            """
+
         # Construct the Olympic Prompt
         prompt = f"""
         You are {persona}.
@@ -751,14 +762,13 @@ class NutritionAgent:
         GUIDELINES:
         {guidelines}
         
+        {goal_instruction}
+        
         TASK:
         1. DEEP DIVE: Don't just summarize. Find the 'One Big Thing' they did wrong or right.
         2. USE THE DATA: Cite specific numbers from the 'DEEP METRICS' block.
            - E.g. "Your Cadence of {metrics.get('avg_cadence', 'N/A')} was too low for this pace."
         3. BE SPECIFIC: Give one actionable correction for next time.
-        
-        OUTPUT JSON:
-        {{ "message": "..." }}
         """
         
         response = self.model.generate_content(prompt)

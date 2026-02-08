@@ -432,9 +432,22 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
                      }
                      return false
                  }
+                 
+                 var combinedLogs = ""
                  if !relevant.isEmpty {
-                     workoutLogs = relevant.map { "\($0.food_name) (\($0.message ?? ""))" }.joined(separator: "; ")
+                     combinedLogs = relevant.map { "\($0.food_name) (\($0.message ?? ""))" }.joined(separator: "; ")
                  }
+                 
+                 // Inject Goal Context
+                 if let goalName = UserDefaults.standard.string(forKey: "goal_name"),
+                    let goalDate = UserDefaults.standard.object(forKey: "goal_date") as? Date {
+                     let formatter = DateFormatter()
+                     formatter.dateStyle = .medium
+                     let dateStr = formatter.string(from: goalDate)
+                     combinedLogs += "\n[GOAL_CONTEXT]: Target Event: \(goalName) on \(dateStr)."
+                 }
+                 
+                 workoutLogs = combinedLogs
                  group.leave()
              }
              

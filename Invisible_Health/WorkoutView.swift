@@ -3,6 +3,7 @@ import HealthKit
 
 struct WorkoutView: View {
     @State private var workouts: [HKWorkout] = []
+    @State private var showingGoalSheet = false
     
     var body: some View {
         NavigationView {
@@ -14,10 +15,24 @@ struct WorkoutView: View {
                         .bold()
                         .foregroundColor(.white)
                     Spacer()
+                    
+                    // Goal Button (New)
+                    Button(action: { showingGoalSheet = true }) {
+                        Image(systemName: "target")
+                            .foregroundColor(.red)
+                            .font(.title3)
+                            .padding(8)
+                            .background(Color.red.opacity(0.1))
+                            .clipShape(Circle())
+                    }
+                    
                     Button(action: { fetchWorkouts() }) {
                         Image(systemName: "arrow.clockwise")
                             .foregroundColor(.orange)
                     }
+                }
+                .sheet(isPresented: $showingGoalSheet) {
+                    GoalSettingView()
                 }
                 .padding()
                 .padding(.top, 40)

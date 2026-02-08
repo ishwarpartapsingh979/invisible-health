@@ -26,13 +26,34 @@ struct WorkoutDetailView: View {
             VStack(alignment: .leading, spacing: 20) {
                 
                 // MARK: - Header
-                VStack(alignment: .leading) {
-                    Text(workout.workoutActivityType.name)
-                        .font(.largeTitle)
-                        .bold()
-                    Text(workout.startDate.formatted(date: .abbreviated, time: .shortened))
-                        .font(.subheadline)
-                        .foregroundColor(.gray)
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text(workout.workoutActivityType.name)
+                            .font(.largeTitle)
+                            .bold()
+                        Text(workout.startDate.formatted(date: .abbreviated, time: .shortened))
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                    }
+                    Spacer()
+                    
+                    // Share / Send to Coach
+                    if #available(iOS 16.0, *) {
+                        ShareLink(item: generateCoachReport()) {
+                            Label("Send to Coach", systemImage: "square.and.arrow.up")
+                                .font(.caption)
+                                .padding(8)
+                                .background(Color.orange.opacity(0.1))
+                                .foregroundColor(.orange)
+                                .cornerRadius(8)
+                        }
+                    } else {
+                        // Fallback for older iOS (Print or Alert)
+                        Button(action: { print(generateCoachReport()) }) {
+                            Image(systemName: "square.and.arrow.up")
+                                .foregroundColor(.gray)
+                        }
+                    }
                 }
                 .padding(.horizontal)
                 
@@ -106,6 +127,31 @@ struct WorkoutDetailView: View {
         case .downhillSkiing: return "Alpine Guide"
         default: return "Coach"
         }
+    }
+    
+    func generateCoachReport() -> String {
+        let durationMin = Int(workout.duration / 60)
+        let cals = metrics["active_calories"] as? Double ?? 0
+        
+        var report = """
+        🏅 \(workout.workoutActivityType.name) Session
+        📅 \(workout.startDate.formatted(date: .abbreviated, time: .shortened))
+        ⏱ \(durationMin) min | 🔥 \(Int(cals)) kcal
+        
+        📊 Key Metrics:
+        """
+        
+        // Add Metrics
+        let sections = generateSections()
+        for section in sections {
+            for item in section.items {
+                report += "\n- \(item.title): \(item.value)"
+            }
+        }
+        
+        report += "\n\n🤖 \(getCoachPersona()) Insight:\n\(analysis)"
+        
+        return report
     }
     
     func generateSections() -> [MetricSection] {
