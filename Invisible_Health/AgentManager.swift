@@ -393,16 +393,30 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         func process(_ targetWorkout: HKWorkout) {
              let group = DispatchGroup()
              
-             // Metrics
+             // Metrics (Legacy Support containers)
              var osc: Double?; var gct: Double?; var pwr: Double?
              var avgHR: Double?; var maxHR: Double?
+             
+             // New Dynamic Metrics
+             var comprehensiveMetricsJSON: String = "{}"
              
              // Logs
              var workoutLogs: String = ""
              
              group.enter()
-             HealthManager.shared.fetchWorkoutMetrics(workout: targetWorkout) { o, g, p, a, m in
-                 osc = o; gct = g; pwr = p; avgHR = a; maxHR = m
+             HealthManager.shared.fetchComprehensiveWorkoutData(workout: targetWorkout) { metrics in
+                 // Populate Legacy
+                 osc = metrics["avg_oscillation_cm"] as? Double
+                 gct = metrics["avg_gct_ms"] as? Double
+                 pwr = metrics["avg_power_watts"] as? Double
+                 avgHR = metrics["avg_hr"] as? Double
+                 maxHR = metrics["max_hr"] as? Double
+                 
+                 // Serialize Full Dict
+                 if let jsonData = try? JSONSerialization.data(withJSONObject: metrics, options: []),
+                    let jsonStr = String(data: jsonData, encoding: .utf8) {
+                     comprehensiveMetricsJSON = jsonStr
+                 }
                  group.leave()
              }
              
@@ -425,7 +439,13 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
              }
              
              group.notify(queue: .main) {
-                 self.sendWorkoutToBackend(workout: targetWorkout, osc: osc, gct: gct, pwr: pwr, avgHR: avgHR, maxHR: maxHR, logs: workoutLogs, completion: completion)
+                 self.sendWorkoutToBackend(
+                    workout: targetWorkout,
+                    osc: osc, gct: gct, pwr: pwr, avgHR: avgHR, maxHR: maxHR,
+                    logs: workoutLogs,
+                    comprehensiveMetrics: comprehensiveMetricsJSON, // New Field
+                    completion: completion
+                 )
              }
         }
         
@@ -444,7 +464,7 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     }
     
     // Extracted Backend Call
-    private func sendWorkoutToBackend(workout: HKWorkout, osc: Double?, gct: Double?, pwr: Double?, avgHR: Double?, maxHR: Double?, logs: String, completion: @escaping (String) -> Void) {
+    private func sendWorkoutToBackend(workout: HKWorkout, osc: Double?, gct: Double?, pwr: Double?, avgHR: Double?, maxHR: Double?, logs: String, comprehensiveMetrics: String, completion: @escaping (String) -> Void) {
         let lastWorkout = workout
                 
                 // 3. Prepare Payload
@@ -462,7 +482,11 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
                 request.httpMethod = "POST"
                 request.setValue("application/json", forHTTPHeaderField: "Content-Type")
                 
-                let body: [String: Any] = [
+                // Parse metrics back to dict for embedding (or just send string and parse on server -> let's embed as object if possible, but easier to send string 'metrics_json')
+                // Actually better to send valid JSON object in body.
+                // But Swift needs `Any`.
+                
+                var body: [String: Any] = [
                     "action": "analyze_workout",
                     "user_id": "00000000-0000-0000-0000-000000000001",
                     "workout_type": "\(lastWorkout.workoutActivityType.rawValue)",
@@ -475,6 +499,12 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
                     "max_hr": maxHR ?? 0,
                     "logs": logs
                 ]
+                
+                // Add Metrics Dict
+                if let data = comprehensiveMetrics.data(using: .utf8),
+                   let jsonDict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    body["metrics"] = jsonDict
+                }
                 
                 do {
                     request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])

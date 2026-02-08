@@ -174,21 +174,13 @@ class HealthManager: ObservableObject {
         }
     }
     
-    // HELPER: Fetch Workout Details (Metrics for a specific workout)
+    // Returns (Avg Oscillation, Avg GCT, Avg Power, Avg HR, Max HR)
     func fetchWorkoutMetrics(workout: HKWorkout, completion: @escaping (Double?, Double?, Double?, Double?, Double?) -> Void) {
-        // Returns (Avg Oscillation, Avg GCT, Avg Power, Avg HR, Max HR)
-        
+        // ... (Existing implementation kept as is for compatibility)
         let predicate = HKQuery.predicateForSamples(withStart: workout.startDate, end: workout.endDate, options: .strictStartDate)
-        
-        var avgOscillation: Double?
-        var avgGCT: Double?
-        var avgPower: Double?
-        var avgHR: Double?
-        var maxHR: Double?
-        
+        var avgOscillation: Double?; var avgGCT: Double?; var avgPower: Double?; var avgHR: Double?; var maxHR: Double?
         let group = DispatchGroup()
         
-        // 1. Oscillation (cm)
         group.enter()
         let oscType = HKQuantityType.quantityType(forIdentifier: .runningVerticalOscillation)!
         let oscQuery = HKStatisticsQuery(quantityType: oscType, quantitySamplePredicate: predicate, options: .discreteAverage) { _, result, _ in
@@ -197,7 +189,6 @@ class HealthManager: ObservableObject {
         }
         healthStore.execute(oscQuery)
         
-        // 2. GCT (ms)
         group.enter()
         let gctType = HKQuantityType.quantityType(forIdentifier: .runningGroundContactTime)!
         let gctQuery = HKStatisticsQuery(quantityType: gctType, quantitySamplePredicate: predicate, options: .discreteAverage) { _, result, _ in
@@ -206,7 +197,6 @@ class HealthManager: ObservableObject {
         }
         healthStore.execute(gctQuery)
         
-        // 3. Power (Watts)
         group.enter()
         let pwrType = HKQuantityType.quantityType(forIdentifier: .runningPower)!
         let pwrQuery = HKStatisticsQuery(quantityType: pwrType, quantitySamplePredicate: predicate, options: .discreteAverage) { _, result, _ in
@@ -215,7 +205,6 @@ class HealthManager: ObservableObject {
         }
         healthStore.execute(pwrQuery)
         
-        // 4. Heart Rate (Avg & Max)
         group.enter()
         let hrType = HKQuantityType.quantityType(forIdentifier: .heartRate)!
         let hrQuery = HKStatisticsQuery(quantityType: hrType, quantitySamplePredicate: predicate, options: [.discreteAverage, .discreteMax]) { _, result, _ in
@@ -227,6 +216,106 @@ class HealthManager: ObservableObject {
         
         group.notify(queue: .main) {
             completion(avgOscillation, avgGCT, avgPower, avgHR, maxHR)
+        }
+    }
+    
+    // MARK: - Olympic Level Data Fetcher (New)
+    func fetchComprehensiveWorkoutData(workout: HKWorkout, completion: @escaping ([String: Any]) -> Void) {
+        var metrics: [String: Any] = [:]
+        let group = DispatchGroup()
+        let predicate = HKQuery.predicateForSamples(withStart: workout.startDate, end: workout.endDate, options: .strictStartDate)
+        
+        // 1. Basic Metrics (Reuse existing logic or duplicate for independence)
+        // Heart Rate
+        group.enter()
+        let hrType = HKQuantityType.quantityType(forIdentifier: .heartRate)!
+        let hrQuery = HKStatisticsQuery(quantityType: hrType, quantitySamplePredicate: predicate, options: [.discreteAverage, .discreteMax, .discreteMin]) { _, result, _ in
+            if let avg = result?.averageQuantity()?.doubleValue(for: HKUnit.count().unitDivided(by: .minute())) { metrics["avg_hr"] = avg }
+            if let max = result?.maximumQuantity()?.doubleValue(for: HKUnit.count().unitDivided(by: .minute())) { metrics["max_hr"] = max }
+            if let min = result?.minimumQuantity()?.doubleValue(for: HKUnit.count().unitDivided(by: .minute())) { metrics["min_hr"] = min }
+            group.leave()
+        }
+        healthStore.execute(hrQuery)
+        
+        // 2. Running Specifics
+        if workout.workoutActivityType == .running {
+            // Cadence (Steps per Minute)
+            group.enter()
+            let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount)!
+            let stepQuery = HKStatisticsQuery(quantityType: stepType, quantitySamplePredicate: predicate, options: .cumulativeSum) { _, result, _ in
+                if let steps = result?.sumQuantity()?.doubleValue(for: .count()) {
+                    let durationMin = workout.duration / 60
+                    if durationMin > 0 { metrics["avg_cadence"] = steps / durationMin }
+                }
+                group.leave()
+            }
+            healthStore.execute(stepQuery)
+            
+            // Stride Length
+            group.enter()
+            if let strideType = HKQuantityType.quantityType(forIdentifier: .runningStrideLength) {
+                let strideQuery = HKStatisticsQuery(quantityType: strideType, quantitySamplePredicate: predicate, options: .discreteAverage) { _, result, _ in
+                    if let stride = result?.averageQuantity()?.doubleValue(for: .meter()) { metrics["avg_stride_len"] = stride }
+                    group.leave()
+                }
+                healthStore.execute(strideQuery)
+            } else { group.leave() }
+            
+            // Vertical Oscillation
+            group.enter()
+            let oscType = HKQuantityType.quantityType(forIdentifier: .runningVerticalOscillation)!
+            let oscQuery = HKStatisticsQuery(quantityType: oscType, quantitySamplePredicate: predicate, options: .discreteAverage) { _, result, _ in
+                if let osc = result?.averageQuantity()?.doubleValue(for: .meterUnit(with: .centi)) { metrics["avg_oscillation_cm"] = osc }
+                group.leave()
+            }
+            healthStore.execute(oscQuery)
+            
+            // GCT
+            group.enter()
+            let gctType = HKQuantityType.quantityType(forIdentifier: .runningGroundContactTime)!
+            let gctQuery = HKStatisticsQuery(quantityType: gctType, quantitySamplePredicate: predicate, options: .discreteAverage) { _, result, _ in
+                if let gct = result?.averageQuantity()?.doubleValue(for: .secondUnit(with: .milli)) { metrics["avg_gct_ms"] = gct }
+                group.leave()
+            }
+            healthStore.execute(gctQuery)
+            
+            // Power
+            group.enter()
+            let pwrType = HKQuantityType.quantityType(forIdentifier: .runningPower)!
+            let pwrQuery = HKStatisticsQuery(quantityType: pwrType, quantitySamplePredicate: predicate, options: .discreteAverage) { _, result, _ in
+                if let pwr = result?.averageQuantity()?.doubleValue(for: .watt()) { metrics["avg_power_watts"] = pwr }
+                group.leave()
+            }
+            healthStore.execute(pwrQuery)
+        }
+        
+        // 3. Energy
+        group.enter()
+        let energyType = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)!
+        let energyQuery = HKStatisticsQuery(quantityType: energyType, quantitySamplePredicate: predicate, options: .cumulativeSum) { _, result, _ in
+            if let cal = result?.sumQuantity()?.doubleValue(for: .kilocalorie()) { metrics["active_calories"] = cal }
+            group.leave()
+        }
+        healthStore.execute(energyQuery)
+        
+        // 4. Distance
+        group.enter()
+        // Try common distance types
+        let distType: HKQuantityType?
+        if workout.workoutActivityType == .cycling { distType = HKQuantityType.quantityType(forIdentifier: .distanceCycling) }
+        else if workout.workoutActivityType == .swimming { distType = HKQuantityType.quantityType(forIdentifier: .distanceSwimming) }
+        else { distType = HKQuantityType.quantityType(forIdentifier: .distanceWalkingRunning) }
+        
+        if let type = distType {
+            let distQuery = HKStatisticsQuery(quantityType: type, quantitySamplePredicate: predicate, options: .cumulativeSum) { _, result, _ in
+                if let dist = result?.sumQuantity()?.doubleValue(for: .meter()) { metrics["distance_meters"] = dist }
+                group.leave()
+            }
+            healthStore.execute(distQuery)
+        } else { group.leave() }
+
+        group.notify(queue: .main) {
+            completion(metrics)
         }
     }
 

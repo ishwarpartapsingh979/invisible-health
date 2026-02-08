@@ -538,27 +538,35 @@ class NutritionAgent:
     @observe(as_type="generation")
     def analyze_workout(self, data: dict):
         """
-        Analyzes workout metrics. Differentiates between Running (Biomechanics) and Strength (Cardio Load + Context).
+        Analyzes workout metrics. 
+        Uses "Olympic Coach Personas" if comprehensive data is present.
+        Falls back to Legacy logic if not.
         """
         try:
+            # Common Data
             user_id = data.get('user_id')
-            w_type_raw = str(data.get('workout_type', 'Workout'))
+            w_type_raw = str(data.get('workout_type', 'Workout')) # "52", "37" etc
             duration = int(float(data.get('duration_seconds', 0))) // 60
             cals = int(float(data.get('calories', 0)))
             logs_context = data.get('logs', "No notes found.")
             
-            # Metrics
+            # Check for New "Olympic" Metrics
+            metrics_dict = data.get("metrics")
+            
+            if metrics_dict:
+                # --- OLYMPIC LEVEL ANALYSIS ---
+                return self._analyze_workout_olympic(w_type_raw, duration, cals, logs_context, metrics_dict)
+            
+            # --- LEGACY FALLBACK (Existing Logic) ---
             osc = data.get('avg_oscillation_cm', 0)
             gct = data.get('avg_gct_ms', 0)
             pwr = data.get('avg_power_watts', 0)
             avg_hr = data.get('avg_hr', 0)
             max_hr = data.get('max_hr', 0)
             
-            # Detect Type
-            # HKWorkoutActivityType: 52 = Running, 20 = Functional Strength, 37 = Traditional Strength
-            is_running = "52" in w_type_raw or "running" in w_type_raw.lower()
+            is_running_legacy = "52" in w_type_raw or "running" in w_type_raw.lower()
             
-            if is_running:
+            if is_running_legacy:
                 prompt = f"""
                 You are an Elite Sports Scientist & Biomechanics Coach.
                 
@@ -580,7 +588,6 @@ class NutritionAgent:
                 {{ "message": "..." }}
                 """
             else:
-                # Strength / General Prompt
                 prompt = f"""
                 You are an Elite Strength & Conditioning Coach.
                 
@@ -608,6 +615,100 @@ class NutritionAgent:
             
         except Exception as e:
             return f'{{"message": "Error analyzing workout: {str(e)}"}}'
+
+    def _analyze_workout_olympic(self, w_type: str, duration: int, cals: int, logs: str, metrics: dict):
+        """
+        Specialized Olympic Coach Logic based on Workout Type.
+        """
+        # Parse Type
+        # Common HKWorkoutActivityType Raw Values:
+        # 52: Running, 37: Traditional Strength, 20: Functional Strength, 
+        # 46: Swimming, 13: Cycling, 63: HIIT, 57: Yoga, 24: Hiking, 52: Walking? No Walking is 52?? No Running is 52. Walking is 52? Wait.
+        # Running: 52
+        # Walking: 52?? No. 
+        # Let's rely on string matching if raw values are ambiguous or just use general buckets.
+        
+        # Determine Persona
+        persona = "General Coach"
+        guidelines = "Analyze Heart Rate and Effort."
+        
+        # 1. RUNNING (Outdoor vs Indoor)
+        if "52" in w_type or "running" in w_type.lower():
+            # Check for GPS/Biomechanics signals
+            has_gps = metrics.get('avg_stride_len', 0) > 0 or metrics.get('distance_meters', 0) > 0
+            has_biomech = metrics.get('avg_oscillation_cm', 0) > 0
+            
+            if has_biomech:
+                persona = "The Biomechanist (Olympic Running Coach)"
+                guidelines = """
+                Focus deeply on FORM efficiency.
+                - Vertical Oscillation: < 8cm is elite. > 10cm is bouncing.
+                - GCT: < 200ms is elite. > 250ms is plodding.
+                - Power: Relate watts to pace.
+                """
+            else:
+                persona = "The Pacer (Indoor Run Specialist)"
+                guidelines = """
+                Focus on EFFICIENCY and CARDIAC DRIFT.
+                - Cadence: Target 170-180 spm. If lower, suggest shorter strides.
+                - HR vs Pace: If HR rose but pace stayed same, note 'Cardiac Drift'.
+                - Since no GPS/Biomechanics, assume Treadmill.
+                """
+                
+        # 2. STRENGTH (Traditional/Functional)
+        elif "37" in w_type or "20" in w_type or "strength" in w_type.lower():
+            persona = "The Hypertrophy Expert"
+            guidelines = """
+            Focus on INTENSITY and TIME UNDER TENSION.
+            - Analyze HR Peaks: Do they match sets (spikes) vs rest (drops)?
+            - Rest Intervals: If HR stays high, it's Circuit/Endurance. If it drops, it's Strength/Power.
+            - Context: Use the user's logs (e.g. "Leg Day") to validate the HR spikes.
+            """
+            
+        # 3. HIIT
+        elif "63" in w_type or "hiit" in w_type.lower():
+            persona = "The Metabolic Conditioning Coach"
+            guidelines = """
+            Focus on RECOVERY RATE.
+            - Look at the difference between Max HR and Avg HR.
+            - Are they recovering fast enough between intervals?
+            - Sustain: Did they crash at the end?
+            """
+            
+        # 4. YOGA / MIND
+        elif "57" in w_type or "yoga" in w_type.lower():
+            persona = "The Mindfulness Guide"
+            guidelines = "Focus on Heart Rate variability and calmness. Lower HR is better."
+            
+        # Construct the Olympic Prompt
+        prompt = f"""
+        You are {persona}.
+        
+        SESSION DATA:
+        - Type: {w_type}
+        - Duration: {duration} min
+        - Calories: {cals}
+        - User Notes: "{logs}"
+        
+        DEEP METRICS (HealthKit):
+        {metrics}
+        
+        GUIDELINES:
+        {guidelines}
+        
+        TASK:
+        1. DEEP DIVE: Don't just summarize. Find the 'One Big Thing' they did wrong or right.
+        2. USE THE DATA: Cite specific numbers from the 'DEEP METRICS' block.
+           - E.g. "Your Cadence of {metrics.get('avg_cadence', 'N/A')} was too low for this pace."
+        3. BE SPECIFIC: Give one actionable correction for next time.
+        
+        OUTPUT JSON:
+        {{ "message": "..." }}
+        """
+        
+        response = self.model.generate_content(prompt)
+        clean_json = response.text.replace("```json", "").replace("```", "").strip()
+        return clean_json
         
     # --- PHASE 3.3: NIGHTLY REPORT ---
     @observe(as_type="generation")
