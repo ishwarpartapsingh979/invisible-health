@@ -5,8 +5,9 @@ struct NutritionWidget: Widget {
     let kind: String = "NutritionWidget"
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: NutritionActivityAttributes.self) { context in
-            // Lock Screen/Banner UI
-            NutritionLiveActivityView(context: context)
+            // Lock Screen/Banner UI commented out
+            // NutritionLiveActivityView(context: context)
+            EmptyView()
         } dynamicIsland: { context in
             DynamicIsland {
                 // Expanded UI

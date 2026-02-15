@@ -58,6 +58,16 @@ def run_agent(request):
                  response_json = agent.chat_with_coach(data)
                  return response_json, 200, {'Content-Type': 'application/json'}
 
+            # --- RECOMMENDATION TAB ---
+            if data.get('action') == 'workout_recommendation':
+                response_json = agent.get_workout_recommendation(data)
+                return response_json, 200, {'Content-Type': 'application/json'}
+
+            # --- TOMORROW PREVIEW ---
+            if data.get('action') == 'tomorrow_preview':
+                response_json = agent.get_tomorrow_preview(data)
+                return response_json, 200, {'Content-Type': 'application/json'}
+
             user_id = data.get('user_id')
             text = data.get('text')
             

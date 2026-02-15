@@ -15,3 +15,5 @@ Secrets.swift
 keys/
 **/*_key.json
 backend/venv/
+# Claude Code
+.claude/

@@ -674,6 +674,248 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         }
     }
     
+    // MARK: - Recommendation Tab
+
+    struct WorkoutRecommendation: Codable {
+        let readiness_score: Int
+        let readiness_label: String
+        let readiness_color: String
+        let recommended_workout_type: String
+        let recommended_duration_min: Int
+        let recommended_intensity: String
+        let headline: String
+        let reasoning: String
+        let key_signals: [RecommendationSignal]
+        let one_drill: String
+        let logic_breakdown: [String]
+    }
+
+    struct RecommendationSignal: Codable, Identifiable {
+        var id: String { label }
+        let label: String
+        let value: String
+        let status: String // "good" | "warning" | "critical"
+    }
+
+    func fetchWorkoutRecommendation(userId: String = "00000000-0000-0000-0000-000000000001",
+                                    completion: @escaping (WorkoutRecommendation?) -> Void) {
+        let group = DispatchGroup()
+
+        // Gather all signals in parallel
+        var snapshot = HealthManager.ReadinessSnapshot(
+            hrv: nil, restingHR: nil, vo2Max: nil, bodyMassKg: nil,
+            timeInBedHours: 0, timeAsleepHours: 0,
+            walkingAsymmetryPct: nil, morningHRStream: [],
+            heartRateRecovery: nil
+        )
+        var telemetryGap: HealthManager.TelemetryGapResult? = nil
+        var orthoSpike: HealthManager.OrthostasisResult? = nil
+        var lastWorkout: HKWorkout? = nil
+        var steps: Double = 0
+
+        group.enter()
+        HealthManager.shared.fetchReadinessSnapshot { s in
+            snapshot = s; group.leave()
+        }
+
+        group.enter()
+        HealthManager.shared.calculateTelemetryGapSleep { gap in
+            telemetryGap = gap; group.leave()
+        }
+
+        group.enter()
+        HealthManager.shared.fetchRecentWorkouts(days: 2) { workouts in
+            lastWorkout = workouts.first; group.leave()
+        }
+
+        group.enter()
+        HealthManager.shared.fetchTodaySteps { s in
+            steps = s; group.leave()
+        }
+
+        group.notify(queue: .main) {
+            // Orthostatic spike uses watchOnTime from telemetry gap
+            if let watchOn = telemetryGap?.watchOnTime {
+                group.enter()
+                HealthManager.shared.calculateOrthostaticSpike(from: watchOn) { spike in
+                    orthoSpike = spike; group.leave()
+                }
+                group.notify(queue: .main) {
+                    self.sendRecommendationToBackend(
+                        userId: userId, snapshot: snapshot,
+                        telemetryGap: telemetryGap, orthoSpike: orthoSpike,
+                        lastWorkout: lastWorkout, steps: steps,
+                        completion: completion
+                    )
+                }
+            } else {
+                self.sendRecommendationToBackend(
+                    userId: userId, snapshot: snapshot,
+                    telemetryGap: telemetryGap, orthoSpike: nil,
+                    lastWorkout: lastWorkout, steps: steps,
+                    completion: completion
+                )
+            }
+        }
+    }
+
+    private func sendRecommendationToBackend(
+        userId: String,
+        snapshot: HealthManager.ReadinessSnapshot,
+        telemetryGap: HealthManager.TelemetryGapResult?,
+        orthoSpike: HealthManager.OrthostasisResult?,
+        lastWorkout: HKWorkout?,
+        steps: Double,
+        completion: @escaping (WorkoutRecommendation?) -> Void
+    ) {
+        guard let url = URL(string: agentURL) else { completion(nil); return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        // Load goals from UserDefaults
+        var activeGoals: [String] = []
+        if let data = UserDefaults.standard.data(forKey: "user_goals"),
+           let goals = try? JSONDecoder().decode([Goal].self, from: data) {
+            activeGoals = goals.map { goal in
+                if let target = goal.targetDate {
+                    let f = DateFormatter(); f.dateStyle = .medium
+                    return "\(goal.title) (by \(f.string(from: target)))"
+                }
+                return goal.title
+            }
+        }
+
+        // Diet rating for today
+        let dietRating = NotificationManager.dietRating(for: NotificationManager.todayDateString()) ?? "unknown"
+
+        // Last workout details
+        let lastWorkoutName = lastWorkout.map { HKWorkoutActivityType(rawValue: $0.workoutActivityType.rawValue)?.name ?? "Workout" } ?? "None"
+        let lastWorkoutDuration = Int((lastWorkout?.duration ?? 0) / 60)
+        let lastWorkoutCals = Int(lastWorkout?.statistics(for: HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)!)?.sumQuantity()?.doubleValue(for: .kilocalorie()) ?? 0)
+
+        var body: [String: Any] = [
+            "action":                   "workout_recommendation",
+            "user_id":                  userId,
+            "steps_today":              Int(steps),
+            "diet_rating":              dietRating,
+            "active_goals":             activeGoals,
+            "last_workout_name":        lastWorkoutName,
+            "last_workout_duration_min": lastWorkoutDuration,
+            "last_workout_calories":    lastWorkoutCals
+        ]
+
+        // HRV, RHR, VO2, body mass, HRR
+        if let v = snapshot.hrv             { body["hrv"] = v }
+        if let v = snapshot.restingHR       { body["rhr"] = v }
+        if let v = snapshot.vo2Max          { body["vo2_max"] = v }
+        if let v = snapshot.bodyMassKg      { body["body_mass_kg"] = v }
+        if let v = snapshot.heartRateRecovery { body["hrr_1min"] = v }
+        if let v = snapshot.walkingAsymmetryPct { body["walking_asymmetry_pct"] = v }
+
+        // Sleep
+        if let gap = telemetryGap {
+            body["proxy_sleep_hours"]   = gap.proxyTimeInBed / 3600
+            body["iphone_in_bed_hours"] = gap.iPhoneInBedSeconds / 3600
+        }
+
+        // Orthostatic spike
+        if let spike = orthoSpike {
+            body["ortho_avg_bpm"]  = spike.averageBPM
+            body["ortho_peak_bpm"] = spike.peakBPM
+        }
+
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
+        } catch {
+            print("❌ Recommendation encode error: \(error)"); completion(nil); return
+        }
+
+        print("🎯 Fetching workout recommendation...")
+
+        URLSession.shared.dataTask(with: request) { data, _, error in
+            guard let data = data, error == nil else {
+                DispatchQueue.main.async { completion(nil) }; return
+            }
+            do {
+                let rec = try JSONDecoder().decode(WorkoutRecommendation.self, from: data)
+                DispatchQueue.main.async { completion(rec) }
+            } catch {
+                print("❌ Recommendation decode error: \(error)")
+                if let raw = String(data: data, encoding: .utf8) { print("Raw: \(raw)") }
+                DispatchQueue.main.async { completion(nil) }
+            }
+        }.resume()
+    }
+
+    // MARK: - Tomorrow Preview
+
+    struct TomorrowPreview: Codable {
+        let preview_workout_type: String
+        let preview_duration_range: String
+        let preview_intensity_ceiling: String
+        let preview_headline: String
+        let preview_reasoning: String
+        let caveat: String
+    }
+
+    /// Cached tomorrow preview — set as soon as diet rating is saved.
+    /// RecommendationView reads this directly.
+    @Published var cachedTomorrowPreview: TomorrowPreview? = nil
+
+    /// Cached morning recommendation — set after morning audit completes.
+    @Published var cachedMorningRecommendation: WorkoutRecommendation? = nil
+
+    func fetchTomorrowPreview(dietRating: String,
+                              userId: String = "00000000-0000-0000-0000-000000000001",
+                              completion: ((TomorrowPreview?) -> Void)? = nil) {
+        // Fetch last workout for context, then hit backend
+        HealthManager.shared.fetchRecentWorkouts(days: 2) { [weak self] workouts in
+            guard let self = self else { return }
+            let last = workouts.first
+            let name     = last.map { HKWorkoutActivityType(rawValue: $0.workoutActivityType.rawValue)?.name ?? "Workout" } ?? "None"
+            let duration = Int((last?.duration ?? 0) / 60)
+            let cals     = Int(last?.statistics(for: HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)!)?.sumQuantity()?.doubleValue(for: .kilocalorie()) ?? 0)
+
+            guard let url = URL(string: self.agentURL) else { completion?(nil); return }
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+            let body: [String: Any] = [
+                "action":                    "tomorrow_preview",
+                "user_id":                   userId,
+                "diet_rating":               dietRating,
+                "last_workout_name":         name,
+                "last_workout_duration_min": duration,
+                "last_workout_calories":     cals
+            ]
+
+            guard let httpBody = try? JSONSerialization.data(withJSONObject: body) else {
+                completion?(nil); return
+            }
+            request.httpBody = httpBody
+
+            print("🔮 Fetching tomorrow preview for diet rating: \(dietRating)")
+
+            URLSession.shared.dataTask(with: request) { [weak self] data, _, error in
+                guard let self = self, let data = data, error == nil else {
+                    DispatchQueue.main.async { completion?(nil) }; return
+                }
+                do {
+                    let preview = try JSONDecoder().decode(TomorrowPreview.self, from: data)
+                    DispatchQueue.main.async {
+                        self.cachedTomorrowPreview = preview
+                        completion?(preview)
+                    }
+                } catch {
+                    print("❌ TomorrowPreview decode error: \(error)")
+                    DispatchQueue.main.async { completion?(nil) }
+                }
+            }.resume()
+        }
+    }
+
     // MARK: - Phase 6.3: Contextual Chat
     
 

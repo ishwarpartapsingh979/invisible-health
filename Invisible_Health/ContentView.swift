@@ -55,6 +55,8 @@ struct ContentView: View {
                      ChatView() // Tab 4
                 case 5:
                      SOSView() // Tab 5
+                case 6:
+                    RecommendationView() // Tab 6 — NEW
                 default:
                     // Tab 0: Home / Mic Screen
                     micView
@@ -81,7 +83,9 @@ struct ContentView: View {
                         */
                         
                         TabButton(icon: "figure.run", text: "WORKOUT", isSelected: selectedTab == 2) { selectedTab = 2 }
-                        
+
+                        TabButton(icon: "brain.head.profile", text: "RECO", isSelected: selectedTab == 6) { selectedTab = 6 }
+
                         /*
                         TabButton(icon: "brain.head.profile", text: "SUMMARY", isSelected: selectedTab == 3) { selectedTab = 3 }
                         

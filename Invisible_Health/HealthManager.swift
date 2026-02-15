@@ -39,7 +39,12 @@ class HealthManager: ObservableObject {
             
             // CNS / Recovery
             HKObjectType.quantityType(forIdentifier: HKQuantityTypeIdentifier.heartRateVariabilitySDNN)!,
-            HKObjectType.quantityType(forIdentifier: HKQuantityTypeIdentifier.restingHeartRate)!
+            HKObjectType.quantityType(forIdentifier: HKQuantityTypeIdentifier.restingHeartRate)!,
+
+            // New Tab: Readiness Engine
+            HKObjectType.categoryType(forIdentifier: HKCategoryTypeIdentifier.sleepAnalysis)!,
+            HKObjectType.quantityType(forIdentifier: HKQuantityTypeIdentifier.bodyMass)!,
+            HKObjectType.quantityType(forIdentifier: HKQuantityTypeIdentifier.walkingAsymmetryPercentage)!
         ]
         
         // WRITE Types (Nutrition)
@@ -57,7 +62,8 @@ class HealthManager: ObservableObject {
                 DispatchQueue.main.async {
                     self.isAuthorized = true
                     self.fetchTodaySteps()
-                    self.enableBackgroundDelivery() // Start Watching ⚡️
+                    self.enableBackgroundDelivery()       // Steps observer (existing)
+                    self.registerMorningAuditObserver()   // HR observer (new tab only)
                 }
             } else {
                 print("❌ HealthKit Auth Error: \(String(describing: error))")
@@ -459,6 +465,518 @@ class HealthManager: ObservableObject {
         }
     }
     
+    // MARK: - NEW TAB: Readiness Engine Fetchers
+    // All functions below are exclusively for the new Readiness/Recommendation tab.
+    // None of these are called by any existing WorkoutView, WorkoutDetailView, or CoachChatView code.
+
+    /// Fetches last night's sleep: returns (timeInBedHours, timeAsleepHours).
+    /// Uses iPhone's passive sleep tracking (HKCategoryValueSleepAnalysis).
+    func fetchSleepData(completion: @escaping (Double, Double) -> Void) {
+        guard let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else {
+            completion(0, 0); return
+        }
+
+        let now = Date()
+        // Window: yesterday noon to now — captures last night's sleep
+        let windowStart = Calendar.current.date(byAdding: .hour, value: -18, to: now)!
+        let predicate = HKQuery.predicateForSamples(withStart: windowStart, end: now, options: .strictStartDate)
+        let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
+
+        let query = HKSampleQuery(sampleType: sleepType, predicate: predicate, limit: 100, sortDescriptors: [sortDescriptor]) { _, samples, error in
+            guard let samples = samples as? [HKCategorySample], error == nil else {
+                completion(0, 0); return
+            }
+
+            var inBedSeconds: Double = 0
+            var asleepSeconds: Double = 0
+
+            for sample in samples {
+                let duration = sample.endDate.timeIntervalSince(sample.startDate)
+                switch sample.value {
+                case HKCategoryValueSleepAnalysis.inBed.rawValue:
+                    inBedSeconds += duration
+                case HKCategoryValueSleepAnalysis.asleepCore.rawValue,
+                     HKCategoryValueSleepAnalysis.asleepDeep.rawValue,
+                     HKCategoryValueSleepAnalysis.asleepREM.rawValue,
+                     HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue:
+                    asleepSeconds += duration
+                default:
+                    break
+                }
+            }
+
+            let inBedHours = inBedSeconds / 3600
+            let asleepHours = asleepSeconds / 3600
+            print("😴 Sleep — In Bed: \(String(format: "%.1f", inBedHours))h, Asleep: \(String(format: "%.1f", asleepHours))h")
+            DispatchQueue.main.async { completion(inBedHours, asleepHours) }
+        }
+        healthStore.execute(query)
+    }
+
+    /// Fetches latest body mass in kg.
+    func fetchBodyMass(completion: @escaping (Double?) -> Void) {
+        fetchLatestSample(for: .bodyMass, unit: .gramUnit(with: .kilo), completion: completion)
+    }
+
+    /// Fetches latest walking asymmetry percentage (0–100).
+    /// High values (>5%) indicate tight hamstrings/glutes or gait imbalance.
+    func fetchWalkingAsymmetry(completion: @escaping (Double?) -> Void) {
+        fetchLatestSample(for: .walkingAsymmetryPercentage, unit: .percent(), completion: completion)
+    }
+
+    /// Fetches heart rate samples from the first 15 minutes after waking (6–9 AM window today).
+    /// Used to calculate the orthostatic spike: difference between lying HR and standing HR.
+    /// Returns array of (timestamp, bpm) tuples sorted ascending.
+    func fetchMorningHRStream(completion: @escaping ([(Date, Double)]) -> Void) {
+        guard let hrType = HKQuantityType.quantityType(forIdentifier: .heartRate) else {
+            completion([]); return
+        }
+
+        let calendar = Calendar.current
+        let now = Date()
+        // 6 AM to 9 AM today
+        guard let windowStart = calendar.date(bySettingHour: 6, minute: 0, second: 0, of: now),
+              let windowEnd   = calendar.date(bySettingHour: 9, minute: 0, second: 0, of: now) else {
+            completion([]); return
+        }
+
+        let predicate = HKQuery.predicateForSamples(withStart: windowStart, end: windowEnd, options: .strictStartDate)
+        let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+
+        let query = HKSampleQuery(sampleType: hrType, predicate: predicate, limit: 50, sortDescriptors: [sortDescriptor]) { _, samples, error in
+            guard let samples = samples as? [HKQuantitySample], error == nil else {
+                completion([]); return
+            }
+
+            let bpmUnit = HKUnit.count().unitDivided(by: .minute())
+            let stream: [(Date, Double)] = samples.map { ($0.startDate, $0.quantity.doubleValue(for: bpmUnit)) }
+            print("🌅 Morning HR stream: \(stream.count) samples (6–9 AM)")
+            DispatchQueue.main.async { completion(stream) }
+        }
+        healthStore.execute(query)
+    }
+
+    /// Composite readiness snapshot for the new tab.
+    /// Fetches HRV, RHR, VO2, sleep, body mass, walking asymmetry, and morning HR stream in parallel.
+    /// Returns a typed struct so the new tab has a single clean data object.
+    struct ReadinessSnapshot {
+        var hrv: Double?                         // ms — primary CNS metric
+        var restingHR: Double?                   // bpm
+        var vo2Max: Double?                      // ml/kg/min
+        var bodyMassKg: Double?                  // kg
+        var timeInBedHours: Double               // hours
+        var timeAsleepHours: Double              // hours
+        var walkingAsymmetryPct: Double?         // % — injury prevention veto
+        var morningHRStream: [(Date, Double)]    // orthostatic spike raw data
+        var heartRateRecovery: Double?           // bpm dropped in 1 min post-workout
+    }
+
+    func fetchReadinessSnapshot(completion: @escaping (ReadinessSnapshot) -> Void) {
+        var snapshot = ReadinessSnapshot(
+            hrv: nil, restingHR: nil, vo2Max: nil, bodyMassKg: nil,
+            timeInBedHours: 0, timeAsleepHours: 0,
+            walkingAsymmetryPct: nil, morningHRStream: [],
+            heartRateRecovery: nil
+        )
+
+        let group = DispatchGroup()
+
+        group.enter()
+        fetchLatestSample(for: .heartRateVariabilitySDNN, unit: .secondUnit(with: .milli)) { val in
+            snapshot.hrv = val; group.leave()
+        }
+
+        group.enter()
+        fetchLatestSample(for: .restingHeartRate, unit: HKUnit.count().unitDivided(by: .minute())) { val in
+            snapshot.restingHR = val; group.leave()
+        }
+
+        group.enter()
+        let vo2Unit = HKUnit.literUnit(with: .milli).unitDivided(by: HKUnit.gramUnit(with: .kilo)).unitDivided(by: HKUnit.minute())
+        fetchLatestSample(for: .vo2Max, unit: vo2Unit) { val in
+            snapshot.vo2Max = val; group.leave()
+        }
+
+        group.enter()
+        fetchBodyMass { val in
+            snapshot.bodyMassKg = val; group.leave()
+        }
+
+        group.enter()
+        fetchSleepData { inBed, asleep in
+            snapshot.timeInBedHours = inBed
+            snapshot.timeAsleepHours = asleep
+            group.leave()
+        }
+
+        group.enter()
+        fetchWalkingAsymmetry { val in
+            snapshot.walkingAsymmetryPct = val; group.leave()
+        }
+
+        group.enter()
+        fetchMorningHRStream { stream in
+            snapshot.morningHRStream = stream; group.leave()
+        }
+
+        group.enter()
+        fetchLatestSample(for: .heartRateRecoveryOneMinute, unit: HKUnit.count().unitDivided(by: .minute())) { val in
+            snapshot.heartRateRecovery = val; group.leave()
+        }
+
+        group.notify(queue: .main) {
+            print("✅ ReadinessSnapshot ready — HRV: \(String(describing: snapshot.hrv)), RHR: \(String(describing: snapshot.restingHR)), Sleep: \(String(format: "%.1f", snapshot.timeAsleepHours))h")
+            completion(snapshot)
+        }
+    }
+
+    // MARK: - NEW TAB: Morning Audit Engine
+    // Three precision functions + one orchestrator. Zero overlap with workout tab.
+
+    // -------------------------------------------------------------------------
+    // 1. TELEMETRY GAP SLEEP CALCULATOR
+    //    Detects when the watch was removed (last HR of the evening) and
+    //    when it was put back on (first HR of the morning), then returns the
+    //    gap as proxyTimeInBed.  Falls back to iPhone's passive .inBed if
+    //    the gap logic fails (e.g. watch worn all night).
+    // -------------------------------------------------------------------------
+    struct TelemetryGapResult {
+        var watchOffTime: Date?          // last HR reading before the gap
+        var watchOnTime: Date?           // first HR reading after the gap
+        var proxyTimeInBed: TimeInterval // seconds between the two (primary)
+        var iPhoneInBedSeconds: Double   // iPhone passive fallback (secondary)
+    }
+
+    func calculateTelemetryGapSleep(completion: @escaping (TelemetryGapResult) -> Void) {
+        guard let hrType = HKQuantityType.quantityType(forIdentifier: .heartRate) else {
+            completion(TelemetryGapResult(watchOffTime: nil, watchOnTime: nil,
+                                          proxyTimeInBed: 0, iPhoneInBedSeconds: 0))
+            return
+        }
+
+        let now = Date()
+        let windowStart = Calendar.current.date(byAdding: .hour, value: -24, to: now)!
+        let predicate = HKQuery.predicateForSamples(withStart: windowStart, end: now, options: .strictStartDate)
+        // Ascending so we can walk the timeline forward
+        let sortAsc = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+
+        let hrQuery = HKSampleQuery(sampleType: hrType, predicate: predicate,
+                                    limit: HKObjectQueryNoLimit, sortDescriptors: [sortAsc]) { [weak self] _, samples, error in
+            guard let self = self,
+                  let hrSamples = samples as? [HKQuantitySample], !hrSamples.isEmpty, error == nil else {
+                completion(TelemetryGapResult(watchOffTime: nil, watchOnTime: nil,
+                                              proxyTimeInBed: 0, iPhoneInBedSeconds: 0))
+                return
+            }
+
+            // Find the largest gap between consecutive HR readings — that's the watch-off window.
+            // We require the gap to be at least 1 hour to avoid confusing workout rest periods.
+            let minimumGapSeconds: TimeInterval = 3600 // 1 hour
+
+            var largestGap: TimeInterval = 0
+            var gapStart: Date? = nil
+            var gapEnd: Date? = nil
+
+            for i in 1..<hrSamples.count {
+                let gap = hrSamples[i].startDate.timeIntervalSince(hrSamples[i - 1].endDate)
+                if gap > largestGap && gap >= minimumGapSeconds {
+                    largestGap = gap
+                    gapStart = hrSamples[i - 1].endDate   // watch came off
+                    gapEnd   = hrSamples[i].startDate      // watch went back on
+                }
+            }
+
+            print("🕐 Telemetry Gap — Watch off: \(String(describing: gapStart)), Watch on: \(String(describing: gapEnd)), Gap: \(String(format: "%.1f", largestGap / 3600))h")
+
+            // Fallback: iPhone passive .inBed via sleepAnalysis
+            self.fetchSleepData { _, _ in
+                // We only need the raw inBed seconds for validation; fetchSleepData already logs it.
+                // Re-query here narrowed to .inBed only for the secondary figure.
+            }
+
+            // Get iPhone .inBed seconds independently for the result struct
+            guard let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else {
+                DispatchQueue.main.async {
+                    completion(TelemetryGapResult(
+                        watchOffTime: gapStart,
+                        watchOnTime: gapEnd,
+                        proxyTimeInBed: largestGap,
+                        iPhoneInBedSeconds: 0
+                    ))
+                }
+                return
+            }
+
+            let sleepStart = Calendar.current.date(byAdding: .hour, value: -18, to: now)!
+            let sleepPredicate = HKQuery.predicateForSamples(withStart: sleepStart, end: now, options: .strictStartDate)
+            let sleepQuery = HKSampleQuery(sampleType: sleepType, predicate: sleepPredicate,
+                                           limit: 100, sortDescriptors: nil) { _, sleepSamples, _ in
+                var inBedSeconds: Double = 0
+                if let categorySamples = sleepSamples as? [HKCategorySample] {
+                    for s in categorySamples where s.value == HKCategoryValueSleepAnalysis.inBed.rawValue {
+                        inBedSeconds += s.endDate.timeIntervalSince(s.startDate)
+                    }
+                }
+
+                DispatchQueue.main.async {
+                    completion(TelemetryGapResult(
+                        watchOffTime: gapStart,
+                        watchOnTime: gapEnd,
+                        proxyTimeInBed: largestGap,
+                        iPhoneInBedSeconds: inBedSeconds
+                    ))
+                }
+            }
+            self.healthStore.execute(sleepQuery)
+        }
+        healthStore.execute(hrQuery)
+    }
+
+    // -------------------------------------------------------------------------
+    // 2. ORTHOSTATIC SPIKE CALCULATOR
+    //    Once the first morning HR timestamp is known (from above), queries
+    //    all HR samples in the 15 minutes that follow and returns averageBPM
+    //    and peakBPM.  A high peak (>20 bpm above RHR) signals CNS reactivity.
+    // -------------------------------------------------------------------------
+    struct OrthostasisResult {
+        var windowStart: Date
+        var windowEnd: Date
+        var averageBPM: Double   // mean HR in the 15-min window
+        var peakBPM: Double      // max HR in the 15-min window
+        var sampleCount: Int
+    }
+
+    func calculateOrthostaticSpike(from firstMorningHRTime: Date,
+                                   completion: @escaping (OrthostasisResult?) -> Void) {
+        guard let hrType = HKQuantityType.quantityType(forIdentifier: .heartRate) else {
+            completion(nil); return
+        }
+
+        let windowEnd = firstMorningHRTime.addingTimeInterval(15 * 60) // +15 minutes
+        let predicate = HKQuery.predicateForSamples(withStart: firstMorningHRTime,
+                                                     end: windowEnd,
+                                                     options: .strictStartDate)
+
+        // Use a statistics query for avg + max in one round-trip
+        let statsQuery = HKStatisticsQuery(
+            quantityType: hrType,
+            quantitySamplePredicate: predicate,
+            options: [.discreteAverage, .discreteMax]
+        ) { _, result, error in
+            guard error == nil, let result = result else {
+                completion(nil); return
+            }
+
+            let bpmUnit = HKUnit.count().unitDivided(by: .minute())
+            let avg  = result.averageQuantity()?.doubleValue(for: bpmUnit) ?? 0
+            let peak = result.maximumQuantity()?.doubleValue(for: bpmUnit) ?? 0
+
+            // Also get sample count for confidence scoring
+            let countQuery = HKSampleQuery(
+                sampleType: hrType,
+                predicate: predicate,
+                limit: HKObjectQueryNoLimit,
+                sortDescriptors: nil
+            ) { _, samples, _ in
+                let count = samples?.count ?? 0
+                let orthoResult = OrthostasisResult(
+                    windowStart: firstMorningHRTime,
+                    windowEnd: windowEnd,
+                    averageBPM: avg,
+                    peakBPM: peak,
+                    sampleCount: count
+                )
+                print("🌡️ Orthostatic Spike — Avg: \(String(format: "%.0f", avg)) bpm, Peak: \(String(format: "%.0f", peak)) bpm, Samples: \(count)")
+                DispatchQueue.main.async { completion(orthoResult) }
+            }
+            self.healthStore.execute(countQuery)
+        }
+        healthStore.execute(statsQuery)
+    }
+
+    // -------------------------------------------------------------------------
+    // 3. DAILY HRV & RHR BASELINE FETCHER
+    //    Queries today's calendar day specifically (not just "most recent ever")
+    //    so the AI always works with same-day baselines.
+    // -------------------------------------------------------------------------
+    struct DailyBaselineResult {
+        var hrv: Double?         // ms SDNN — primary CNS signal
+        var restingHR: Double?   // bpm — secondary load signal
+        var hrvTimestamp: Date?
+        var rhrTimestamp: Date?
+    }
+
+    func fetchDailyBaseline(completion: @escaping (DailyBaselineResult) -> Void) {
+        var result = DailyBaselineResult()
+        let group = DispatchGroup()
+
+        let todayStart = Calendar.current.startOfDay(for: Date())
+        let todayPredicate = HKQuery.predicateForSamples(withStart: todayStart, end: Date(), options: .strictStartDate)
+        let sortDesc = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
+
+        // HRV — today first, fall back to latest ever if today has none yet
+        group.enter()
+        if let hrvType = HKQuantityType.quantityType(forIdentifier: .heartRateVariabilitySDNN) {
+            let hrvQuery = HKSampleQuery(sampleType: hrvType, predicate: todayPredicate,
+                                         limit: 1, sortDescriptors: [sortDesc]) { [weak self] _, samples, _ in
+                guard let self = self else { group.leave(); return }
+                if let sample = samples?.first as? HKQuantitySample {
+                    result.hrv = sample.quantity.doubleValue(for: .secondUnit(with: .milli))
+                    result.hrvTimestamp = sample.startDate
+                    group.leave()
+                } else {
+                    // fallback: last available reading
+                    self.fetchLatestSample(for: .heartRateVariabilitySDNN, unit: .secondUnit(with: .milli)) { val in
+                        result.hrv = val
+                        group.leave()
+                    }
+                }
+            }
+            healthStore.execute(hrvQuery)
+        } else { group.leave() }
+
+        // RHR — today first, fall back to latest ever
+        group.enter()
+        if let rhrType = HKQuantityType.quantityType(forIdentifier: .restingHeartRate) {
+            let rhrUnit = HKUnit.count().unitDivided(by: .minute())
+            let rhrQuery = HKSampleQuery(sampleType: rhrType, predicate: todayPredicate,
+                                          limit: 1, sortDescriptors: [sortDesc]) { [weak self] _, samples, _ in
+                guard let self = self else { group.leave(); return }
+                if let sample = samples?.first as? HKQuantitySample {
+                    result.restingHR = sample.quantity.doubleValue(for: rhrUnit)
+                    result.rhrTimestamp = sample.startDate
+                    group.leave()
+                } else {
+                    self.fetchLatestSample(for: .restingHeartRate, unit: rhrUnit) { val in
+                        result.restingHR = val
+                        group.leave()
+                    }
+                }
+            }
+            healthStore.execute(rhrQuery)
+        } else { group.leave() }
+
+        group.notify(queue: .main) {
+            print("📊 Daily Baseline — HRV: \(String(describing: result.hrv))ms, RHR: \(String(describing: result.restingHR))bpm")
+            completion(result)
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // 4. MORNING AUDIT ORCHESTRATOR
+    //    Single entry point called by the HKObserverQuery on first morning HR.
+    //    Runs all three calculations in the correct dependency order:
+    //    Step A → telemetry gap (finds watchOnTime)
+    //    Step B → orthostatic spike (needs watchOnTime from Step A)
+    //    Step C → daily baseline (independent, runs in parallel with B)
+    //    Background-safe: registered via a separate HKObserverQuery on heartRate
+    //    so it triggers even when the app is not open.
+    // -------------------------------------------------------------------------
+    struct MorningAuditResult {
+        var telemetryGap: TelemetryGapResult
+        var orthostaticSpike: OrthostasisResult?
+        var dailyBaseline: DailyBaselineResult
+    }
+
+    /// Registers the background HKObserverQuery for heartRate.
+    /// Called once from requestAuthorization (after isAuthorized = true).
+    /// Completely separate from the steps observer in enableBackgroundDelivery().
+    func registerMorningAuditObserver() {
+        guard let hrType = HKQuantityType.quantityType(forIdentifier: .heartRate) else { return }
+
+        // Enable background delivery for heart rate (immediate frequency —
+        // HealthKit will batch but we want the wake-up as soon as possible)
+        healthStore.enableBackgroundDelivery(for: hrType, frequency: .immediate) { success, error in
+            if success {
+                print("⚡️ Background Delivery enabled for HeartRate (Morning Audit)")
+            } else {
+                print("❌ HeartRate background delivery failed: \(String(describing: error))")
+            }
+        }
+
+        let observer = HKObserverQuery(sampleType: hrType, predicate: nil) { [weak self] _, completionHandler, error in
+            guard let self = self, error == nil else {
+                completionHandler()
+                return
+            }
+            // Only run the audit during the morning window (5 AM – 10 AM)
+            // to avoid triggering on every workout HR update during the day.
+            let hour = Calendar.current.component(.hour, from: Date())
+            guard hour >= 5 && hour < 10 else {
+                completionHandler()
+                return
+            }
+
+            print("🌅 Morning HR observer fired — running audit...")
+            self.performMorningAudit { result in
+                print("✅ Morning Audit complete — proxy sleep: \(String(format: "%.1f", result.telemetryGap.proxyTimeInBed / 3600))h, ortho peak: \(String(describing: result.orthostaticSpike?.peakBPM)) bpm, HRV: \(String(describing: result.dailyBaseline.hrv))ms")
+                // Store result for the new tab to read when user opens app
+                self.cachedMorningAudit = result
+
+                // Immediately compute the full recommendation using fresh audit data
+                // so it's ready before the user even opens the app.
+                print("⚡️ Auto-computing morning recommendation from audit...")
+                AgentManager.shared.fetchWorkoutRecommendation { recommendation in
+                    guard let rec = recommendation else {
+                        print("❌ Morning auto-recommendation failed")
+                        return
+                    }
+                    // Cache it so RecommendationView shows it instantly on open
+                    AgentManager.shared.cachedMorningRecommendation = rec
+
+                    // Fire a local notification so the user knows it's ready
+                    let body = "\(rec.recommended_workout_type) · \(rec.recommended_duration_min) min · \(rec.recommended_intensity). Tap to send to Watch."
+                    NotificationManager.shared.shortNotification(
+                        title: "Today's workout is ready 💪",
+                        body: body
+                    )
+                    print("🔔 Morning recommendation notification fired: \(rec.headline)")
+                }
+            }
+            completionHandler()
+        }
+        healthStore.execute(observer)
+    }
+
+    /// Cached result so the new tab UI can read it synchronously on open.
+    @Published var cachedMorningAudit: MorningAuditResult? = nil
+
+    func performMorningAudit(completion: @escaping (MorningAuditResult) -> Void) {
+        // Step A: Telemetry gap → gives us watchOnTime for the spike window
+        calculateTelemetryGapSleep { [weak self] gapResult in
+            guard let self = self else { return }
+
+            let group = DispatchGroup()
+            var spikeResult: OrthostasisResult? = nil
+            var baselineResult = DailyBaselineResult()
+
+            // Step B: Orthostatic spike — depends on watchOnTime from Step A
+            if let watchOnTime = gapResult.watchOnTime {
+                group.enter()
+                self.calculateOrthostaticSpike(from: watchOnTime) { spike in
+                    spikeResult = spike
+                    group.leave()
+                }
+            }
+
+            // Step C: Daily HRV + RHR baseline — independent, runs in parallel
+            group.enter()
+            self.fetchDailyBaseline { baseline in
+                baselineResult = baseline
+                group.leave()
+            }
+
+            group.notify(queue: .main) {
+                let auditResult = MorningAuditResult(
+                    telemetryGap: gapResult,
+                    orthostaticSpike: spikeResult,
+                    dailyBaseline: baselineResult
+                )
+                completion(auditResult)
+            }
+        }
+    }
+
     // MARK: - 4. Background Delivery (Wake on Move)
     func enableBackgroundDelivery() {
         guard isAuthorized else { return }

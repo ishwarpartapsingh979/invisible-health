@@ -849,6 +849,236 @@ class NutritionAgent:
         except Exception as e:
              return f'{{"message": "Error generating report: {str(e)}"}}'
 
+    # --- RECOMMENDATION TAB ---
+    @observe(as_type="generation")
+    def get_workout_recommendation(self, data: dict):
+        """
+        Daily workout recommendation engine.
+        Synthesises every available signal into a single actionable prescription.
+        Signals consumed:
+          - CNS: HRV, RHR, orthostatic spike avg/peak BPM
+          - Sleep: proxy_sleep_hours (telemetry gap), iphone_in_bed_hours
+          - Recovery: heart_rate_recovery_1min, walking_asymmetry_pct
+          - Long-term: vo2_max, body_mass_kg
+          - Yesterday: last_workout_name, last_workout_duration_min, last_workout_calories
+          - Diet: diet_rating ("nailed_it" | "minor_good" | "minor_bad" | "fully_bad")
+          - Goals: active_goals (list of strings)
+          - Today's food logs from Supabase
+        """
+        try:
+            user_id = data.get("user_id")
+
+            # Fetch today's nutrition logs for caloric context
+            today_logs = []
+            try:
+                logs_resp = self.supabase.table("logs") \
+                    .select("food_name, calories") \
+                    .eq("user_id", user_id) \
+                    .order("created_at", desc=True) \
+                    .limit(10) \
+                    .execute()
+                today_logs = logs_resp.data
+            except Exception as e:
+                print(f"Could not fetch logs for recommendation: {e}")
+
+            total_cals_today = sum([l.get("calories", 0) or 0 for l in today_logs])
+            food_summary = ", ".join([l.get("food_name", "") for l in today_logs]) or "No food logged yet"
+
+            # Pull all incoming signals with safe defaults
+            hrv                    = data.get("hrv")                     # ms
+            rhr                    = data.get("rhr")                     # bpm
+            ortho_avg              = data.get("ortho_avg_bpm")           # bpm
+            ortho_peak             = data.get("ortho_peak_bpm")          # bpm
+            proxy_sleep_hours      = data.get("proxy_sleep_hours")       # hours
+            iphone_in_bed_hours    = data.get("iphone_in_bed_hours")     # hours
+            hrr_1min               = data.get("hrr_1min")                # bpm recovered
+            walking_asymmetry_pct  = data.get("walking_asymmetry_pct")   # %
+            vo2_max                = data.get("vo2_max")                 # ml/kg/min
+            body_mass_kg           = data.get("body_mass_kg")            # kg
+            last_workout_name      = data.get("last_workout_name", "None")
+            last_workout_duration  = data.get("last_workout_duration_min", 0)
+            last_workout_calories  = data.get("last_workout_calories", 0)
+            diet_rating            = data.get("diet_rating", "unknown")
+            active_goals           = data.get("active_goals", [])
+            steps_today            = data.get("steps_today", 0)
+
+            # Map diet rating to human label
+            diet_label_map = {
+                "nailed_it":  "Nailed it (optimal fuel)",
+                "minor_good": "Minor good (slightly under-fuelled)",
+                "minor_bad":  "Minor bad (slightly over-indulged)",
+                "fully_bad":  "Fully bad (heavily over-indulged / junk-heavy)",
+                "unknown":    "Not rated yet"
+            }
+            diet_label = diet_label_map.get(diet_rating, "Not rated")
+
+            # Best sleep estimate: prefer telemetry gap if available, else iPhone
+            sleep_hours = proxy_sleep_hours or iphone_in_bed_hours or "Unknown"
+
+            goals_str = "; ".join(active_goals) if active_goals else "No specific goals set"
+
+            prompt = f"""
+You are an elite Athletic Performance Director making today's training prescription.
+You have access to the athlete's full biometric morning audit. Be precise, direct, and decisive.
+Never hedge. Give ONE clear recommendation.
+
+=== MORNING AUDIT ===
+CNS & Recovery:
+  - HRV (SDNN):              {hrv} ms         [Elite >60, Good 40-60, Fatigued <40]
+  - Resting HR:              {rhr} bpm         [Lower is better; spike vs personal baseline = load]
+  - Orthostatic Avg HR:      {ortho_avg} bpm   [First 15 min after waking; high = CNS reactive]
+  - Orthostatic Peak HR:     {ortho_peak} bpm  [>20 bpm above RHR = systemic stress flag]
+  - HR Recovery (1 min):     {hrr_1min} bpm    [Elite >25 bpm drop; <12 = poor parasympathetic]
+
+Sleep:
+  - Proxy Time in Bed:       {sleep_hours} hrs [Telemetry gap method]
+  - iPhone Passive inBed:    {iphone_in_bed_hours} hrs
+
+Structural / Injury:
+  - Walking Asymmetry:       {walking_asymmetry_pct}%  [>5% = hamstring/glute tightness flag]
+
+Long-Term Capacity:
+  - VO2 Max:                 {vo2_max} ml/kg/min
+  - Body Mass:               {body_mass_kg} kg
+
+=== YESTERDAY ===
+  - Last Workout:            {last_workout_name}, {last_workout_duration} min, {last_workout_calories} kcal
+  - Diet Rating:             {diet_label}
+  - Food logged:             {food_summary} (~{total_cals_today} kcal)
+
+=== TODAY SO FAR ===
+  - Steps:                   {steps_today}
+
+=== ATHLETE GOALS ===
+  {goals_str}
+
+=== YOUR TASK ===
+Using ALL the signals above, prescribe today's training. Apply this decision logic:
+
+1. VETO CONDITIONS (if any are true, prescribe REST or active recovery only):
+   - HRV < 30 ms
+   - Orthostatic peak > RHR + 25 bpm
+   - Sleep < 5 hours
+   - Walking asymmetry > 8%
+   - HRR 1-min < 10 bpm
+
+2. REDUCED LOAD (if any are true, prescribe Zone 1-2 only, no intensity):
+   - HRV 30-45 ms
+   - Sleep 5-6.5 hours
+   - Diet rating = "fully_bad"
+   - Orthostatic peak > RHR + 15 bpm
+
+3. FULL SEND (all clear):
+   - Prescribe based on yesterday's workout and goals (alternate muscle groups, allow intensity)
+
+Output STRICT JSON:
+{{
+  "readiness_score": 0-100,
+  "readiness_label": "High / Moderate / Low / Rest Day",
+  "readiness_color": "green / yellow / orange / red",
+  "recommended_workout_type": "e.g. Tempo Run / Strength / Zone 2 Ride / Rest / Yoga / HIIT",
+  "recommended_duration_min": 0,
+  "recommended_intensity": "Easy / Moderate / Hard / Rest",
+  "headline": "One punchy sentence. E.g. 'HRV says go. Hammer a tempo run.'",
+  "reasoning": "2-3 sentences citing the specific numbers that drove this decision.",
+  "key_signals": [
+    {{"label": "HRV", "value": "...", "status": "good/warning/critical"}},
+    {{"label": "Sleep", "value": "...", "status": "good/warning/critical"}},
+    {{"label": "Last Workout", "value": "...", "status": "good/warning/critical"}},
+    {{"label": "Diet", "value": "...", "status": "good/warning/critical"}},
+    {{"label": "Ortho Spike", "value": "...", "status": "good/warning/critical"}}
+  ],
+  "one_drill": "One specific warm-up or activation drill relevant to today's prescription.",
+  "logic_breakdown": [
+    "Step 1: [signal name] was [value] — this [triggered/cleared] the [veto/reduced/full-send] condition because [reason].",
+    "Step 2: ...",
+    "Step 3: ...",
+    "Final call: [summary of decision path in one sentence]."
+  ]
+}}
+
+IMPORTANT: logic_breakdown must trace EVERY decision step taken, citing actual numbers from the audit above.
+Minimum 3 steps, maximum 6. Each entry must be a plain English sentence a non-athlete can understand.
+Do NOT repeat the reasoning field — logic_breakdown is the step-by-step decision trace, not a summary.
+"""
+            response = self.model.generate_content(prompt)
+            clean = response.text.replace("```json", "").replace("```", "").strip()
+            return clean
+
+        except Exception as e:
+            import json
+            return json.dumps({"headline": f"Error generating recommendation: {str(e)}", "readiness_score": 0})
+
+    # --- TOMORROW PREVIEW ---
+    @observe(as_type="generation")
+    def get_tomorrow_preview(self, data: dict):
+        """
+        Lightweight next-day soft preview.
+        Triggered immediately when the user saves their diet rating for today.
+        Inputs: today's workout (name, duration, calories) + diet rating only.
+        No HealthKit, no goals — those are folded in during the morning finalisation.
+        Returns a soft preview with a clear caveat that it will be updated in the morning.
+        """
+        try:
+            last_workout_name     = data.get("last_workout_name", "None")
+            last_workout_duration = data.get("last_workout_duration_min", 0)
+            last_workout_calories = data.get("last_workout_calories", 0)
+            diet_rating           = data.get("diet_rating", "unknown")
+
+            diet_label_map = {
+                "nailed_it":  "Nailed it (optimal fuel — full recovery likely)",
+                "minor_good": "Minor good (slightly under-fuelled — moderate recovery)",
+                "minor_bad":  "Minor bad (slightly over-indulged — some inflammation likely)",
+                "fully_bad":  "Fully bad (heavy junk / overeating — recovery compromised)",
+                "unknown":    "Not rated"
+            }
+            diet_label = diet_label_map.get(diet_rating, "Not rated")
+
+            prompt = f"""
+You are an Athletic Performance Director giving a SOFT PREVIEW of tomorrow's training.
+You only have two data points. Be honest about uncertainty. Do NOT pretend to know recovery metrics.
+
+=== TODAY'S DATA ===
+Workout completed: {last_workout_name}, {last_workout_duration} min, {last_workout_calories} kcal
+Diet rating:       {diet_label}
+
+=== YOUR TASK ===
+Based ONLY on these two signals:
+1. What muscle groups / energy systems were taxed today?
+2. What does the diet rating suggest about tomorrow's fuel availability?
+3. Give a soft recommendation for tomorrow — type, rough duration range, intensity ceiling.
+
+Rules:
+- If diet = "fully_bad": cap intensity at Easy/Moderate regardless of workout
+- If workout was heavy strength or long run (>45 min): suggest opposite or recovery tomorrow
+- If workout = "None": treat as rest day, suggest any moderate session tomorrow
+- Always include a caveat that morning HRV/sleep data will finalise this
+
+Output STRICT JSON:
+{{
+  "preview_workout_type": "e.g. Zone 2 Run / Strength / Yoga / Rest / HIIT",
+  "preview_duration_range": "e.g. 30-45 min",
+  "preview_intensity_ceiling": "Easy / Moderate / Hard",
+  "preview_headline": "One sentence soft preview. E.g. 'Legs took a hit — upper body or Zone 2 tomorrow.'",
+  "preview_reasoning": "2 sentences max explaining the two signals.",
+  "caveat": "Morning HRV and sleep data will be checked at wake-up to finalise this."
+}}
+"""
+            response = self.model.generate_content(prompt)
+            clean = response.text.replace("```json", "").replace("```", "").strip()
+            return clean
+
+        except Exception as e:
+            import json
+            return json.dumps({
+                "preview_headline": f"Preview unavailable: {str(e)}",
+                "preview_workout_type": "Unknown",
+                "preview_duration_range": "--",
+                "preview_intensity_ceiling": "--",
+                "preview_reasoning": "",
+                "caveat": "Morning audit will finalise your recommendation."
+            })
+
     # --- PHASE 3.4: CHAT WITH CONTEXT ---
     @observe(as_type="generation")
     def chat_with_context(self, data: dict):
