@@ -271,9 +271,17 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
     }
     // MARK: - Helpers
 
+    /// Bangalore timezone calendar — use this for all date/time logic
+    nonisolated static var bangaloreCalendar: Calendar {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "Asia/Kolkata")!
+        return cal
+    }
+
     nonisolated static func todayDateString() -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
+        formatter.timeZone = TimeZone(identifier: "Asia/Kolkata")  // Bangalore time
         return formatter.string(from: Date())
     }
 

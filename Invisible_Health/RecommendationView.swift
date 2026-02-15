@@ -76,13 +76,21 @@ struct RecommendationView: View {
         // If morning audit already auto-computed a recommendation, show it immediately
         if let cached = agentManager.cachedMorningRecommendation {
             recommendation = cached
+            // Clear yesterday's preview now that today's recommendation is ready
+            agentManager.cachedTomorrowPreview = nil
+            tomorrowPreview = nil
         } else {
             load()
         }
 
-        // Restore cached tomorrow preview if available
-        if let cached = agentManager.cachedTomorrowPreview {
+        // Restore cached tomorrow preview ONLY if it's from today
+        if let cached = agentManager.cachedTomorrowPreview,
+           let previewDate = agentManager.value(forKey: "tomorrowPreviewDate") as? String,
+           previewDate == NotificationManager.todayDateString() {
             tomorrowPreview = cached
+        } else {
+            // Stale preview from yesterday — clear it
+            tomorrowPreview = nil
         }
     }
 

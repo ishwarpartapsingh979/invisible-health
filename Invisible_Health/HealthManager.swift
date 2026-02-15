@@ -101,7 +101,7 @@ class HealthManager: ObservableObject {
     // FETCH WORKOUTS (Last 3 Days)
     func fetchRecentWorkouts(days: Int = 3, completion: @escaping ([HKWorkout]) -> Void) {
         let now = Date()
-        let calendar = Calendar.current
+        let calendar = NotificationManager.bangaloreCalendar  // Bangalore time
         let startOfToday = calendar.startOfDay(for: now)
         // Go back (days - 1) days to include today + 2 previous days
         let startDate = calendar.date(byAdding: .day, value: -(days - 1), to: startOfToday)!
@@ -899,9 +899,10 @@ class HealthManager: ObservableObject {
                 completionHandler()
                 return
             }
-            // Only run the audit during the morning window (5 AM – 10 AM)
+            // Only run the audit during the morning window (5 AM – 10 AM Bangalore time)
             // to avoid triggering on every workout HR update during the day.
-            let hour = Calendar.current.component(.hour, from: Date())
+            let calendar = NotificationManager.bangaloreCalendar
+            let hour = calendar.component(.hour, from: Date())
             guard hour >= 5 && hour < 10 else {
                 completionHandler()
                 return

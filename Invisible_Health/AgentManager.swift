@@ -424,7 +424,7 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
              group.enter()
              self.fetchLogs { allLogs in
                  // Filter logs created on the same day as the workout
-                 let calendar = Calendar.current
+                 let calendar = NotificationManager.bangaloreCalendar
                  let workoutDate = targetWorkout.startDate
                  let relevant = allLogs.filter { log in
                      let formatter = ISO8601DateFormatter()
@@ -617,7 +617,8 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             let todayLogs = recentLogs.filter { log in
                 let formatter = ISO8601DateFormatter()
                 if let date = formatter.date(from: log.created_at) {
-                    return Calendar.current.isDateInToday(date)
+                    let calendar = NotificationManager.bangaloreCalendar
+                    return calendar.isDateInToday(date)
                 }
                 return false
             }
@@ -793,8 +794,8 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         // Diet rating for today
         let dietRating = NotificationManager.dietRating(for: NotificationManager.todayDateString()) ?? "unknown"
 
-        // Split workouts into today vs yesterday
-        let calendar = Calendar.current
+        // Split workouts into today vs yesterday (Bangalore time)
+        let calendar = NotificationManager.bangaloreCalendar
         let startOfToday = calendar.startOfDay(for: Date())
         let startOfYesterday = calendar.date(byAdding: .day, value: -1, to: startOfToday)!
 
@@ -821,10 +822,11 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         let yesterdaySummary = workoutSummary(yesterdayWorkouts)
         let yesterdayTotalCals = totalCals(yesterdayWorkouts)
 
-        // Keep last_workout for backward compat (most recent overall)
-        let lastWorkoutName = lastWorkout.map { HKWorkoutActivityType(rawValue: $0.workoutActivityType.rawValue)?.name ?? "Workout" } ?? "None"
-        let lastWorkoutDuration = Int((lastWorkout?.duration ?? 0) / 60)
-        let lastWorkoutCals = Int(lastWorkout?.statistics(for: HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)!)?.sumQuantity()?.doubleValue(for: .kilocalorie()) ?? 0)
+        // last_workout = most recent yesterday workout (not all-time history)
+        let lastWorkoutSource = yesterdayWorkouts.first
+        let lastWorkoutName = lastWorkoutSource.map { HKWorkoutActivityType(rawValue: $0.workoutActivityType.rawValue)?.name ?? "Workout" } ?? "None"
+        let lastWorkoutDuration = Int((lastWorkoutSource?.duration ?? 0) / 60)
+        let lastWorkoutCals = Int(lastWorkoutSource?.statistics(for: HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)!)?.sumQuantity()?.doubleValue(for: .kilocalorie()) ?? 0)
 
         var body: [String: Any] = [
             "action":                       "workout_recommendation",
@@ -897,6 +899,7 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     /// Cached tomorrow preview — set as soon as diet rating is saved.
     /// RecommendationView reads this directly.
     @Published var cachedTomorrowPreview: TomorrowPreview? = nil
+    private var tomorrowPreviewDate: String? = nil  // date string when preview was cached
 
     /// Cached morning recommendation — set after morning audit completes.
     @Published var cachedMorningRecommendation: WorkoutRecommendation? = nil
@@ -904,10 +907,16 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     func fetchTomorrowPreview(dietRating: String,
                               userId: String = "00000000-0000-0000-0000-000000000001",
                               completion: ((TomorrowPreview?) -> Void)? = nil) {
-        // Fetch last workout for context, then hit backend
+        // Fetch today's workout only (not historical data)
         HealthManager.shared.fetchRecentWorkouts(days: 2) { [weak self] workouts in
             guard let self = self else { return }
-            let last = workouts.first
+
+            // Filter to only TODAY's workouts (Bangalore time)
+            let calendar = NotificationManager.bangaloreCalendar
+            let startOfToday = calendar.startOfDay(for: Date())
+            let todayWorkouts = workouts.filter { $0.startDate >= startOfToday }
+
+            let last = todayWorkouts.first
             let name     = last.map { HKWorkoutActivityType(rawValue: $0.workoutActivityType.rawValue)?.name ?? "Workout" } ?? "None"
             let duration = Int((last?.duration ?? 0) / 60)
             let cals     = Int(last?.statistics(for: HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)!)?.sumQuantity()?.doubleValue(for: .kilocalorie()) ?? 0)
@@ -941,6 +950,7 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
                     let preview = try JSONDecoder().decode(TomorrowPreview.self, from: data)
                     DispatchQueue.main.async {
                         self.cachedTomorrowPreview = preview
+                        self.tomorrowPreviewDate = NotificationManager.todayDateString()  // stamp the date
                         completion?(preview)
                     }
                 } catch {

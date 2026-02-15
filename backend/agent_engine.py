@@ -947,11 +947,11 @@ Long-Term Capacity:
 === YESTERDAY ===
   - Workouts:                {yesterday_workouts} (~{yesterday_total_cals} kcal total)
   - Diet Rating:             {diet_label}
-  - Food logged:             {food_summary} (~{total_cals_today} kcal)
 
 === TODAY SO FAR ===
   - Workouts completed:      {today_workouts}
   - Steps:                   {steps_today}
+  - Food logged:             {food_summary} (~{total_cals_today} kcal)
 
 === ATHLETE GOALS ===
   {goals_str}
