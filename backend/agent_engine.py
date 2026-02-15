@@ -898,6 +898,9 @@ class NutritionAgent:
             last_workout_name      = data.get("last_workout_name", "None")
             last_workout_duration  = data.get("last_workout_duration_min", 0)
             last_workout_calories  = data.get("last_workout_calories", 0)
+            today_workouts         = data.get("today_workouts", "None")
+            yesterday_workouts     = data.get("yesterday_workouts", "None")
+            yesterday_total_cals   = data.get("yesterday_total_calories", 0)
             diet_rating            = data.get("diet_rating", "unknown")
             active_goals           = data.get("active_goals", [])
             steps_today            = data.get("steps_today", 0)
@@ -942,11 +945,12 @@ Long-Term Capacity:
   - Body Mass:               {body_mass_kg} kg
 
 === YESTERDAY ===
-  - Last Workout:            {last_workout_name}, {last_workout_duration} min, {last_workout_calories} kcal
+  - Workouts:                {yesterday_workouts} (~{yesterday_total_cals} kcal total)
   - Diet Rating:             {diet_label}
   - Food logged:             {food_summary} (~{total_cals_today} kcal)
 
 === TODAY SO FAR ===
+  - Workouts completed:      {today_workouts}
   - Steps:                   {steps_today}
 
 === ATHLETE GOALS ===
@@ -969,7 +973,8 @@ Using ALL the signals above, prescribe today's training. Apply this decision log
    - Orthostatic peak > RHR + 15 bpm
 
 3. FULL SEND (all clear):
-   - Prescribe based on yesterday's workout and goals (alternate muscle groups, allow intensity)
+   - Prescribe based on yesterday's workouts and today's completed workouts. Alternate muscle groups, allow intensity.
+   - If today's workout is already complete (e.g. a walk or session done), factor that in and recommend what still makes sense for the rest of the day or tomorrow's direction.
 
 Output STRICT JSON:
 {{

@@ -271,14 +271,14 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
     }
     // MARK: - Helpers
 
-    static func todayDateString() -> String {
+    nonisolated static func todayDateString() -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.string(from: Date())
     }
 
     /// Returns the diet rating for a given date string (e.g. "2026-02-15"), or nil if not yet rated.
-    static func dietRating(for dateString: String) -> String? {
+    nonisolated static func dietRating(for dateString: String) -> String? {
         return UserDefaults.standard.string(forKey: "diet_rating_\(dateString)")
     }
 

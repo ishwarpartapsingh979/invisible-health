@@ -711,6 +711,7 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         var telemetryGap: HealthManager.TelemetryGapResult? = nil
         var orthoSpike: HealthManager.OrthostasisResult? = nil
         var lastWorkout: HKWorkout? = nil
+        var recentWorkouts: [HKWorkout] = []
         var steps: Double = 0
 
         group.enter()
@@ -725,7 +726,9 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
 
         group.enter()
         HealthManager.shared.fetchRecentWorkouts(days: 2) { workouts in
-            lastWorkout = workouts.first; group.leave()
+            recentWorkouts = workouts
+            lastWorkout = workouts.first
+            group.leave()
         }
 
         group.enter()
@@ -744,7 +747,7 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
                     self.sendRecommendationToBackend(
                         userId: userId, snapshot: snapshot,
                         telemetryGap: telemetryGap, orthoSpike: orthoSpike,
-                        lastWorkout: lastWorkout, steps: steps,
+                        lastWorkout: lastWorkout, recentWorkouts: recentWorkouts, steps: steps,
                         completion: completion
                     )
                 }
@@ -752,7 +755,7 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
                 self.sendRecommendationToBackend(
                     userId: userId, snapshot: snapshot,
                     telemetryGap: telemetryGap, orthoSpike: nil,
-                    lastWorkout: lastWorkout, steps: steps,
+                    lastWorkout: lastWorkout, recentWorkouts: recentWorkouts, steps: steps,
                     completion: completion
                 )
             }
@@ -765,6 +768,7 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         telemetryGap: HealthManager.TelemetryGapResult?,
         orthoSpike: HealthManager.OrthostasisResult?,
         lastWorkout: HKWorkout?,
+        recentWorkouts: [HKWorkout],
         steps: Double,
         completion: @escaping (WorkoutRecommendation?) -> Void
     ) {
@@ -789,20 +793,51 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         // Diet rating for today
         let dietRating = NotificationManager.dietRating(for: NotificationManager.todayDateString()) ?? "unknown"
 
-        // Last workout details
+        // Split workouts into today vs yesterday
+        let calendar = Calendar.current
+        let startOfToday = calendar.startOfDay(for: Date())
+        let startOfYesterday = calendar.date(byAdding: .day, value: -1, to: startOfToday)!
+
+        let todayWorkouts = recentWorkouts.filter { $0.startDate >= startOfToday }
+        let yesterdayWorkouts = recentWorkouts.filter { $0.startDate >= startOfYesterday && $0.startDate < startOfToday }
+
+        func workoutSummary(_ workouts: [HKWorkout]) -> String {
+            guard !workouts.isEmpty else { return "None" }
+            return workouts.map { w in
+                let name = HKWorkoutActivityType(rawValue: w.workoutActivityType.rawValue)?.name ?? "Workout"
+                let mins = Int(w.duration / 60)
+                let cals = Int(w.statistics(for: HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)!)?.sumQuantity()?.doubleValue(for: .kilocalorie()) ?? 0)
+                return "\(name) \(mins)min \(cals)kcal"
+            }.joined(separator: ", ")
+        }
+
+        func totalCals(_ workouts: [HKWorkout]) -> Int {
+            workouts.reduce(0) { sum, w in
+                sum + Int(w.statistics(for: HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)!)?.sumQuantity()?.doubleValue(for: .kilocalorie()) ?? 0)
+            }
+        }
+
+        let todaySummary = workoutSummary(todayWorkouts)
+        let yesterdaySummary = workoutSummary(yesterdayWorkouts)
+        let yesterdayTotalCals = totalCals(yesterdayWorkouts)
+
+        // Keep last_workout for backward compat (most recent overall)
         let lastWorkoutName = lastWorkout.map { HKWorkoutActivityType(rawValue: $0.workoutActivityType.rawValue)?.name ?? "Workout" } ?? "None"
         let lastWorkoutDuration = Int((lastWorkout?.duration ?? 0) / 60)
         let lastWorkoutCals = Int(lastWorkout?.statistics(for: HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)!)?.sumQuantity()?.doubleValue(for: .kilocalorie()) ?? 0)
 
         var body: [String: Any] = [
-            "action":                   "workout_recommendation",
-            "user_id":                  userId,
-            "steps_today":              Int(steps),
-            "diet_rating":              dietRating,
-            "active_goals":             activeGoals,
-            "last_workout_name":        lastWorkoutName,
-            "last_workout_duration_min": lastWorkoutDuration,
-            "last_workout_calories":    lastWorkoutCals
+            "action":                       "workout_recommendation",
+            "user_id":                      userId,
+            "steps_today":                  Int(steps),
+            "diet_rating":                  dietRating,
+            "active_goals":                 activeGoals,
+            "last_workout_name":            lastWorkoutName,
+            "last_workout_duration_min":    lastWorkoutDuration,
+            "last_workout_calories":        lastWorkoutCals,
+            "today_workouts":               todaySummary,
+            "yesterday_workouts":           yesterdaySummary,
+            "yesterday_total_calories":     yesterdayTotalCals
         ]
 
         // HRV, RHR, VO2, body mass, HRR

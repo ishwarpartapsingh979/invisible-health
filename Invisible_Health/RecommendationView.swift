@@ -13,6 +13,8 @@ struct RecommendationView: View {
     @State private var errorMessage: String? = nil
     @State private var showLogicBreakdown: Bool = false
     @State private var watchSendState: WatchSendState = .idle
+    @State private var workoutPlanToPreview: WorkoutPlan? = nil
+    @State private var showWorkoutPreview: Bool = false
 
     // Diet rating
     @State private var todayDietRating: String? = nil        // nil = not yet rated
@@ -61,6 +63,7 @@ struct RecommendationView: View {
             }
             .background(Color.black.edgesIgnoringSafeArea(.all))
             .onAppear { onViewAppear() }
+            .workoutPreview(workoutPlanToPreview ?? WorkoutPlan(.goal(SingleGoalWorkout(activity: .other, location: .outdoor, goal: .open))), isPresented: $showWorkoutPreview)
         }
     }
 
@@ -569,38 +572,17 @@ struct RecommendationView: View {
     // MARK: - WorkoutKit
 
     func sendToWatch(_ rec: AgentManager.WorkoutRecommendation) {
-        watchSendState = .sending
-        Task {
-            do {
-                let authResult = try await WorkoutPlan.requestAuthorization()
-                guard authResult == .sharingAuthorized else {
-                    await MainActor.run {
-                        watchSendState = .failed("WorkoutKit authorization denied. Enable it in Settings > Health.")
-                    }
-                    return
-                }
-                let activityType = mapToHKWorkoutActivityType(rec.recommended_workout_type)
-                let durationSeconds = Double(rec.recommended_duration_min) * 60
-                let goal = WorkoutGoal.time(durationSeconds, .seconds)
-                let composition = SingleGoalWorkout(
-                    activity: activityType,
-                    goal: goal,
-                    location: workoutLocation(rec.recommended_workout_type)
-                )
-                await MainActor.run {
-                    Task {
-                        do {
-                            try await WorkoutPlan.presentPreview(for: composition)
-                            watchSendState = .sent
-                        } catch {
-                            watchSendState = .failed("Could not present Watch preview: \(error.localizedDescription)")
-                        }
-                    }
-                }
-            } catch {
-                await MainActor.run { watchSendState = .failed(error.localizedDescription) }
-            }
-        }
+        let activityType = mapToHKWorkoutActivityType(rec.recommended_workout_type)
+        let durationSeconds = Double(rec.recommended_duration_min) * 60
+        let goal = WorkoutGoal.time(durationSeconds, .seconds)
+        let singleGoalWorkout = SingleGoalWorkout(
+            activity: activityType,
+            location: workoutLocation(rec.recommended_workout_type),
+            goal: goal
+        )
+        workoutPlanToPreview = WorkoutPlan(.goal(singleGoalWorkout))
+        showWorkoutPreview = true
+        watchSendState = .sent
     }
 
     // MARK: - Helpers
@@ -639,10 +621,14 @@ struct RecommendationView: View {
     }
 
     func heartRateAlert(for intensity: String) -> HeartRateRangeAlert? {
+        // BPM expressed as hertz: 1 beat/min = 1/60 Hz
+        func bpm(_ value: Double) -> Measurement<UnitFrequency> {
+            Measurement(value: value / 60.0, unit: .hertz)
+        }
         switch intensity.lowercased() {
-        case "easy":     return HeartRateRangeAlert(target: 100...130)
-        case "moderate": return HeartRateRangeAlert(target: 130...155)
-        case "hard":     return HeartRateRangeAlert(target: 155...175)
+        case "easy":     return HeartRateRangeAlert(target: bpm(100)...bpm(130))
+        case "moderate": return HeartRateRangeAlert(target: bpm(130)...bpm(155))
+        case "hard":     return HeartRateRangeAlert(target: bpm(155)...bpm(175))
         default:         return nil
         }
     }
