@@ -816,12 +816,14 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         // Diet rating for today
         let dietRating = NotificationManager.dietRating(for: NotificationManager.todayDateString()) ?? "unknown"
 
-        // Split workouts into today vs yesterday (Bangalore time)
-        let calendar = NotificationManager.bangaloreCalendar
-        let startOfToday = calendar.startOfDay(for: Date())
+        // Split workouts into today vs yesterday (device timezone)
+        let calendar = Calendar.current
+        let now = Date()
+        let startOfToday = calendar.startOfDay(for: now)
+        let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday)!
         let startOfYesterday = calendar.date(byAdding: .day, value: -1, to: startOfToday)!
 
-        let todayWorkouts = recentWorkouts.filter { $0.startDate >= startOfToday }
+        let todayWorkouts = recentWorkouts.filter { $0.startDate >= startOfToday && $0.startDate < startOfTomorrow }
         let yesterdayWorkouts = recentWorkouts.filter { $0.startDate >= startOfYesterday && $0.startDate < startOfToday }
 
         func workoutSummary(_ workouts: [HKWorkout]) -> String {
@@ -934,10 +936,12 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         HealthManager.shared.fetchRecentWorkouts(days: 2) { [weak self] workouts in
             guard let self = self else { return }
 
-            // Filter to only TODAY's workouts (Bangalore time)
-            let calendar = NotificationManager.bangaloreCalendar
-            let startOfToday = calendar.startOfDay(for: Date())
-            let todayWorkouts = workouts.filter { $0.startDate >= startOfToday }
+            // Filter to only TODAY's workouts (device timezone)
+            let calendar = Calendar.current
+            let now = Date()
+            let startOfToday = calendar.startOfDay(for: now)
+            let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday)!
+            let todayWorkouts = workouts.filter { $0.startDate >= startOfToday && $0.startDate < startOfTomorrow }
 
             let last = todayWorkouts.first
             let name     = last.map { HKWorkoutActivityType(rawValue: $0.workoutActivityType.rawValue)?.name ?? "Workout" } ?? "None"
