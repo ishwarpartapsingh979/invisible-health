@@ -904,6 +904,7 @@ class NutritionAgent:
             diet_rating            = data.get("diet_rating", "unknown")
             active_goals           = data.get("active_goals", [])
             steps_today            = data.get("steps_today", 0)
+            has_fresh_vitals       = data.get("has_fresh_vitals", False)
 
             # Map diet rating to human label
             diet_label_map = {
@@ -999,7 +1000,8 @@ Output STRICT JSON:
     "Step 2: ...",
     "Step 3: ...",
     "Final call: [summary of decision path in one sentence]."
-  ]
+  ],
+  "has_fresh_vitals": {has_fresh_vitals}
 }}
 
 IMPORTANT: logic_breakdown must trace EVERY decision step taken, citing actual numbers from the audit above.

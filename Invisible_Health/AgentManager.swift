@@ -689,6 +689,7 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         let key_signals: [RecommendationSignal]
         let one_drill: String
         let logic_breakdown: [String]
+        let has_fresh_vitals: Bool  // true = final plan, false = preview
     }
 
     struct RecommendationSignal: Codable, Identifiable {
@@ -696,6 +697,21 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         let label: String
         let value: String
         let status: String // "good" | "warning" | "critical"
+    }
+
+    /// Checks if fresh morning vitals (from watch put on today) are available
+    private func hasFreshMorningVitals(telemetryGap: HealthManager.TelemetryGapResult?) -> Bool {
+        guard let watchOn = telemetryGap?.watchOnTime else { return false }
+
+        // Check if watchOnTime is from today (Bangalore time)
+        let calendar = NotificationManager.bangaloreCalendar
+        let isToday = calendar.isDateInToday(watchOn)
+
+        // Check if it was recent (within last 6 hours)
+        let hoursSinceWatchOn = Date().timeIntervalSince(watchOn) / 3600
+        let isRecent = hoursSinceWatchOn <= 6
+
+        return isToday && isRecent
     }
 
     func fetchWorkoutRecommendation(userId: String = "00000000-0000-0000-0000-000000000001",
@@ -738,6 +754,9 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         }
 
         group.notify(queue: .main) {
+            // Check if fresh morning vitals are available
+            let hasFreshVitals = self.hasFreshMorningVitals(telemetryGap: telemetryGap)
+
             // Orthostatic spike uses watchOnTime from telemetry gap
             if let watchOn = telemetryGap?.watchOnTime {
                 group.enter()
@@ -749,6 +768,7 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
                         userId: userId, snapshot: snapshot,
                         telemetryGap: telemetryGap, orthoSpike: orthoSpike,
                         lastWorkout: lastWorkout, recentWorkouts: recentWorkouts, steps: steps,
+                        hasFreshVitals: hasFreshVitals,
                         completion: completion
                     )
                 }
@@ -757,6 +777,7 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
                     userId: userId, snapshot: snapshot,
                     telemetryGap: telemetryGap, orthoSpike: nil,
                     lastWorkout: lastWorkout, recentWorkouts: recentWorkouts, steps: steps,
+                    hasFreshVitals: hasFreshVitals,
                     completion: completion
                 )
             }
@@ -771,6 +792,7 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         lastWorkout: HKWorkout?,
         recentWorkouts: [HKWorkout],
         steps: Double,
+        hasFreshVitals: Bool,
         completion: @escaping (WorkoutRecommendation?) -> Void
     ) {
         guard let url = URL(string: agentURL) else { completion(nil); return }
@@ -839,7 +861,8 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             "last_workout_calories":        lastWorkoutCals,
             "today_workouts":               todaySummary,
             "yesterday_workouts":           yesterdaySummary,
-            "yesterday_total_calories":     yesterdayTotalCals
+            "yesterday_total_calories":     yesterdayTotalCals,
+            "has_fresh_vitals":             hasFreshVitals
         ]
 
         // HRV, RHR, VO2, body mass, HRR

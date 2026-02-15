@@ -523,6 +523,22 @@ struct RecommendationView: View {
                 .padding().frame(maxWidth: .infinity)
                 .background(Color.white.opacity(0.05)).cornerRadius(16)
                 .padding(.horizontal)
+            } else if !rec.has_fresh_vitals {
+                // Preview mode — no push to watch
+                VStack(spacing: 8) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "eye.fill").foregroundColor(.indigo)
+                        Text("Preview Only")
+                            .font(.subheadline).bold().foregroundColor(.white)
+                    }
+                    Text("Put on your watch tomorrow morning to get the final plan with Push to Watch")
+                        .font(.caption).foregroundColor(.gray)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding().frame(maxWidth: .infinity)
+                .background(Color.indigo.opacity(0.1)).cornerRadius(16)
+                .padding(.horizontal)
             } else {
                 switch watchSendState {
                 case .idle:
