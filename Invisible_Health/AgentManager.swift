@@ -424,7 +424,7 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
              group.enter()
              self.fetchLogs { allLogs in
                  // Filter logs created on the same day as the workout
-                 let calendar = NotificationManager.bangaloreCalendar
+                 let calendar = Calendar.current
                  let workoutDate = targetWorkout.startDate
                  let relevant = allLogs.filter { log in
                      let formatter = ISO8601DateFormatter()
@@ -617,7 +617,7 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             let todayLogs = recentLogs.filter { log in
                 let formatter = ISO8601DateFormatter()
                 if let date = formatter.date(from: log.created_at) {
-                    let calendar = NotificationManager.bangaloreCalendar
+                    let calendar = Calendar.current
                     return calendar.isDateInToday(date)
                 }
                 return false
@@ -703,8 +703,8 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     private func hasFreshMorningVitals(telemetryGap: HealthManager.TelemetryGapResult?) -> Bool {
         guard let watchOn = telemetryGap?.watchOnTime else { return false }
 
-        // Check if watchOnTime is from today (Bangalore time)
-        let calendar = NotificationManager.bangaloreCalendar
+        // Check if watchOnTime is from today (device time)
+        let calendar = Calendar.current
         let isToday = calendar.isDateInToday(watchOn)
 
         // Check if it was recent (within last 6 hours)

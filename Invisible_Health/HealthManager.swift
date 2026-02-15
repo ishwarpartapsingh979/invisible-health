@@ -98,24 +98,24 @@ class HealthManager: ObservableObject {
     
     // MARK: - 2a. Elite Fetchers (Phase 3.1)
     
-    // FETCH WORKOUTS (Last 3 Days)
+    // FETCH WORKOUTS (Last N Days - using device timezone)
     func fetchRecentWorkouts(days: Int = 3, completion: @escaping ([HKWorkout]) -> Void) {
         let now = Date()
-        let calendar = NotificationManager.bangaloreCalendar  // Bangalore time
+        let calendar = Calendar.current  // Device timezone
         let startOfToday = calendar.startOfDay(for: now)
-        // Go back (days - 1) days to include today + 2 previous days
+        // Go back (days - 1) days to include today + (days - 1) previous days
         let startDate = calendar.date(byAdding: .day, value: -(days - 1), to: startOfToday)!
-        
+
         let predicate = HKQuery.predicateForSamples(withStart: startDate, end: now, options: .strictStartDate)
         let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
-        
+
         let query = HKSampleQuery(sampleType: .workoutType(), predicate: predicate, limit: 100, sortDescriptors: [sortDescriptor]) { _, samples, error in
             guard let workouts = samples as? [HKWorkout], error == nil else {
                 print("❌ Error fetching workouts: \(String(describing: error))")
                 completion([])
                 return
             }
-            
+
             print("🏋️ Found \(workouts.count) workouts (Last \(days) Days).")
             DispatchQueue.main.async {
                 completion(workouts)
@@ -899,9 +899,9 @@ class HealthManager: ObservableObject {
                 completionHandler()
                 return
             }
-            // Only run the audit during the morning window (5 AM – 10 AM Bangalore time)
+            // Only run the audit during the morning window (5 AM – 10 AM device time)
             // to avoid triggering on every workout HR update during the day.
-            let calendar = NotificationManager.bangaloreCalendar
+            let calendar = Calendar.current
             let hour = calendar.component(.hour, from: Date())
             guard hour >= 5 && hour < 10 else {
                 completionHandler()
