@@ -1,7 +1,5 @@
 # 1. functions-framework: Google's library to run this code as a Cloud Function
 functions-framework==3.4.0
-# packaging: required by wheel>=0.46.3
-packaging>=24.0
 # 2. google-cloud-aiplatform: The official SDK for Gemini (Vertex AI) on Google Cloud
 google-cloud-aiplatform==1.60.0
 # 3. supabase: To talk to your database (Memory)
@@ -10,7 +8,7 @@ supabase==2.13.0
 python-dotenv==1.0.0
 # 5. requests: For making HTTP calls (e.g., to Google Maps API later)
 requests==2.31.0
-# 6. langfuse: For Observability
-langfuse==2.30.0
-
-
+# 6. langfuse: For Observability (upgraded from 2.30.0 to allow packaging 24.x)
+langfuse==2.60.3
+# packaging: 24.x satisfies wheel>=0.46.3 (requires >=24.0) and langfuse 2.60.3 (requires <25.0,>=23.2)
+packaging==24.0
