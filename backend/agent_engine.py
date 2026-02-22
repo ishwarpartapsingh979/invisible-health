@@ -1008,7 +1008,7 @@ Output STRICT JSON:
     {{"label": "Yesterday's Diet", "value": "{diet_label}", "status": "good/warning/critical"}},
     {{"label": "Today's Volume", "value": "Summary of today's completed workouts", "status": "good/warning/critical"}}
   ],
-  "one_drill": "One specific warm-up or activation drill relevant to today's prescription.",
+  "one_drill": "BEFORE YOU START: [Specific drill]. [Why it matters for today's workout]. [Exact instructions: sets, reps, duration].",
   "logic_breakdown": [
     "Paragraph 1: Your Body's State",
     "Paragraph 2: How Your Diet Helped (Or Hurt)",
@@ -1091,6 +1091,37 @@ IMPORTANT:
 - MANDATORY: Include counterfactual reasoning ("If you'd eaten poorly, you'd be..." or "If you'd eaten better, you could...")
 - Each paragraph should be 3-5 sentences
 - Total length: ~300-350 words across all 4 paragraphs
+
+CRITICAL RULES FOR one_drill:
+This is a PRE-WORKOUT activation drill that must be completed BEFORE the main workout.
+The drill MUST be specific to today's prescription and body state.
+
+FORMAT (3 parts in one string):
+1. START WITH URGENCY: "BEFORE YOU START: [Drill name]"
+2. WHY IT MATTERS: One sentence explaining how this drill prepares the body for today's specific workout
+3. EXACT INSTRUCTIONS: Precise protocol (sets, reps, duration, focus)
+
+EXAMPLES:
+
+For Tempo Run after strength yesterday:
+"BEFORE YOU START: Hip Flexor + Glute Activation Circuit. Yesterday's strength work left your hips tight, which will limit your stride and spike injury risk on today's tempo run. Do 2 rounds: 10 walking lunges per leg (focus on depth), 10 glute bridges (squeeze at top for 2 seconds), 30-second pigeon pose each side."
+
+For Strength after poor sleep:
+"BEFORE YOU START: CNS Wake-Up Drill. Your low HRV means your nervous system isn't firing at full capacity, which reduces power output and coordination for heavy lifts. Do 3 sets: 5 jump squats (land soft), 10 fast push-ups (explosive), 10 med ball slams. This primes your CNS without fatiguing you."
+
+For Zone 2 Run (recovery day):
+"BEFORE YOU START: Dynamic Mobility Flow. Your body is in recovery mode, so we need to wake up stiff joints without adding load. Do 1 round: 10 leg swings each direction, 10 arm circles forward/back, 10 cat-cows, 5 world's greatest stretch each side. Total time: 3-4 minutes."
+
+For Rest Day:
+"BEFORE YOU START: Not applicable — today is full rest. If you feel restless, a 10-minute easy walk is fine, but no formal activation needed."
+
+RULES:
+- Always start with "BEFORE YOU START:"
+- Be SPECIFIC (no generic "warm up")
+- Explain WHY based on today's body state (HRV, yesterday's workout, etc.)
+- Give EXACT protocol (no vague "do some stretches")
+- Keep total time under 5 minutes
+- Tailor to the workout type (running vs strength vs HIIT need different prep)
 """
             response = self.model.generate_content(prompt)
             clean = response.text.replace("```json", "").replace("```", "").strip()
@@ -1125,34 +1156,78 @@ IMPORTANT:
             diet_label = diet_label_map.get(diet_rating, "Not rated")
 
             prompt = f"""
-You are an Athletic Performance Director giving a SOFT PREVIEW of tomorrow's training.
-You only have two data points. Be honest about uncertainty. Do NOT pretend to know recovery metrics.
+You are an Athletic Performance Director giving TOMORROW'S PREVIEW after the user rates their diet.
+This is shown in the evening (after today's work is done) to preview tomorrow's likely workout.
+Be CONFIDENT and MOTIVATING. The goal is to make them excited about tomorrow AND motivated to sleep/recover well tonight.
 
 === TODAY'S DATA ===
 Workouts completed: {today_workouts} (~{today_total_calories} kcal burned)
 Diet rating:        {diet_label}
 
 === YOUR TASK ===
-Based ONLY on these two signals:
-1. What muscle groups / energy systems were taxed today?
-2. What does the diet rating suggest about tomorrow's fuel availability?
-3. Give a soft recommendation for tomorrow — type, rough duration range, intensity ceiling.
+Analyze today's training load + diet quality to preview tomorrow's workout.
 
-Rules:
-- If diet = "fully_bad": cap intensity at Easy/Moderate regardless of workout
-- If workout was heavy strength or long run (>45 min): suggest opposite or recovery tomorrow
-- If workout = "None": treat as rest day, suggest any moderate session tomorrow
-- Always include a caveat that morning HRV/sleep data will finalise this
+DECISION LOGIC:
+1. What muscle groups / energy systems were taxed today?
+   - Strength → suggest cardio/mobility tomorrow (alternate)
+   - Running → suggest strength or rest tomorrow (alternate)
+   - HIIT → suggest Zone 2 or rest tomorrow (recover)
+   - Rest today → suggest any moderate session tomorrow
+
+2. How does diet impact tomorrow's capacity?
+   - "Nailed it" → Full capacity unlocked, can go hard
+   - "Minor good" → Moderate capacity, cap at moderate intensity
+   - "Minor bad" → Reduced capacity, cap at easy/Zone 2
+   - "Fully bad" → Minimal capacity, likely rest or very light work
+
+3. Create a CONFIDENT preview (not "we're likely looking at..." but "Tomorrow: [X]")
 
 Output STRICT JSON:
 {{
-  "preview_workout_type": "e.g. Zone 2 Run / Strength / Yoga / Rest / HIIT",
+  "preview_workout_type": "e.g. Zone 2 Run / Upper Body Strength / Mobility Flow / Rest",
   "preview_duration_range": "e.g. 30-45 min",
   "preview_intensity_ceiling": "Easy / Moderate / Hard",
-  "preview_headline": "One sentence soft preview. E.g. 'Legs took a hit — upper body or Zone 2 tomorrow.'",
-  "preview_reasoning": "2 sentences max explaining the two signals.",
-  "caveat": "Morning HRV and sleep data will be checked at wake-up to finalise this."
+  "preview_headline": "CONFIDENT one-liner that builds excitement. E.g. 'Tomorrow: Upper body strength — your legs earned a break.' or 'Tomorrow: Easy Zone 2 run to flush yesterday's damage.'",
+  "preview_reasoning": "2-3 sentences. First: explain what today taxed. Second: explain how diet unlocked (or limited) tomorrow. Third (optional): motivate good sleep/recovery tonight.",
+  "caveat": "Morning HRV and sleep will confirm this plan."
 }}
+
+EXAMPLES:
+
+After heavy strength + good diet:
+{{
+  "preview_headline": "Tomorrow: Zone 2 cardio to flush the lactic acid and keep momentum.",
+  "preview_reasoning": "Today's strength session taxed your muscular system hard (448 kcal burned). Because you nailed your diet, your glycogen is topped up for tomorrow's work. Get 8+ hours of sleep tonight to lock in those gains and clear tomorrow for cardio.",
+  "preview_workout_type": "Zone 2 Run",
+  "preview_duration_range": "35-45 min",
+  "preview_intensity_ceiling": "Moderate"
+}}
+
+After light run + bad diet:
+{{
+  "preview_headline": "Tomorrow: Likely rest or very light mobility — tonight's diet limited your options.",
+  "preview_reasoning": "Today's run was moderate (300 kcal), so your legs could handle more tomorrow. But your poor diet choice compromised recovery capacity — inflammation will be elevated and fuel stores are compromised. Fix tonight's meal and sleep to unlock a real session the day after.",
+  "preview_workout_type": "Rest or Light Yoga",
+  "preview_duration_range": "15-20 min",
+  "preview_intensity_ceiling": "Easy"
+}}
+
+After rest day + good diet:
+{{
+  "preview_headline": "Tomorrow: You're fueled and rested — time to attack a hard session.",
+  "preview_reasoning": "You rested today and nailed your diet, which means your recovery tank is full. Tomorrow is your chance to capitalize on this readiness with intensity. Prioritize sleep tonight to confirm green lights across the board.",
+  "preview_workout_type": "Tempo Run or Strength",
+  "preview_duration_range": "40-50 min",
+  "preview_intensity_ceiling": "Hard"
+}}
+
+RULES:
+- Be CONFIDENT, not wishy-washy ("Tomorrow: X" not "We're likely looking at X")
+- Make it MOTIVATING (build excitement for tomorrow)
+- Connect diet directly to tomorrow's capacity (show cause → effect)
+- If diet was good: celebrate and motivate ("You earned this")
+- If diet was bad: show consequence and path forward ("Fix tonight to unlock the day after")
+- Always end reasoning with a forward-looking statement (sleep, next meal, etc.)
 """
             response = self.model.generate_content(prompt)
             clean = response.text.replace("```json", "").replace("```", "").strip()
