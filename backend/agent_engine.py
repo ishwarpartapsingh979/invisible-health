@@ -868,21 +868,33 @@ class NutritionAgent:
         try:
             user_id = data.get("user_id")
 
-            # Fetch today's nutrition logs for caloric context
+            # Fetch today's nutrition logs for caloric context (FIXED: filter by today only)
             today_logs = []
+            total_cals_today = 0
+            food_summary = "No food logged yet"
+
             try:
+                from datetime import datetime, timezone
+
+                # Get today's date range in UTC
+                now = datetime.now(timezone.utc)
+                today_start = datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=timezone.utc).isoformat()
+                today_end = datetime(now.year, now.month, now.day, 23, 59, 59, tzinfo=timezone.utc).isoformat()
+
                 logs_resp = self.supabase.table("logs") \
                     .select("food_name, calories") \
                     .eq("user_id", user_id) \
+                    .gte("created_at", today_start) \
+                    .lte("created_at", today_end) \
                     .order("created_at", desc=True) \
-                    .limit(10) \
                     .execute()
                 today_logs = logs_resp.data
+
+                if today_logs:
+                    total_cals_today = sum([l.get("calories", 0) or 0 for l in today_logs])
+                    food_summary = ", ".join([l.get("food_name", "") for l in today_logs])
             except Exception as e:
                 print(f"Could not fetch logs for recommendation: {e}")
-
-            total_cals_today = sum([l.get("calories", 0) or 0 for l in today_logs])
-            food_summary = ", ".join([l.get("food_name", "") for l in today_logs]) or "No food logged yet"
 
             # Pull all incoming signals with safe defaults
             hrv                    = data.get("hrv")                     # ms
@@ -946,13 +958,12 @@ Long-Term Capacity:
   - Body Mass:               {body_mass_kg} kg
 
 === YESTERDAY ===
-  - Workouts:                {yesterday_workouts} (~{yesterday_total_cals} kcal total)
+  - Workouts:                {yesterday_workouts} (~{yesterday_total_cals} kcal burned)
   - Diet Rating:             {diet_label}
 
 === TODAY SO FAR ===
   - Workouts completed:      {today_workouts}
   - Steps:                   {steps_today}
-  - Food logged:             {food_summary} (~{total_cals_today} kcal)
 
 === ATHLETE GOALS ===
   {goals_str}
@@ -988,11 +999,11 @@ Output STRICT JSON:
   "headline": "One punchy sentence. E.g. 'HRV says go. Hammer a tempo run.'",
   "reasoning": "2-3 sentences citing the specific numbers that drove this decision.",
   "key_signals": [
-    {{"label": "HRV", "value": "...", "status": "good/warning/critical"}},
-    {{"label": "Sleep", "value": "...", "status": "good/warning/critical"}},
-    {{"label": "Last Workout", "value": "...", "status": "good/warning/critical"}},
-    {{"label": "Diet", "value": "...", "status": "good/warning/critical"}},
-    {{"label": "Ortho Spike", "value": "...", "status": "good/warning/critical"}}
+    {{"label": "HRV", "value": "XX.X ms", "status": "good/warning/critical"}},
+    {{"label": "Sleep", "value": "X.X hrs", "status": "good/warning/critical"}},
+    {{"label": "Yesterday's Load", "value": "Workout name (calories burned)", "status": "good/warning/critical"}},
+    {{"label": "Yesterday's Diet", "value": "{diet_label}", "status": "good/warning/critical"}},
+    {{"label": "Today's Volume", "value": "Summary of today's completed workouts", "status": "good/warning/critical"}}
   ],
   "one_drill": "One specific warm-up or activation drill relevant to today's prescription.",
   "logic_breakdown": [
@@ -1004,9 +1015,24 @@ Output STRICT JSON:
   "has_fresh_vitals": {has_fresh_vitals}
 }}
 
-IMPORTANT: logic_breakdown must trace EVERY decision step taken, citing actual numbers from the audit above.
-Minimum 3 steps, maximum 6. Each entry must be a plain English sentence a non-athlete can understand.
-Do NOT repeat the reasoning field — logic_breakdown is the step-by-step decision trace, not a summary.
+CRITICAL RULES FOR key_signals:
+1. MUST use EXACTLY these 5 labels in order: "HRV", "Sleep", "Yesterday's Load", "Yesterday's Diet", "Today's Volume"
+2. HRV value: Show the actual number with "ms" unit (e.g. "56.8 ms")
+3. Sleep value: Show the actual hours (e.g. "7.01 hrs" or "Unknown")
+4. Yesterday's Load value: Show yesterday's workout summary from the data above (e.g. "Strength 30min (200 kcal)" or "Rest Day")
+5. Yesterday's Diet value: MUST be exactly one of: "Nailed it", "Minor good", "Minor bad", "Fully bad", or "Not rated yet"
+6. Today's Volume value: Show today's completed workouts ONLY, excluding diet/food (e.g. "2 Strength Sessions" or "Rest Day")
+7. Status rules:
+   - "good" = green checkmark (optimal)
+   - "warning" = yellow triangle (moderate concern)
+   - "critical" = red X (requires attention/veto trigger)
+
+IMPORTANT:
+- Do NOT mix food calories with workout load in any signal
+- Do NOT create new signal labels beyond these 5
+- logic_breakdown must trace EVERY decision step taken, citing actual numbers from the audit above
+- Minimum 3 steps, maximum 6. Each entry must be a plain English sentence a non-athlete can understand
+- Do NOT repeat the reasoning field — logic_breakdown is the step-by-step decision trace, not a summary
 """
             response = self.model.generate_content(prompt)
             clean = response.text.replace("```json", "").replace("```", "").strip()
@@ -1027,9 +1053,8 @@ Do NOT repeat the reasoning field — logic_breakdown is the step-by-step decisi
         Returns a soft preview with a clear caveat that it will be updated in the morning.
         """
         try:
-            last_workout_name     = data.get("last_workout_name", "None")
-            last_workout_duration = data.get("last_workout_duration_min", 0)
-            last_workout_calories = data.get("last_workout_calories", 0)
+            today_workouts        = data.get("today_workouts", "None")
+            today_total_calories  = data.get("today_total_calories", 0)
             diet_rating           = data.get("diet_rating", "unknown")
 
             diet_label_map = {
@@ -1046,8 +1071,8 @@ You are an Athletic Performance Director giving a SOFT PREVIEW of tomorrow's tra
 You only have two data points. Be honest about uncertainty. Do NOT pretend to know recovery metrics.
 
 === TODAY'S DATA ===
-Workout completed: {last_workout_name}, {last_workout_duration} min, {last_workout_calories} kcal
-Diet rating:       {diet_label}
+Workouts completed: {today_workouts} (~{today_total_calories} kcal burned)
+Diet rating:        {diet_label}
 
 === YOUR TASK ===
 Based ONLY on these two signals:

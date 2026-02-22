@@ -813,9 +813,6 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             }
         }
 
-        // Diet rating for today
-        let dietRating = NotificationManager.dietRating(for: NotificationManager.todayDateString()) ?? "unknown"
-
         // Split workouts into today vs yesterday (device timezone)
         let calendar = Calendar.current
         let now = Date()
@@ -846,6 +843,13 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         let yesterdaySummary = workoutSummary(yesterdayWorkouts)
         let yesterdayTotalCals = totalCals(yesterdayWorkouts)
 
+        // Get yesterday's diet rating
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.timeZone = TimeZone.current
+        let yesterdayDate = formatter.string(from: startOfYesterday)
+        let yesterdayDietRating = NotificationManager.dietRating(for: yesterdayDate) ?? "unknown"
+
         // last_workout = most recent yesterday workout (not all-time history)
         let lastWorkoutSource = yesterdayWorkouts.first
         let lastWorkoutName = lastWorkoutSource.map { HKWorkoutActivityType(rawValue: $0.workoutActivityType.rawValue)?.name ?? "Workout" } ?? "None"
@@ -856,7 +860,7 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             "action":                       "workout_recommendation",
             "user_id":                      userId,
             "steps_today":                  Int(steps),
-            "diet_rating":                  dietRating,
+            "diet_rating":                  yesterdayDietRating,
             "active_goals":                 activeGoals,
             "last_workout_name":            lastWorkoutName,
             "last_workout_duration_min":    lastWorkoutDuration,
@@ -943,10 +947,25 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday)!
             let todayWorkouts = workouts.filter { $0.startDate >= startOfToday && $0.startDate < startOfTomorrow }
 
-            let last = todayWorkouts.first
-            let name     = last.map { HKWorkoutActivityType(rawValue: $0.workoutActivityType.rawValue)?.name ?? "Workout" } ?? "None"
-            let duration = Int((last?.duration ?? 0) / 60)
-            let cals     = Int(last?.statistics(for: HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)!)?.sumQuantity()?.doubleValue(for: .kilocalorie()) ?? 0)
+            // Create summary of ALL today's workouts
+            func workoutSummary(_ workouts: [HKWorkout]) -> String {
+                guard !workouts.isEmpty else { return "None" }
+                return workouts.map { w in
+                    let name = HKWorkoutActivityType(rawValue: w.workoutActivityType.rawValue)?.name ?? "Workout"
+                    let mins = Int(w.duration / 60)
+                    let cals = Int(w.statistics(for: HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)!)?.sumQuantity()?.doubleValue(for: .kilocalorie()) ?? 0)
+                    return "\(name) \(mins)min \(cals)kcal"
+                }.joined(separator: ", ")
+            }
+
+            func totalCals(_ workouts: [HKWorkout]) -> Int {
+                workouts.reduce(0) { sum, w in
+                    sum + Int(w.statistics(for: HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)!)?.sumQuantity()?.doubleValue(for: .kilocalorie()) ?? 0)
+                }
+            }
+
+            let todaySummary = workoutSummary(todayWorkouts)
+            let todayTotalCals = totalCals(todayWorkouts)
 
             guard let url = URL(string: self.agentURL) else { completion?(nil); return }
             var request = URLRequest(url: url)
@@ -957,9 +976,8 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
                 "action":                    "tomorrow_preview",
                 "user_id":                   userId,
                 "diet_rating":               dietRating,
-                "last_workout_name":         name,
-                "last_workout_duration_min": duration,
-                "last_workout_calories":     cals
+                "today_workouts":            todaySummary,
+                "today_total_calories":      todayTotalCals
             ]
 
             guard let httpBody = try? JSONSerialization.data(withJSONObject: body) else {

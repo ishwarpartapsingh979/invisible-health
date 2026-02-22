@@ -101,10 +101,13 @@ class HealthManager: ObservableObject {
     // FETCH WORKOUTS (Last N Days - using device timezone)
     func fetchRecentWorkouts(days: Int = 3, completion: @escaping ([HKWorkout]) -> Void) {
         let now = Date()
-        let calendar = Calendar.current  // Device timezone
-        let startOfToday = calendar.startOfDay(for: now)
-        // Go back (days - 1) days to include today + (days - 1) previous days
-        let startDate = calendar.date(byAdding: .day, value: -(days - 1), to: startOfToday)!
+        var calendar = Calendar.current
+        // Set timezone to IST (Indian Standard Time)
+        calendar.timeZone = TimeZone(identifier: "Asia/Kolkata")!
+
+        // Feb 15, 2026 IST 00:00:00 as hardcoded start date
+        let dateComponents = DateComponents(year: 2026, month: 2, day: 15, hour: 0, minute: 0, second: 0)
+        let startDate = calendar.date(from: dateComponents)!
 
         let predicate = HKQuery.predicateForSamples(withStart: startDate, end: now, options: .strictStartDate)
         let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
