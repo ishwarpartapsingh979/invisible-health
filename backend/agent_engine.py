@@ -974,17 +974,20 @@ Using ALL the signals above, prescribe today's training. Apply this decision log
 1. VETO CONDITIONS (if any are true, prescribe REST or active recovery only):
    - HRV < 30 ms
    - Orthostatic peak > RHR + 25 bpm
-   - Sleep < 5 hours
+   - Sleep < 6 hours
    - Walking asymmetry > 8%
    - HRR 1-min < 10 bpm
 
 2. REDUCED LOAD (if any are true, prescribe Zone 1-2 only, no intensity):
    - HRV 30-45 ms
-   - Sleep 5-6.5 hours
-   - Diet rating = "fully_bad"
+   - Sleep 6-7.5 hours
+   - Diet rating = "fully_bad" OR "minor_bad"
    - Orthostatic peak > RHR + 15 bpm
 
 3. FULL SEND (all clear):
+   - Sleep > 7.5 hours (ideally 8+)
+   - HRV > 45 ms
+   - Diet rating = "nailed_it" OR "minor_good"
    - Prescribe based on yesterday's workouts and today's completed workouts. Alternate muscle groups, allow intensity.
    - If today's workout is already complete (e.g. a walk or session done), factor that in and recommend what still makes sense for the rest of the day or tomorrow's direction.
 
@@ -1007,10 +1010,10 @@ Output STRICT JSON:
   ],
   "one_drill": "One specific warm-up or activation drill relevant to today's prescription.",
   "logic_breakdown": [
-    "Step 1: [signal name] was [value] — this [triggered/cleared] the [veto/reduced/full-send] condition because [reason].",
-    "Step 2: ...",
-    "Step 3: ...",
-    "Final call: [summary of decision path in one sentence]."
+    "Paragraph 1: Your Body's State",
+    "Paragraph 2: How Your Diet Helped (Or Hurt)",
+    "Paragraph 3: The Logic (equation)",
+    "Paragraph 4: The Prescription"
   ],
   "has_fresh_vitals": {has_fresh_vitals}
 }}
@@ -1027,12 +1030,67 @@ CRITICAL RULES FOR key_signals:
    - "warning" = yellow triangle (moderate concern)
    - "critical" = red X (requires attention/veto trigger)
 
+CRITICAL RULES FOR logic_breakdown:
+This is the MOST IMPORTANT section — it must tell a compelling STORY, not list data.
+
+FORMAT (exactly 4 paragraphs):
+
+Paragraph 1 — "YOUR BODY'S STATE" (current recovery status):
+- Start with an analogy that explains the athlete's recovery state (e.g., "Your body is in high-performance mode" or "Your body is in debt collection mode")
+- Explain EACH key signal using relatable comparisons:
+  * HRV: Battery percentage (low = low charge), nervous system capacity
+  * RHR: Engine temperature (high = running hot, still processing load)
+  * Sleep: Phone charging overnight (missing/low = didn't charge properly)
+  * Yesterday's load: Recent withdrawals from the recovery bank
+  * Today's volume: Already spent energy today
+- Use conversational language: "think of it like...", "it's like...", "imagine..."
+- Make it personal: "Your nervous system...", "Your body..."
+
+Paragraph 2 — "HOW YOUR DIET HELPED (OR HURT)" (diet impact analysis):
+MANDATORY: You MUST explain the diet's role in unlocking or limiting today's capacity.
+- If diet = "nailed_it": Explain how good nutrition ENABLED this workout capacity
+  * Example: "Because you nailed your diet yesterday, your glycogen stores are fully topped up — like filling your car's gas tank to 100%. This gives you the fuel to train hard today without crashing mid-session."
+  * Show the counterfactual: "If you'd eaten poorly, you'd be running on fumes right now, forcing a reduced-load day even with good HRV."
+- If diet = "minor_good": Show what was unlocked and what's still limited
+  * Example: "Your decent diet yesterday provided enough fuel for moderate work, but not enough to go all-out. You're at 70% tank capacity."
+- If diet = "minor_bad": Explain the penalty
+  * Example: "Yesterday's diet mistakes are costing you today. Poor nutrition increases inflammation (hence elevated RHR) and limits glycogen availability. You could have done intervals today, but now you're capped at Zone 2."
+- If diet = "fully_bad": Drive home the impact
+  * Example: "Yesterday's diet disaster is the main reason we're prescribing rest today. Junk food spikes cortisol, disrupts sleep quality, and drains recovery capacity. Even if HRV was good, bad diet would still force caution."
+ALWAYS include: "This is why nutrition compliance unlocks performance — it's not just about calories, it's about earning tomorrow's workout capacity."
+
+Paragraph 3 — "THE LOGIC" (how signals combine):
+- Show the EQUATION: How the signals combine to create the decision
+- Example: "Good HRV + Good Sleep + Nailed Diet + Rest yesterday = Full send clearance"
+- Or: "Low HRV + Poor Sleep + Bad Diet = Triple veto, recovery mandatory"
+- Explain the consequence clearly
+- Connect it to the decision rules (veto/reduced/full-send)
+
+Paragraph 4 — "THE PRESCRIPTION" (what to do and why):
+- State the recommendation clearly
+- Explain WHY this specific workout type/intensity makes sense given the state
+- If diet was good: Celebrate what it unlocked ("Your discipline yesterday earned you this session")
+- If diet was bad: Show the path back ("Fix tonight's diet to unlock tomorrow's capacity")
+- Give forward guidance: what this achieves
+
+EXAMPLES OF GOOD ANALOGIES:
+- HRV 30ms: "Like your phone at 15% battery — it works, but any heavy app will crash it"
+- RHR elevated: "Your engine is idling hot, still processing yesterday's workload"
+- Sleep missing: "Like trying to charge your phone with a faulty cable — you don't know if it actually charged"
+- Already trained today on low HRV: "Like driving on a spare tire — you've used up your safety margin"
+- High volume yesterday: "You made a big withdrawal from the recovery bank yesterday"
+
 IMPORTANT:
-- Do NOT mix food calories with workout load in any signal
-- Do NOT create new signal labels beyond these 5
-- logic_breakdown must trace EVERY decision step taken, citing actual numbers from the audit above
-- Minimum 3 steps, maximum 6. Each entry must be a plain English sentence a non-athlete can understand
-- Do NOT repeat the reasoning field — logic_breakdown is the step-by-step decision trace, not a summary
+- Do NOT list steps (no "Step 1, Step 2...")
+- Do NOT repeat data from the reasoning field
+- Do NOT use technical jargon without explaining it
+- DO use relatable analogies for every metric
+- DO connect the dots between signals
+- DO write in second person ("Your body", not "The athlete's body")
+- MANDATORY: Paragraph 2 MUST discuss diet impact (even if diet = "unknown", explain what's missing)
+- MANDATORY: Include counterfactual reasoning ("If you'd eaten poorly, you'd be..." or "If you'd eaten better, you could...")
+- Each paragraph should be 3-5 sentences
+- Total length: ~300-350 words across all 4 paragraphs
 """
             response = self.model.generate_content(prompt)
             clean = response.text.replace("```json", "").replace("```", "").strip()
