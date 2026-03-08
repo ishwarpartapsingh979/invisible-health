@@ -1300,7 +1300,7 @@ RULES:
             metrics = data.get("metrics", {})
             history = data.get("history", []) # List of {role:user/model, text:msg}
             w_name = metrics.get("workout_name", "Workout")
-            
+
             # Determine Persona (Reuse Logic)
             is_indoor = metrics.get("is_indoor", False)
             persona = "General Coach"
@@ -1312,37 +1312,252 @@ RULES:
             elif "Cycling" in w_name: persona = "The Tour Directuer"
             elif "Swimming" in w_name: persona = "The Aquatics Director"
             elif "Soccer" in w_name or "Football" in w_name: persona = "The Performance Analyst"
-            
+
             # Construct Conversation History
             conversation_text = ""
             for msg in history:
                 role = msg.get("role", "user").upper()
                 text = msg.get("text", "")
                 conversation_text += f"{role}: {text}\n"
-                
+
             # Final Prompt (Stateless)
             final_prompt = f"""
             You are {persona}.
             You are chatting with an athlete about their recent {w_name} session.
-            
+
             CONTEXT (Workout Data):
             {json.dumps(metrics, indent=2)}
-            
+
             INSTRUCTIONS:
             - Keep answers short (under 3 sentences), punchy, and motivating.
             - Use the specific metrics provided above to back up your points.
             - If they ask "How do I fix X?", give a specific drill.
             - Call them 'Athlete'.
-            
+
             CONVERSATION SO FAR:
             {conversation_text}
-            
+
             (You are replying to the last USER message above. Do NOT use markdown. Just plain text.)
             YOUR RESPONSE:
             """
-            
+
             response = self.model.generate_content(final_prompt)
             return json.dumps({"message": response.text})
-            
+
+        except Exception as e:
+            return json.dumps({"message": f"I am having trouble replying. ({str(e)})"})
+
+    # --- GLOBAL COACH CHAT (All Workouts) ---
+    @observe(as_type="generation")
+    def chat_with_coach_global(self, data: dict):
+        """
+        Maintains a conversation about the user's overall training (last 30 days).
+        Persona: Performance Director / Holistic Coach with full recovery, nutrition, and goals context
+        """
+        try:
+            user_id = data.get("user_id")
+            history = data.get("history", [])
+            summary = data.get("workouts_summary", {})
+
+            # Extract key metrics for easier access
+            weekly_summary = summary.get("weekly_summary", [])
+            trends = summary.get("trends", {})
+            recovery = summary.get("recovery_summary", {})
+            nutrition = summary.get("nutrition_summary", {})
+            goals = summary.get("active_goals", [])
+            total_workouts = summary.get("total_workouts", 0)
+            rest_days = summary.get("total_rest_days", 0)
+
+            # Construct Conversation History
+            conversation_text = ""
+            for msg in history:
+                role = msg.get("role", "user").upper()
+                text = msg.get("text", "")
+                conversation_text += f"{role}: {text}\n"
+
+            # Enhanced Prompt with comprehensive data
+            final_prompt = f"""
+            You are an Elite Performance Director with 30 days of holistic athlete data.
+
+            ATHLETE PROFILE (Last 30 Days):
+            Period: {summary.get("period", "Last 30 days")}
+            Total Workouts: {total_workouts}
+            Rest Days: {rest_days}
+
+            WEEKLY BREAKDOWN:
+            {json.dumps(weekly_summary, indent=2)}
+
+            WORKOUT TYPE DISTRIBUTION:
+            {json.dumps(summary.get("workout_type_summary", []), indent=2)}
+
+            TRENDS:
+            - Volume: {trends.get("volume_trend", "unknown")}
+            - HRV: {trends.get("hrv_trend", "unknown")}
+
+            RECOVERY METRICS:
+            - Average HRV: {recovery.get("avg_hrv_30d", 0):.1f} ms
+            - Average Sleep: {recovery.get("avg_sleep_hours", 0):.1f} hours/night
+
+            NUTRITION:
+            - Avg Daily Calories: {nutrition.get("avg_daily_calories", 0)}
+            - Total Food Logs: {nutrition.get("total_logs", 0)}
+
+            ACTIVE GOALS:
+            {json.dumps(goals, indent=2) if goals else "None set"}
+
+            YOUR CAPABILITIES AS PERFORMANCE DIRECTOR:
+            1. Volume Management:
+               - Flag if training load is increasing too fast (>20% week-over-week = injury risk)
+               - Assess if volume is appropriate for goals
+               - Identify if athlete is under-training
+
+            2. Recovery Analysis:
+               - Use HRV trends to detect overtraining (declining HRV = stress accumulation)
+               - Correlate sleep quality with performance
+               - Recommend deload weeks if recovery is poor
+
+            3. Progression Tracking:
+               - Compare Week 1 vs Week 4 metrics
+               - Identify if athlete is improving, plateauing, or regressing
+               - Check if progression aligns with goals
+
+            4. Injury Risk Assessment:
+               - Watch for volume spikes (>20% increase)
+               - Monitor rest day frequency (need 1-2 per week minimum)
+               - Flag if HRV is declining despite rest
+
+            5. Goal Alignment:
+               - Assess if current training supports stated goals
+               - Recommend adjustments if off-track
+               - Calculate days remaining until goal dates
+
+            6. Nutrition-Performance Correlation:
+               - If nutrition logs exist, correlate calorie intake with performance
+               - Flag under-fueling if workouts are high but calories are low
+
+            INSTRUCTIONS:
+            - Give MACRO-level insights (not workout-by-workout details unless asked)
+            - Always cite specific numbers from the data (e.g., "Your HRV dropped from 62ms in Week 1 to 54ms in Week 4")
+            - When comparing weeks, use exact values from weekly_summary
+            - If HRV is declining AND volume is increasing, warn about overtraining
+            - If volume increased >20% between any two consecutive weeks, flag injury risk
+            - If sleep is <7 hours on average, recommend prioritizing rest
+            - If goals are set, reference days remaining and whether current pace is on-track
+            - Be direct, data-driven, and motivating but honest
+            - Keep answers under 5 sentences (6 if explaining complex trends)
+            - Call them 'Athlete'
+
+            CONVERSATION SO FAR:
+            {conversation_text}
+
+            (You are replying to the last USER message above. Do NOT use markdown. Just plain text.)
+            YOUR RESPONSE:
+            """
+
+            response = self.model.generate_content(final_prompt)
+            return json.dumps({"message": response.text})
+
+        except Exception as e:
+            return json.dumps({"message": f"I am having trouble replying. ({str(e)})"})
+
+    # --- PREVIEW COACH CHAT (Tomorrow's Preview) ---
+    @observe(as_type="generation")
+    def chat_with_coach_preview(self, data: dict):
+        """
+        Maintains a conversation about tomorrow's workout preview (evening).
+        Persona: Planning Coach
+        """
+        try:
+            user_id = data.get("user_id")
+            history = data.get("history", [])
+            preview = data.get("preview", {})
+            today_workouts = data.get("today_workouts", "None")
+            diet_rating = data.get("diet_rating", "unknown")
+
+            # Construct Conversation History
+            conversation_text = ""
+            for msg in history:
+                role = msg.get("role", "user").upper()
+                text = msg.get("text", "")
+                conversation_text += f"{role}: {text}\n"
+
+            # Final Prompt
+            final_prompt = f"""
+            You are a Planning Coach discussing tomorrow's workout preview with an athlete (evening chat).
+
+            CONTEXT:
+            - Today's Workouts: {today_workouts}
+            - Today's Diet Rating: {diet_rating}
+            - Tomorrow's Preview: {json.dumps(preview, indent=2)}
+
+            INSTRUCTIONS:
+            - This is a SOFT PREVIEW based on today's data only
+            - Final plan will be confirmed tomorrow morning with HRV, sleep, and recovery data
+            - Answer questions like "Can I do HIIT instead?", "Why rest?", "What if I eat better tonight?"
+            - Explain how tonight's sleep and recovery will impact tomorrow's final plan
+            - If they want to change intensity, explain what needs to happen tonight (sleep, nutrition)
+            - Be honest: "This is a preview - your body tomorrow will have the final say"
+            - Keep answers under 4 sentences
+            - Call them 'Athlete'
+
+            CONVERSATION SO FAR:
+            {conversation_text}
+
+            (You are replying to the last USER message above. Do NOT use markdown. Just plain text.)
+            YOUR RESPONSE:
+            """
+
+            response = self.model.generate_content(final_prompt)
+            return json.dumps({"message": response.text})
+
+        except Exception as e:
+            return json.dumps({"message": f"I am having trouble replying. ({str(e)})"})
+
+    # --- RECOMMENDATION COACH CHAT (Morning Recommendation) ---
+    @observe(as_type="generation")
+    def chat_with_coach_recommendation(self, data: dict):
+        """
+        Maintains a conversation about the final morning workout recommendation.
+        Persona: Performance Director with full vitals access
+        """
+        try:
+            user_id = data.get("user_id")
+            history = data.get("history", [])
+            recommendation = data.get("recommendation", {})
+
+            # Construct Conversation History
+            conversation_text = ""
+            for msg in history:
+                role = msg.get("role", "user").upper()
+                text = msg.get("text", "")
+                conversation_text += f"{role}: {text}\n"
+
+            # Final Prompt
+            final_prompt = f"""
+            You are an Elite Performance Director with full access to the athlete's morning vitals.
+
+            MORNING RECOMMENDATION:
+            {json.dumps(recommendation, indent=2)}
+
+            INSTRUCTIONS:
+            - This is the FINAL recommendation based on HRV, sleep, HR, recovery metrics
+            - Answer questions like "Can I push harder?", "Why is my HRV low?", "Explain the drill"
+            - Use specific numbers from the recommendation (HRV, sleep hours, readiness score, etc.)
+            - If they want to override the recommendation, explain the risks based on their current state
+            - If they ask about the drill, break it down step-by-step
+            - Be authoritative but supportive - you have the data to back up your decisions
+            - Keep answers under 4 sentences unless explaining a drill (then use 5-6)
+            - Call them 'Athlete'
+
+            CONVERSATION SO FAR:
+            {conversation_text}
+
+            (You are replying to the last USER message above. Do NOT use markdown. Just plain text.)
+            YOUR RESPONSE:
+            """
+
+            response = self.model.generate_content(final_prompt)
+            return json.dumps({"message": response.text})
+
         except Exception as e:
             return json.dumps({"message": f"I am having trouble replying. ({str(e)})"})

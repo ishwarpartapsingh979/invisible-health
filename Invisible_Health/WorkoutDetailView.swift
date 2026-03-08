@@ -144,7 +144,7 @@ struct WorkoutDetailView: View {
             .padding(.top)
         }
         .sheet(isPresented: $showChat) {
-             CoachChatView(workout: workout, initialAnalysis: analysis)
+             CoachChatView(context: .singleWorkout(workout: workout, initialAnalysis: analysis))
         }
         .onAppear {
             HealthManager.shared.fetchComprehensiveWorkoutData(workout: workout) { data in

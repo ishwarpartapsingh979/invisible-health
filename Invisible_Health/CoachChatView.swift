@@ -8,14 +8,48 @@ struct ChatMessageModel: Identifiable, Equatable {
     let text: String
 }
 
+// Context Enum for Different Chat Types
+enum CoachChatContext {
+    case singleWorkout(workout: HKWorkout, initialAnalysis: String)
+    case globalWorkouts(workouts: [HKWorkout], initialSummary: String)
+    case tomorrowPreview(preview: AgentManager.TomorrowPreview, todayWorkouts: String, dietRating: String)
+    case morningRecommendation(recommendation: AgentManager.WorkoutRecommendation)
+}
+
 struct CoachChatView: View {
-    let workout: HKWorkout
-    let initialAnalysis: String
-    
+    let context: CoachChatContext
+
     @State private var messages: [ChatMessageModel] = []
     @State private var inputText: String = ""
     @State private var isTyping: Bool = false
     @Environment(\.dismiss) var dismiss
+
+    // Computed properties for context-specific data
+    var initialMessage: String {
+        switch context {
+        case .singleWorkout(_, let analysis):
+            return analysis
+        case .globalWorkouts(_, let summary):
+            return summary
+        case .tomorrowPreview(let preview, _, _):
+            return preview.preview_headline
+        case .morningRecommendation(let rec):
+            return rec.headline
+        }
+    }
+
+    var chatTitle: String {
+        switch context {
+        case .singleWorkout:
+            return "Coach Chat 💬"
+        case .globalWorkouts:
+            return "Performance Director 📊"
+        case .tomorrowPreview:
+            return "Tomorrow's Plan 🌙"
+        case .morningRecommendation:
+            return "Today's Brief 🎯"
+        }
+    }
     
     var body: some View {
         NavigationView {
@@ -25,7 +59,7 @@ struct CoachChatView: View {
                     ScrollView {
                         LazyVStack(spacing: 12) {
                             // Initial Greeting (System/Coach)
-                            ChatBubble(text: initialAnalysis, isUser: false)
+                            ChatBubble(text: initialMessage, isUser: false)
                                 .id("initial")
                             
                             ForEach(messages) { msg in
@@ -81,7 +115,7 @@ struct CoachChatView: View {
                 .padding()
                 .background(Color(UIColor.systemBackground))
             }
-            .navigationTitle("Coach Chat 💬")
+            .navigationTitle(chatTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -91,43 +125,69 @@ struct CoachChatView: View {
                 }
             }
         }
-        .onAppear {
-            // Optional: Add a "system" message to history if needed by backend, 
-            // but for UI, we just show the initial analysis bubble.
-        }
     }
     
     func sendMessage() {
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
-        
+
         let userMsg = ChatMessageModel(role: "user", text: text)
-        
+
         // Snapshot history for background processing
         let currentMessages = messages
-        
+
         // UI Update (Immediate)
         messages.append(userMsg)
         inputText = ""
         isTyping = true
-        
+
         // Offload O(N) history building to background
         DispatchQueue.global(qos: .userInitiated).async {
             var historyPayload: [[String: String]] = [
-                ["role": "model", "text": self.initialAnalysis]
+                ["role": "model", "text": self.initialMessage]
             ]
-            
+
             for m in currentMessages {
                 historyPayload.append(["role": m.role, "text": m.text])
             }
             historyPayload.append(["role": "user", "text": text])
-            
-            // Call Agent
-            AgentManager.shared.chatWithCoach(workout: self.workout, history: historyPayload) { response in
-                DispatchQueue.main.async { // Back to Main for UI update
-                    let coachMsg = ChatMessageModel(role: "model", text: response)
-                    self.messages.append(coachMsg)
-                    self.isTyping = false
+
+            // Call appropriate Agent method based on context
+            switch self.context {
+            case .singleWorkout(let workout, _):
+                AgentManager.shared.chatWithCoach(workout: workout, history: historyPayload) { response in
+                    DispatchQueue.main.async {
+                        let coachMsg = ChatMessageModel(role: "model", text: response)
+                        self.messages.append(coachMsg)
+                        self.isTyping = false
+                    }
+                }
+
+            case .globalWorkouts(let workouts, _):
+                AgentManager.shared.chatWithCoachGlobal(workouts: workouts, history: historyPayload) { response in
+                    DispatchQueue.main.async {
+                        let coachMsg = ChatMessageModel(role: "model", text: response)
+                        self.messages.append(coachMsg)
+                        self.isTyping = false
+                    }
+                }
+
+            case .tomorrowPreview(let preview, let todayWorkouts, let dietRating):
+                AgentManager.shared.chatWithCoachPreview(preview: preview, todayWorkouts: todayWorkouts, dietRating: dietRating, history: historyPayload) { response in
+                    DispatchQueue.main.async {
+                        let coachMsg = ChatMessageModel(role: "model", text: response)
+                        self.messages.append(coachMsg)
+                        self.isTyping = false
+                    }
+                }
+
+            case .morningRecommendation(let recommendation):
+                AgentManager.shared.chatWithCoachRecommendation(recommendation: recommendation, history: historyPayload) { response in
+                    DispatchQueue.main.async {
+                        let coachMsg = ChatMessageModel(role: "model", text: response)
+                        self.messages.append(coachMsg)
+                        self.isTyping = false
+                    }
                 }
             }
         }

@@ -56,7 +56,9 @@ struct ContentView: View {
                 case 5:
                      SOSView() // Tab 5
                 case 6:
-                    RecommendationView() // Tab 6 — NEW
+                    RecommendationView() // Tab 6
+                case 7:
+                    GlobalCoachView() // Tab 7 — Global Coach
                 default:
                     // Tab 0: Home / Mic Screen
                     micView
@@ -85,6 +87,8 @@ struct ContentView: View {
                         TabButton(icon: "figure.run", text: "WORKOUT", isSelected: selectedTab == 2) { selectedTab = 2 }
 
                         TabButton(icon: "brain.head.profile", text: "RECO", isSelected: selectedTab == 6) { selectedTab = 6 }
+
+                        TabButton(icon: "chart.line.uptrend.xyaxis", text: "COACH", isSelected: selectedTab == 7) { selectedTab = 7 }
 
                         /*
                         TabButton(icon: "brain.head.profile", text: "SUMMARY", isSelected: selectedTab == 3) { selectedTab = 3 }

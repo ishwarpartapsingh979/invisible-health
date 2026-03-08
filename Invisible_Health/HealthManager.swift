@@ -152,9 +152,9 @@ class HealthManager: ObservableObject {
         var vo2: Double?
         var hrv: Double?
         var rhr: Double?
-        
+
         let group = DispatchGroup()
-        
+
         // VO2 Max (ml/kg/min)
         group.enter()
         let vo2Unit = HKUnit.literUnit(with: .milli).unitDivided(by: HKUnit.gramUnit(with: .kilo)).unitDivided(by: HKUnit.minute())
@@ -162,25 +162,206 @@ class HealthManager: ObservableObject {
             vo2 = value
             group.leave()
         }
-        
+
         // HRV (ms)
         group.enter()
         fetchLatestSample(for: .heartRateVariabilitySDNN, unit: .secondUnit(with: .milli)) { value in
             hrv = value
             group.leave()
         }
-        
+
         // Resting HR (bpm)
         group.enter()
         fetchLatestSample(for: .restingHeartRate, unit: HKUnit.count().unitDivided(by: .minute())) { value in
             rhr = value
             group.leave()
         }
-        
+
         group.notify(queue: .main) {
             print("🫀 Elite Biometrics - VO2: \(String(describing: vo2)), HRV: \(String(describing: hrv)), RHR: \(String(describing: rhr))")
             completion(vo2, hrv, rhr)
         }
+    }
+
+    // MARK: - Historical Recovery Data (30 Days)
+
+    struct DailyRecoveryMetric {
+        let date: Date
+        let hrv: Double?
+        let restingHR: Double?
+        let sleepHours: Double?
+    }
+
+    func fetch30DayRecoveryMetrics(completion: @escaping ([DailyRecoveryMetric]) -> Void) {
+        let calendar = Calendar.current
+        let now = Date()
+        guard let thirtyDaysAgo = calendar.date(byAdding: .day, value: -30, to: now) else {
+            completion([])
+            return
+        }
+
+        var dailyMetrics: [Date: DailyRecoveryMetric] = [:]
+        let group = DispatchGroup()
+
+        // Fetch HRV samples
+        group.enter()
+        fetchHistoricalSamples(
+            for: .heartRateVariabilitySDNN,
+            unit: .secondUnit(with: .milli),
+            startDate: thirtyDaysAgo,
+            endDate: now
+        ) { samples in
+            for sample in samples {
+                let dayStart = calendar.startOfDay(for: sample.date)
+                if dailyMetrics[dayStart] == nil {
+                    dailyMetrics[dayStart] = DailyRecoveryMetric(date: dayStart, hrv: nil, restingHR: nil, sleepHours: nil)
+                }
+                // Update with average if multiple samples per day
+                let current = dailyMetrics[dayStart]!
+                dailyMetrics[dayStart] = DailyRecoveryMetric(
+                    date: dayStart,
+                    hrv: sample.value,
+                    restingHR: current.restingHR,
+                    sleepHours: current.sleepHours
+                )
+            }
+            group.leave()
+        }
+
+        // Fetch Resting HR samples
+        group.enter()
+        fetchHistoricalSamples(
+            for: .restingHeartRate,
+            unit: HKUnit.count().unitDivided(by: .minute()),
+            startDate: thirtyDaysAgo,
+            endDate: now
+        ) { samples in
+            for sample in samples {
+                let dayStart = calendar.startOfDay(for: sample.date)
+                if dailyMetrics[dayStart] == nil {
+                    dailyMetrics[dayStart] = DailyRecoveryMetric(date: dayStart, hrv: nil, restingHR: nil, sleepHours: nil)
+                }
+                let current = dailyMetrics[dayStart]!
+                dailyMetrics[dayStart] = DailyRecoveryMetric(
+                    date: dayStart,
+                    hrv: current.hrv,
+                    restingHR: sample.value,
+                    sleepHours: current.sleepHours
+                )
+            }
+            group.leave()
+        }
+
+        // Fetch Sleep data
+        group.enter()
+        fetchHistoricalSleep(startDate: thirtyDaysAgo, endDate: now) { sleepData in
+            for (date, hours) in sleepData {
+                let dayStart = calendar.startOfDay(for: date)
+                if dailyMetrics[dayStart] == nil {
+                    dailyMetrics[dayStart] = DailyRecoveryMetric(date: dayStart, hrv: nil, restingHR: nil, sleepHours: nil)
+                }
+                let current = dailyMetrics[dayStart]!
+                dailyMetrics[dayStart] = DailyRecoveryMetric(
+                    date: dayStart,
+                    hrv: current.hrv,
+                    restingHR: current.restingHR,
+                    sleepHours: hours
+                )
+            }
+            group.leave()
+        }
+
+        group.notify(queue: .main) {
+            let sortedMetrics = dailyMetrics.values.sorted { $0.date < $1.date }
+            completion(sortedMetrics)
+        }
+    }
+
+    struct HealthSample {
+        let date: Date
+        let value: Double
+    }
+
+    func fetchHistoricalSamples(
+        for identifier: HKQuantityTypeIdentifier,
+        unit: HKUnit,
+        startDate: Date,
+        endDate: Date,
+        completion: @escaping ([HealthSample]) -> Void
+    ) {
+        guard let quantityType = HKQuantityType.quantityType(forIdentifier: identifier) else {
+            completion([])
+            return
+        }
+
+        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
+        let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+
+        let query = HKSampleQuery(
+            sampleType: quantityType,
+            predicate: predicate,
+            limit: HKObjectQueryNoLimit,
+            sortDescriptors: [sortDescriptor]
+        ) { _, samples, error in
+            guard let samples = samples as? [HKQuantitySample], error == nil else {
+                completion([])
+                return
+            }
+
+            let healthSamples = samples.map { sample in
+                HealthSample(date: sample.startDate, value: sample.quantity.doubleValue(for: unit))
+            }
+            completion(healthSamples)
+        }
+
+        healthStore.execute(query)
+    }
+
+    func fetchHistoricalSleep(
+        startDate: Date,
+        endDate: Date,
+        completion: @escaping ([Date: Double]) -> Void
+    ) {
+        guard let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else {
+            completion([:])
+            return
+        }
+
+        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
+        let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+
+        let query = HKSampleQuery(
+            sampleType: sleepType,
+            predicate: predicate,
+            limit: HKObjectQueryNoLimit,
+            sortDescriptors: [sortDescriptor]
+        ) { _, samples, error in
+            guard let samples = samples as? [HKCategorySample], error == nil else {
+                completion([:])
+                return
+            }
+
+            var sleepByDay: [Date: TimeInterval] = [:]
+            let calendar = Calendar.current
+
+            for sample in samples {
+                // Only count asleep (not in bed)
+                if sample.value == HKCategoryValueSleepAnalysis.asleep.rawValue ||
+                   sample.value == HKCategoryValueSleepAnalysis.asleepCore.rawValue ||
+                   sample.value == HKCategoryValueSleepAnalysis.asleepDeep.rawValue ||
+                   sample.value == HKCategoryValueSleepAnalysis.asleepREM.rawValue {
+                    let duration = sample.endDate.timeIntervalSince(sample.startDate)
+                    let dayStart = calendar.startOfDay(for: sample.startDate)
+                    sleepByDay[dayStart, default: 0] += duration
+                }
+            }
+
+            // Convert to hours
+            let sleepHoursByDay = sleepByDay.mapValues { $0 / 3600.0 }
+            completion(sleepHoursByDay)
+        }
+
+        healthStore.execute(query)
     }
     
     // Returns (Avg Oscillation, Avg GCT, Avg Power, Avg HR, Max HR)

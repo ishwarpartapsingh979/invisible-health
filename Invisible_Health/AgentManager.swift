@@ -5,9 +5,17 @@ import SwiftUI
 import UIKit
 import HealthKit
 
+// Extension for calculating averages
+extension Array where Element == Double {
+    func average() -> Double? {
+        guard !isEmpty else { return nil }
+        return reduce(0, +) / Double(count)
+    }
+}
+
 class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     static let shared = AgentManager()
-    
+
     // The URL of your deployed Cloud Function
     private let agentURL = "https://us-central1-gen-lang-client-0009721575.cloudfunctions.net/run-agent"
     
@@ -1007,32 +1015,30 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     }
 
     // MARK: - Phase 6.3: Contextual Chat
-    
 
-    
     func chatWithCoach(workout: HKWorkout, history: [[String: String]], completion: @escaping (String) -> Void) {
         HealthManager.shared.fetchComprehensiveWorkoutData(workout: workout) { metrics in
-            
+
             var body: [String: Any] = [
                 "action": "chat_with_coach",
                 "user_id": "00000000-0000-0000-0000-000000000001",
                 "history": history,
                 "metrics": metrics
             ]
-            
+
             guard let url = URL(string: self.agentURL) else { return }
             var request = URLRequest(url: url)
             request.httpMethod = "POST"
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            
+
             do {
                 request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
             } catch {
                 print("❌ JSON Error: \(error)")
                 completion("Error encoding.")
-                return 
+                return
             }
-            
+
             URLSession.shared.dataTask(with: request) { data, _, error in
                 if let data = data, let json = try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] {
                     let message = json["message"] as? String ?? "I'm not sure."
@@ -1042,5 +1048,302 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
                 }
             }.resume()
         }
+    }
+
+    // MARK: - Global Coach Chat (All Workouts)
+
+    func chatWithCoachGlobal(workouts: [HKWorkout], history: [[String: String]], completion: @escaping (String) -> Void) {
+        let group = DispatchGroup()
+
+        // 1. Aggregate workout summaries (lightweight, not full metrics)
+        var workoutSummaries: [[String: Any]] = []
+        for workout in workouts {
+            let summary: [String: Any] = [
+                "date": ISO8601DateFormatter().string(from: workout.startDate),
+                "type": workout.workoutActivityType.name,
+                "duration_min": Int(workout.duration / 60),
+                "calories": Int(workout.statistics(for: HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)!)?.sumQuantity()?.doubleValue(for: .kilocalorie()) ?? 0),
+                "distance_km": (workout.statistics(for: HKQuantityType.quantityType(forIdentifier: .distanceWalkingRunning)!)?.sumQuantity()?.doubleValue(for: .meter()) ?? 0) / 1000.0
+            ]
+            workoutSummaries.append(summary)
+        }
+
+        // 2. Fetch 30-day recovery metrics
+        var recoveryMetrics: [[String: Any]] = []
+        group.enter()
+        HealthManager.shared.fetch30DayRecoveryMetrics { metrics in
+            recoveryMetrics = metrics.map { metric in
+                [
+                    "date": ISO8601DateFormatter().string(from: metric.date),
+                    "hrv": metric.hrv ?? 0,
+                    "rhr": metric.restingHR ?? 0,
+                    "sleep_hours": metric.sleepHours ?? 0
+                ]
+            }
+            group.leave()
+        }
+
+        // 3. Fetch nutrition logs
+        var nutritionLogs: [[String: Any]] = []
+        group.enter()
+        self.fetchLogs { logs in
+            let calendar = Calendar.current
+            let thirtyDaysAgo = calendar.date(byAdding: .day, value: -30, to: Date())!
+            let formatter = ISO8601DateFormatter()
+
+            nutritionLogs = logs.compactMap { log -> [String: Any]? in
+                guard let logDate = formatter.date(from: log.created_at),
+                      logDate >= thirtyDaysAgo else { return nil }
+                return [
+                    "date": log.created_at.prefix(10).description,
+                    "food": log.food_name,
+                    "calories": log.calories ?? 0
+                ]
+            }
+            group.leave()
+        }
+
+        // 4. Fetch user goals
+        var goals: [String] = []
+        if let data = UserDefaults.standard.data(forKey: "user_goals"),
+           let savedGoals = try? JSONDecoder().decode([Goal].self, from: data) {
+            goals = savedGoals.map { goal in
+                if let target = goal.targetDate {
+                    let f = DateFormatter(); f.dateStyle = .medium
+                    return "\(goal.title) (by \(f.string(from: target)))"
+                }
+                return goal.title
+            }
+        }
+
+        group.notify(queue: .main) {
+            // Build comprehensive summary
+            let summary = self.buildGlobalSummary(
+                workouts: workouts,
+                workoutSummaries: workoutSummaries,
+                recoveryMetrics: recoveryMetrics,
+                nutritionLogs: nutritionLogs,
+                goals: goals
+            )
+
+            var body: [String: Any] = [
+                "action": "chat_with_coach_global",
+                "user_id": "00000000-0000-0000-0000-000000000001",
+                "history": history,
+                "workouts_summary": summary
+            ]
+
+            guard let url = URL(string: self.agentURL) else { return }
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+            do {
+                request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
+                print("🌍 Global Coach: Sending comprehensive 30-day summary")
+            } catch {
+                print("❌ JSON Error: \(error)")
+                completion("Error encoding.")
+                return
+            }
+
+            URLSession.shared.dataTask(with: request) { data, _, error in
+                if let data = data, let json = try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] {
+                    let message = json["message"] as? String ?? "I'm not sure."
+                    DispatchQueue.main.async { completion(message) }
+                } else {
+                    DispatchQueue.main.async { completion("Coach is unresponsive.") }
+                }
+            }.resume()
+        }
+    }
+
+    // Helper: Build pre-processed global summary
+    private func buildGlobalSummary(
+        workouts: [HKWorkout],
+        workoutSummaries: [[String: Any]],
+        recoveryMetrics: [[String: Any]],
+        nutritionLogs: [[String: Any]],
+        goals: [String]
+    ) -> [String: Any] {
+        let calendar = Calendar.current
+        let now = Date()
+
+        // Period info
+        let thirtyDaysAgo = calendar.date(byAdding: .day, value: -30, to: now)!
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        let periodStr = "\(formatter.string(from: thirtyDaysAgo)) - \(formatter.string(from: now))"
+
+        // Weekly breakdown
+        var weeklyData: [[String: Any]] = []
+        for weekNum in 0..<4 {
+            let weekStart = calendar.date(byAdding: .day, value: -7 * (4 - weekNum - 1), to: now)!
+            let weekEnd = calendar.date(byAdding: .day, value: 7, to: weekStart)!
+
+            let weekWorkouts = workouts.filter { $0.startDate >= weekStart && $0.startDate < weekEnd }
+            let totalDuration = weekWorkouts.reduce(0.0) { $0 + $1.duration }
+            let totalCals = weekWorkouts.reduce(0) { sum, w in
+                sum + Int(w.statistics(for: HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)!)?.sumQuantity()?.doubleValue(for: .kilocalorie()) ?? 0)
+            }
+
+            // Recovery for this week
+            let weekRecovery = recoveryMetrics.filter { metric in
+                guard let dateStr = metric["date"] as? String,
+                      let date = ISO8601DateFormatter().date(from: dateStr) else { return false }
+                return date >= weekStart && date < weekEnd
+            }
+            let avgHRV = weekRecovery.compactMap { $0["hrv"] as? Double }.filter { $0 > 0 }.average()
+            let avgRHR = weekRecovery.compactMap { $0["rhr"] as? Double }.filter { $0 > 0 }.average()
+            let avgSleep = weekRecovery.compactMap { $0["sleep_hours"] as? Double }.filter { $0 > 0 }.average()
+
+            weeklyData.append([
+                "week_label": "Week \(weekNum + 1)",
+                "workouts": weekWorkouts.count,
+                "total_duration_min": Int(totalDuration / 60),
+                "total_calories": totalCals,
+                "avg_hrv": avgHRV ?? 0,
+                "avg_rhr": avgRHR ?? 0,
+                "avg_sleep_hours": avgSleep ?? 0
+            ])
+        }
+
+        // Workout type distribution
+        var typeCount: [String: Int] = [:]
+        var typeDuration: [String: Double] = [:]
+        for workout in workouts {
+            let typeName = workout.workoutActivityType.name
+            typeCount[typeName, default: 0] += 1
+            typeDuration[typeName, default: 0] += workout.duration
+        }
+
+        let typeSummary = typeCount.map { type, count in
+            [
+                "type": type,
+                "count": count,
+                "avg_duration_min": Int((typeDuration[type] ?? 0) / Double(count) / 60)
+            ]
+        }
+
+        // Trends
+        let week1Workouts = (weeklyData.first?["workouts"] as? Int) ?? 0
+        let week4Workouts = (weeklyData.last?["workouts"] as? Int) ?? 0
+        let volumeTrend = week4Workouts > week1Workouts ? "increasing" : (week4Workouts < week1Workouts ? "decreasing" : "stable")
+
+        let allHRV = recoveryMetrics.compactMap { $0["hrv"] as? Double }.filter { $0 > 0 }
+        let hrvTrend = allHRV.count > 7 ? (allHRV.suffix(7).average() < allHRV.prefix(7).average() ? "declining" : "improving") : "insufficient data"
+
+        // Nutrition summary
+        let totalNutritionCals = nutritionLogs.reduce(0) { $0 + (($1["calories"] as? Double) ?? 0) }
+        let avgDailyCals = nutritionLogs.isEmpty ? 0 : Int(totalNutritionCals / 30)
+
+        return [
+            "period": periodStr,
+            "total_workouts": workouts.count,
+            "total_rest_days": max(0, 30 - workouts.count),
+            "weekly_summary": weeklyData,
+            "workout_type_summary": typeSummary,
+            "trends": [
+                "volume_trend": volumeTrend,
+                "hrv_trend": hrvTrend
+            ],
+            "recovery_summary": [
+                "avg_hrv_30d": allHRV.average() ?? 0,
+                "avg_sleep_hours": recoveryMetrics.compactMap { $0["sleep_hours"] as? Double }.filter { $0 > 0 }.average() ?? 0
+            ],
+            "nutrition_summary": [
+                "avg_daily_calories": avgDailyCals,
+                "total_logs": nutritionLogs.count
+            ],
+            "active_goals": goals,
+            "raw_workouts": workoutSummaries  // Keep lightweight list for reference
+        ]
+    }
+
+    // MARK: - Preview Coach Chat
+
+    func chatWithCoachPreview(preview: TomorrowPreview, todayWorkouts: String, dietRating: String, history: [[String: String]], completion: @escaping (String) -> Void) {
+        // Convert preview to dictionary
+        let encoder = JSONEncoder()
+        let decoder = JSONDecoder()
+
+        guard let previewData = try? encoder.encode(preview),
+              let previewDict = try? JSONSerialization.jsonObject(with: previewData) as? [String: Any] else {
+            completion("Error processing preview data.")
+            return
+        }
+
+        var body: [String: Any] = [
+            "action": "chat_with_coach_preview",
+            "user_id": "00000000-0000-0000-0000-000000000001",
+            "history": history,
+            "preview": previewDict,
+            "today_workouts": todayWorkouts,
+            "diet_rating": dietRating
+        ]
+
+        guard let url = URL(string: self.agentURL) else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
+        } catch {
+            print("❌ JSON Error: \(error)")
+            completion("Error encoding.")
+            return
+        }
+
+        URLSession.shared.dataTask(with: request) { data, _, error in
+            if let data = data, let json = try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] {
+                let message = json["message"] as? String ?? "I'm not sure."
+                DispatchQueue.main.async { completion(message) }
+            } else {
+                DispatchQueue.main.async { completion("Coach is unresponsive.") }
+            }
+        }.resume()
+    }
+
+    // MARK: - Recommendation Coach Chat
+
+    func chatWithCoachRecommendation(recommendation: WorkoutRecommendation, history: [[String: String]], completion: @escaping (String) -> Void) {
+        // Convert recommendation to dictionary
+        let encoder = JSONEncoder()
+
+        guard let recData = try? encoder.encode(recommendation),
+              let recDict = try? JSONSerialization.jsonObject(with: recData) as? [String: Any] else {
+            completion("Error processing recommendation data.")
+            return
+        }
+
+        var body: [String: Any] = [
+            "action": "chat_with_coach_recommendation",
+            "user_id": "00000000-0000-0000-0000-000000000001",
+            "history": history,
+            "recommendation": recDict
+        ]
+
+        guard let url = URL(string: self.agentURL) else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
+        } catch {
+            print("❌ JSON Error: \(error)")
+            completion("Error encoding.")
+            return
+        }
+
+        URLSession.shared.dataTask(with: request) { data, _, error in
+            if let data = data, let json = try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] {
+                let message = json["message"] as? String ?? "I'm not sure."
+                DispatchQueue.main.async { completion(message) }
+            } else {
+                DispatchQueue.main.async { completion("Coach is unresponsive.") }
+            }
+        }.resume()
     }
 }

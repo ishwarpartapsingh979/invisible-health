@@ -23,6 +23,10 @@ struct RecommendationView: View {
     // Tomorrow preview
     @State private var tomorrowPreview: AgentManager.TomorrowPreview? = nil
 
+    // Chat states
+    @State private var showPreviewChat: Bool = false
+    @State private var showRecommendationChat: Bool = false
+
     enum WatchSendState {
         case idle, sending, sent, failed(String)
     }
@@ -48,6 +52,7 @@ struct RecommendationView: View {
                         prescriptionCard(rec)
                         logicBreakdownSection(rec)
                         drillCard(rec)
+                        chatButton(rec)
                         acceptButton(rec)
                     } else {
                         emptyState
@@ -65,6 +70,25 @@ struct RecommendationView: View {
             .onAppear { onViewAppear() }
             .workoutPreview(workoutPlanToPreview ?? WorkoutPlan(.goal(SingleGoalWorkout(activity: .other, location: .outdoor, goal: .open))), isPresented: $showWorkoutPreview)
         }
+        .sheet(isPresented: $showPreviewChat) {
+            if let preview = tomorrowPreview, let dietRating = todayDietRating {
+                // Get today's workouts summary
+                let todayWorkouts = getTodayWorkoutsSummary()
+                CoachChatView(context: .tomorrowPreview(preview: preview, todayWorkouts: todayWorkouts, dietRating: dietRating))
+            }
+        }
+        .sheet(isPresented: $showRecommendationChat) {
+            if let rec = recommendation {
+                CoachChatView(context: .morningRecommendation(recommendation: rec))
+            }
+        }
+    }
+
+    // Helper to get today's workouts summary
+    func getTodayWorkoutsSummary() -> String {
+        // This would ideally fetch from HealthManager, but for now return a placeholder
+        // You can expand this to actually fetch today's workouts
+        return "Today's workouts summary"
     }
 
     // MARK: - On Appear
@@ -275,6 +299,24 @@ struct RecommendationView: View {
                         .font(.caption2)
                         .foregroundColor(.gray)
                         .fixedSize(horizontal: false, vertical: true)
+                }
+
+                // Chat Button for Preview
+                if let dietRating = todayDietRating {
+                    Button(action: { showPreviewChat = true }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "bubble.left.and.bubble.right.fill")
+                                .font(.caption)
+                            Text("Ask about tomorrow")
+                                .font(.caption).bold()
+                        }
+                        .foregroundColor(.indigo)
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 12)
+                        .background(Color.indigo.opacity(0.15))
+                        .cornerRadius(8)
+                    }
+                    .padding(.top, 4)
                 }
             }
         }
@@ -506,6 +548,28 @@ struct RecommendationView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.orange.opacity(0.08))
         .cornerRadius(16)
+        .padding(.horizontal)
+    }
+
+    // MARK: - Chat Button
+
+    func chatButton(_ rec: AgentManager.WorkoutRecommendation) -> some View {
+        Button(action: { showRecommendationChat = true }) {
+            HStack(spacing: 12) {
+                Image(systemName: "bubble.left.and.bubble.right.fill")
+                    .font(.title3)
+                Text("Ask Coach about this recommendation")
+                    .font(.subheadline).bold()
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+            }
+            .foregroundColor(.white)
+            .padding()
+            .frame(maxWidth: .infinity)
+            .background(Color.green.opacity(0.8))
+            .cornerRadius(16)
+        }
         .padding(.horizontal)
     }
 
