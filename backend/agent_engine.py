@@ -1384,13 +1384,16 @@ RULES:
     @observe(as_type="generation")
     def chat_with_coach_global(self, data: dict):
         """
-        Maintains a conversation about the user's overall training (last 30 days).
+        Maintains a conversation about the user's overall training (configurable days).
         Persona: Performance Director / Holistic Coach with full recovery, nutrition, and goals context
         """
         try:
             user_id = data.get("user_id")
             history = data.get("history", [])
             summary = data.get("workouts_summary", {})
+            days = data.get("days", 30)  # Get dynamic time range, default to 30
+
+            print(f"🎯 Global Coach: Analyzing {days} days of data")
 
             # Extract key metrics for easier access
             weekly_summary = summary.get("weekly_summary", [])
@@ -1409,11 +1412,12 @@ RULES:
                 conversation_text += f"{role}: {text}\n"
 
             # Enhanced Prompt with comprehensive data
+            time_range_label = f"Last {days} day{'s' if days != 1 else ''}"
             final_prompt = f"""
-            You are an Elite Performance Director with 30 days of holistic athlete data.
+            You are an Elite Performance Director with {days} day{'s' if days != 1 else ''} of holistic athlete data.
 
-            ATHLETE PROFILE (Last 30 Days):
-            Period: {summary.get("period", "Last 30 days")}
+            ATHLETE PROFILE ({time_range_label}):
+            Period: {summary.get("period", time_range_label)}
             Total Workouts: {total_workouts}
             Rest Days: {rest_days}
 
@@ -1428,8 +1432,8 @@ RULES:
             - HRV: {trends.get("hrv_trend", "unknown")}
 
             RECOVERY METRICS:
-            - Average HRV: {recovery.get("avg_hrv_30d", 0):.1f} ms
-            - Average Sleep: {recovery.get("avg_sleep_hours", 0):.1f} hours/night
+            - Average HRV: {recovery.get("avg_hrv_30d", 0):.1f} ms (over {days} days)
+            - Average Sleep: {recovery.get("avg_sleep_hours", 0):.1f} hours/night (over {days} days)
 
             NUTRITION:
             - Avg Daily Calories: {nutrition.get("avg_daily_calories", 0)}
@@ -1450,7 +1454,7 @@ RULES:
                - Recommend deload weeks if recovery is poor
 
             3. Progression Tracking:
-               - Compare Week 1 vs Week 4 metrics
+               - Compare metrics across the time period ({"daily" if days == 1 else "weekly" if days == 7 else "Week 1 vs Week 4"} trends)
                - Identify if athlete is improving, plateauing, or regressing
                - Check if progression aligns with goals
 
@@ -1470,10 +1474,11 @@ RULES:
 
             INSTRUCTIONS:
             - Give MACRO-level insights (not workout-by-workout details unless asked)
-            - Always cite specific numbers from the data (e.g., "Your HRV dropped from 62ms in Week 1 to 54ms in Week 4")
-            - When comparing weeks, use exact values from weekly_summary
+            - Always cite specific numbers from the data
+            - For {days}-day analysis: {"focus on today's performance" if days == 1 else "compare weekly trends" if days == 7 else "compare Week 1 vs Week 4 metrics"}
+            - When comparing periods, use exact values from weekly_summary
             - If HRV is declining AND volume is increasing, warn about overtraining
-            - If volume increased >20% between any two consecutive weeks, flag injury risk
+            - If volume increased >20% between any two consecutive periods, flag injury risk
             - If sleep is <7 hours on average, recommend prioritizing rest
             - If goals are set, reference days remaining and whether current pace is on-track
             - Be direct, data-driven, and motivating but honest

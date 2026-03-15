@@ -1147,7 +1147,8 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
                 "action": "chat_with_coach_global",
                 "user_id": "00000000-0000-0000-0000-000000000001",
                 "history": history,
-                "workouts_summary": summary
+                "workouts_summary": summary,
+                "days": days  // Pass the time range to backend
             ]
 
             guard let url = URL(string: self.agentURL) else { return }
