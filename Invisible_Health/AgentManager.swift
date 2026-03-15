@@ -1069,7 +1069,7 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
 
     // MARK: - Global Coach Chat (All Workouts)
 
-    func chatWithCoachGlobal(workouts: [HKWorkout], history: [[String: String]], completion: @escaping (String) -> Void) {
+    func chatWithCoachGlobal(workouts: [HKWorkout], history: [[String: String]], days: Int = 30, completion: @escaping (String) -> Void) {
         let group = DispatchGroup()
 
         // 1. Aggregate workout summaries (lightweight, not full metrics)
@@ -1085,10 +1085,10 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             workoutSummaries.append(summary)
         }
 
-        // 2. Fetch 30-day recovery metrics
+        // 2. Fetch recovery metrics for specified days
         var recoveryMetrics: [[String: Any]] = []
         group.enter()
-        HealthManager.shared.fetch30DayRecoveryMetrics { metrics in
+        HealthManager.shared.fetchRecoveryMetrics(days: days) { metrics in
             recoveryMetrics = metrics.map { metric in
                 [
                     "date": ISO8601DateFormatter().string(from: metric.date),
@@ -1100,17 +1100,17 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             group.leave()
         }
 
-        // 3. Fetch nutrition logs
+        // 3. Fetch nutrition logs for specified days
         var nutritionLogs: [[String: Any]] = []
         group.enter()
         self.fetchLogs { logs in
             let calendar = Calendar.current
-            let thirtyDaysAgo = calendar.date(byAdding: .day, value: -30, to: Date())!
+            let daysAgo = calendar.date(byAdding: .day, value: -days, to: Date())!
             let formatter = ISO8601DateFormatter()
 
             nutritionLogs = logs.compactMap { log -> [String: Any]? in
                 guard let logDate = formatter.date(from: log.created_at),
-                      logDate >= thirtyDaysAgo else { return nil }
+                      logDate >= daysAgo else { return nil }
                 return [
                     "date": log.created_at.prefix(10).description,
                     "food": log.food_name,
@@ -1157,7 +1157,7 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
 
             do {
                 request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
-                print("🌍 Global Coach: Sending comprehensive 30-day summary")
+                print("🌍 Global Coach: Sending comprehensive \(days)-day summary (\(workouts.count) workouts)")
             } catch {
                 print("❌ JSON Error: \(error)")
                 completion("Error encoding.")

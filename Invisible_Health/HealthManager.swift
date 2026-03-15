@@ -192,10 +192,10 @@ class HealthManager: ObservableObject {
         let sleepHours: Double?
     }
 
-    func fetch30DayRecoveryMetrics(completion: @escaping ([DailyRecoveryMetric]) -> Void) {
+    func fetchRecoveryMetrics(days: Int, completion: @escaping ([DailyRecoveryMetric]) -> Void) {
         let calendar = Calendar.current
         let now = Date()
-        guard let thirtyDaysAgo = calendar.date(byAdding: .day, value: -30, to: now) else {
+        guard let startDate = calendar.date(byAdding: .day, value: -days, to: now) else {
             completion([])
             return
         }
@@ -208,7 +208,7 @@ class HealthManager: ObservableObject {
         fetchHistoricalSamples(
             for: .heartRateVariabilitySDNN,
             unit: .secondUnit(with: .milli),
-            startDate: thirtyDaysAgo,
+            startDate: startDate,
             endDate: now
         ) { samples in
             for sample in samples {
@@ -233,7 +233,7 @@ class HealthManager: ObservableObject {
         fetchHistoricalSamples(
             for: .restingHeartRate,
             unit: HKUnit.count().unitDivided(by: .minute()),
-            startDate: thirtyDaysAgo,
+            startDate: startDate,
             endDate: now
         ) { samples in
             for sample in samples {
@@ -254,7 +254,7 @@ class HealthManager: ObservableObject {
 
         // Fetch Sleep data
         group.enter()
-        fetchHistoricalSleep(startDate: thirtyDaysAgo, endDate: now) { sleepData in
+        fetchHistoricalSleep(startDate: startDate, endDate: now) { sleepData in
             for (date, hours) in sleepData {
                 let dayStart = calendar.startOfDay(for: date)
                 if dailyMetrics[dayStart] == nil {
@@ -275,6 +275,11 @@ class HealthManager: ObservableObject {
             let sortedMetrics = dailyMetrics.values.sorted { $0.date < $1.date }
             completion(sortedMetrics)
         }
+    }
+
+    // Wrapper for backwards compatibility
+    func fetch30DayRecoveryMetrics(completion: @escaping ([DailyRecoveryMetric]) -> Void) {
+        fetchRecoveryMetrics(days: 30, completion: completion)
     }
 
     struct HealthSample {

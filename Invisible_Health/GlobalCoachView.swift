@@ -263,7 +263,8 @@ struct GlobalCoachView: View {
             ["role": "user", "text": "Give me a comprehensive overview of my \(timeRangeText) of training. Include volume trends, recovery patterns, and key insights."]
         ]
 
-        AgentManager.shared.chatWithCoachGlobal(workouts: workouts, history: initialPrompt) { message in
+        print("📊 Generating summary for \(selectedTimeRange.days) days with \(workouts.count) workouts")
+        AgentManager.shared.chatWithCoachGlobal(workouts: workouts, history: initialPrompt, days: selectedTimeRange.days) { message in
             self.isLoading = false
             self.globalSummary = message
         }
