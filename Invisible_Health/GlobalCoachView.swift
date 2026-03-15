@@ -6,6 +6,29 @@ struct GlobalCoachView: View {
     @State private var isLoading: Bool = false
     @State private var showChat: Bool = false
     @State private var globalSummary: String = ""
+    @State private var selectedTimeRange: TimeRange = .month
+
+    enum TimeRange: String, CaseIterable {
+        case day = "Day"
+        case week = "Week"
+        case month = "Month"
+
+        var days: Int {
+            switch self {
+            case .day: return 1
+            case .week: return 7
+            case .month: return 30
+            }
+        }
+
+        var displayText: String {
+            switch self {
+            case .day: return "Last 24 Hours"
+            case .week: return "Last 7 Days"
+            case .month: return "Last 30 Days"
+            }
+        }
+    }
 
     var body: some View {
         NavigationView {
@@ -16,6 +39,9 @@ struct GlobalCoachView: View {
                     VStack(alignment: .leading, spacing: 20) {
                         // Header
                         header
+
+                        // Time Range Selector
+                        timeRangeSelector
 
                         if isLoading {
                             loadingView
@@ -58,7 +84,7 @@ struct GlobalCoachView: View {
                 Text("Performance Director")
                     .font(.largeTitle).bold()
                     .foregroundColor(.white)
-                Text("Last 30 Days")
+                Text(selectedTimeRange.displayText)
                     .font(.subheadline)
                     .foregroundColor(.gray)
             }
@@ -70,6 +96,20 @@ struct GlobalCoachView: View {
             }
         }
         .padding(.top, 40)
+    }
+
+    // MARK: - Time Range Selector
+
+    var timeRangeSelector: some View {
+        Picker("Time Range", selection: $selectedTimeRange) {
+            ForEach(TimeRange.allCases, id: \.self) { range in
+                Text(range.rawValue).tag(range)
+            }
+        }
+        .pickerStyle(SegmentedPickerStyle())
+        .onChange(of: selectedTimeRange) { _ in
+            loadWorkouts()
+        }
     }
 
     // MARK: - Stats Section
@@ -182,7 +222,7 @@ struct GlobalCoachView: View {
             Image(systemName: "figure.run.circle")
                 .font(.system(size: 60))
                 .foregroundColor(.gray)
-            Text("No workouts in the last 30 days")
+            Text("No workouts in the \(selectedTimeRange.displayText.lowercased())")
                 .font(.headline)
                 .foregroundColor(.gray)
             Text("Start training to see your performance analysis")
@@ -198,12 +238,13 @@ struct GlobalCoachView: View {
 
     func loadWorkouts() {
         isLoading = true
-        HealthManager.shared.fetchRecentWorkouts(days: 30) { fetchedWorkouts in
+        globalSummary = "" // Reset summary when time range changes
+        HealthManager.shared.fetchRecentWorkouts(days: selectedTimeRange.days) { fetchedWorkouts in
             self.workouts = fetchedWorkouts
             self.isLoading = false
 
             // Auto-generate summary if we have workouts
-            if !fetchedWorkouts.isEmpty && self.globalSummary.isEmpty {
+            if !fetchedWorkouts.isEmpty {
                 self.generateSummary()
             }
         }
@@ -214,8 +255,9 @@ struct GlobalCoachView: View {
         isLoading = true
 
         // Create a system message asking for an overview
+        let timeRangeText = selectedTimeRange.displayText.lowercased()
         let initialPrompt: [[String: String]] = [
-            ["role": "user", "text": "Give me a comprehensive overview of my last 30 days of training. Include volume trends, recovery patterns, and key insights."]
+            ["role": "user", "text": "Give me a comprehensive overview of my \(timeRangeText) of training. Include volume trends, recovery patterns, and key insights."]
         ]
 
         AgentManager.shared.chatWithCoachGlobal(workouts: workouts, history: initialPrompt) { message in

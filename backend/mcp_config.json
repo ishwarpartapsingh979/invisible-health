@@ -1,0 +1,77 @@
+{
+  "servers": {
+    "swiggy_instamart": {
+      "name": "Swiggy Instamart",
+      "url": "https://mcp.swiggy.com/im",
+      "type": "http",
+      "auth_type": "oauth",
+      "description": "Quick commerce grocery delivery (40,000+ products)",
+      "capabilities": [
+        "search_groceries",
+        "get_nutrition",
+        "add_to_cart",
+        "view_cart",
+        "place_order"
+      ]
+    },
+    "swiggy_food": {
+      "name": "Swiggy Food",
+      "url": "https://mcp.swiggy.com/food",
+      "type": "http",
+      "auth_type": "oauth",
+      "description": "Food delivery service",
+      "capabilities": [
+        "search_restaurants",
+        "get_menu",
+        "add_to_cart",
+        "place_order"
+      ]
+    },
+    "swiggy_dineout": {
+      "name": "Swiggy Dineout",
+      "url": "https://mcp.swiggy.com/dineout",
+      "type": "http",
+      "auth_type": "oauth",
+      "description": "Restaurant reservations",
+      "capabilities": [
+        "search_restaurants",
+        "book_table",
+        "view_offers"
+      ]
+    },
+    "zomato": {
+      "name": "Zomato",
+      "url": "https://mcp-server.zomato.com/mcp",
+      "type": "http",
+      "auth_type": "api_key",
+      "description": "Food delivery and restaurant discovery",
+      "capabilities": [
+        "search_restaurants",
+        "get_menu",
+        "get_nutrition",
+        "add_to_cart",
+        "place_order",
+        "track_order"
+      ]
+    },
+    "zepto": {
+      "name": "Zepto",
+      "url": "https://zepto-mcp-server.zepto.com/mcp",
+      "type": "http",
+      "auth_type": "pkce",
+      "description": "10-minute grocery delivery",
+      "capabilities": [
+        "search_products",
+        "get_product_details",
+        "add_to_cart",
+        "view_cart",
+        "place_order",
+        "track_delivery"
+      ],
+      "notes": "Requires PKCE OAuth 2.1 flow for security"
+    }
+  },
+  "default_service": "swiggy_instamart",
+  "timeout_seconds": 30,
+  "retry_attempts": 3
+}

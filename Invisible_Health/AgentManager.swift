@@ -13,6 +13,13 @@ extension Array where Element == Double {
     }
 }
 
+extension ArraySlice where Element == Double {
+    func average() -> Double? {
+        guard !isEmpty else { return nil }
+        return reduce(0, +) / Double(count)
+    }
+}
+
 class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     static let shared = AgentManager()
 
@@ -722,7 +729,8 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         return isToday && isRecent
     }
 
-    func fetchWorkoutRecommendation(userId: String = "00000000-0000-0000-0000-000000000001",
+    func fetchWorkoutRecommendation(optionalContext: String? = nil,
+                                    userId: String = "00000000-0000-0000-0000-000000000001",
                                     completion: @escaping (WorkoutRecommendation?) -> Void) {
         let group = DispatchGroup()
 
@@ -777,6 +785,7 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
                         telemetryGap: telemetryGap, orthoSpike: orthoSpike,
                         lastWorkout: lastWorkout, recentWorkouts: recentWorkouts, steps: steps,
                         hasFreshVitals: hasFreshVitals,
+                        optionalContext: optionalContext,
                         completion: completion
                     )
                 }
@@ -786,6 +795,7 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
                     telemetryGap: telemetryGap, orthoSpike: nil,
                     lastWorkout: lastWorkout, recentWorkouts: recentWorkouts, steps: steps,
                     hasFreshVitals: hasFreshVitals,
+                    optionalContext: optionalContext,
                     completion: completion
                 )
             }
@@ -801,6 +811,7 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         recentWorkouts: [HKWorkout],
         steps: Double,
         hasFreshVitals: Bool,
+        optionalContext: String?,
         completion: @escaping (WorkoutRecommendation?) -> Void
     ) {
         guard let url = URL(string: agentURL) else { completion(nil); return }
@@ -899,6 +910,11 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             body["ortho_peak_bpm"] = spike.peakBPM
         }
 
+        // Optional context (sleep hrs, conditions like "sore knees")
+        if let context = optionalContext, !context.isEmpty {
+            body["optional_context"] = context
+        }
+
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
         } catch {
@@ -930,6 +946,7 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         let preview_intensity_ceiling: String
         let preview_headline: String
         let preview_reasoning: String
+        let preview_exact_prescription: String
         let caveat: String
     }
 
@@ -1231,7 +1248,14 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         let volumeTrend = week4Workouts > week1Workouts ? "increasing" : (week4Workouts < week1Workouts ? "decreasing" : "stable")
 
         let allHRV = recoveryMetrics.compactMap { $0["hrv"] as? Double }.filter { $0 > 0 }
-        let hrvTrend = allHRV.count > 7 ? (allHRV.suffix(7).average() < allHRV.prefix(7).average() ? "declining" : "improving") : "insufficient data"
+        let hrvTrend: String
+        if allHRV.count > 7,
+           let recentAvg = allHRV.suffix(7).average(),
+           let earlierAvg = allHRV.prefix(7).average() {
+            hrvTrend = recentAvg < earlierAvg ? "declining" : "improving"
+        } else {
+            hrvTrend = "insufficient data"
+        }
 
         // Nutrition summary
         let totalNutritionCals = nutritionLogs.reduce(0) { $0 + (($1["calories"] as? Double) ?? 0) }

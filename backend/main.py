@@ -83,6 +83,31 @@ def run_agent(request):
                 response_json = agent.get_tomorrow_preview(data)
                 return response_json, 200, {'Content-Type': 'application/json'}
 
+            # --- MCP INTEGRATION: GROCERY & FOOD ORDERING ---
+            if data.get('action') == 'search_groceries':
+                response_json = agent.search_groceries_mcp(data)
+                return response_json, 200, {'Content-Type': 'application/json'}
+
+            if data.get('action') == 'compare_prices':
+                response_json = agent.compare_prices_mcp(data)
+                return response_json, 200, {'Content-Type': 'application/json'}
+
+            if data.get('action') == 'suggest_protein_sources':
+                response_json = agent.suggest_protein_sources_mcp(data)
+                return response_json, 200, {'Content-Type': 'application/json'}
+
+            if data.get('action') == 'smart_order':
+                response_json = agent.smart_order_from_prompt_mcp(data)
+                return response_json, 200, {'Content-Type': 'application/json'}
+
+            if data.get('action') == 'search_restaurants':
+                response_json = agent.search_restaurants_mcp(data)
+                return response_json, 200, {'Content-Type': 'application/json'}
+
+            if data.get('action') == 'get_menu':
+                response_json = agent.get_menu_mcp(data)
+                return response_json, 200, {'Content-Type': 'application/json'}
+
             user_id = data.get('user_id')
             text = data.get('text')
             

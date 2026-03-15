@@ -17,7 +17,7 @@ struct ContentView: View {
     @State private var pulseEvaluate: Bool = false
     
     // Tab Selection
-    // 0: Log, 1: Chat, 2: Data, 3: SOS, 4: Workout, 5: Summary
+    // 0: Home/Mic, 1: DataFeed, 2: Workout (logging), 3: Summary, 4: Chat, 5: SOS, 6: Preview (tomorrow), 7: Coach, 8: Today (workout)
     @State private var selectedTab: Int = 2
     
     // Image Annotation State (Phase 2.1)
@@ -56,9 +56,11 @@ struct ContentView: View {
                 case 5:
                      SOSView() // Tab 5
                 case 6:
-                    RecommendationView() // Tab 6
+                    PreviewTabView() // Tab 6 — Tomorrow Preview
                 case 7:
                     GlobalCoachView() // Tab 7 — Global Coach
+                case 8:
+                    WorkoutTabView() // Tab 8 — Today's Workout
                 default:
                     // Tab 0: Home / Mic Screen
                     micView
@@ -86,7 +88,9 @@ struct ContentView: View {
                         
                         TabButton(icon: "figure.run", text: "WORKOUT", isSelected: selectedTab == 2) { selectedTab = 2 }
 
-                        TabButton(icon: "brain.head.profile", text: "RECO", isSelected: selectedTab == 6) { selectedTab = 6 }
+                        TabButton(icon: "moon.stars", text: "PREVIEW", isSelected: selectedTab == 6) { selectedTab = 6 }
+
+                        TabButton(icon: "bolt.fill", text: "TODAY", isSelected: selectedTab == 8) { selectedTab = 8 }
 
                         TabButton(icon: "chart.line.uptrend.xyaxis", text: "COACH", isSelected: selectedTab == 7) { selectedTab = 7 }
 
@@ -147,6 +151,10 @@ struct ContentView: View {
                 selectedTab = 1
             } else if url.absoluteString.contains("sos") {
                 selectedTab = 5
+            } else if url.absoluteString.contains("preview") {
+                selectedTab = 6
+            } else if url.absoluteString.contains("today") {
+                selectedTab = 8
             } else if url.absoluteString.contains("workout") {
                 selectedTab = 2
             } else if url.absoluteString.contains("summary") {

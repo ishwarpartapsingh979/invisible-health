@@ -5,19 +5,21 @@ from vertexai.generative_models import GenerativeModel, Part
 from supabase import create_client, Client
 from tools.google_tools import GoogleTools  # <--- NEW: Import the Eyes
 from langfuse.decorators import observe  # <--- NEW: Import Observer
+from grocery_tools import GroceryTools  # <--- NEW: Import Grocery/Food MCP Tools
 class NutritionAgent:
     """
-    The Brain of our Application (Level 2).
+    The Brain of our Application (Level 2 + MCP Integration).
     Now aware of:
     1. Memory (Supabase)
     2. Intelligence (Gemini)
     3. The World (Google Maps & Search)
+    4. Food Ecosystem (Swiggy, Zepto, Zomato via MCP)
     """
     def __init__(self):
         # --- 1. SETUP MEMORY (Supabase) ---
         url: str = os.environ.get("SUPABASE_URL")
         key: str = os.environ.get("SUPABASE_SERVICE_KEY")
-        
+
         if not url or not key:
             raise ValueError("Missing Supabase Secrets!")
         self.supabase: Client = create_client(url, key)
@@ -27,9 +29,17 @@ class NutritionAgent:
             "gemini-2.5-pro",
             generation_config={"response_mime_type": "application/json"}
         )
-        
+
         # --- 3. SETUP EYES (Tools) ---
         self.tools = GoogleTools()
+
+        # --- 4. SETUP FOOD DELIVERY (MCP Tools) ---
+        try:
+            self.grocery_tools = GroceryTools()
+            print("✅ MCP Grocery Tools initialized (Swiggy, Zepto, Zomato)")
+        except Exception as e:
+            print(f"⚠️ MCP Tools initialization failed: {str(e)}")
+            self.grocery_tools = None
     @observe(as_type="generation")
     def check_user_status(self, user_id: str, lat: float = None, lng: float = None, steps: int = None):
         """
@@ -933,6 +943,9 @@ class NutritionAgent:
 
             goals_str = "; ".join(active_goals) if active_goals else "No specific goals set"
 
+            # Optional context from user (sleep hrs, sore knees, etc.)
+            optional_context = data.get("optional_context", "")
+
             prompt = f"""
 You are an elite Athletic Performance Director making today's training prescription.
 You have access to the athlete's full biometric morning audit. Be precise, direct, and decisive.
@@ -968,28 +981,36 @@ Long-Term Capacity:
 === ATHLETE GOALS ===
   {goals_str}
 
+=== ATHLETE NOTES (OPTIONAL CONTEXT) ===
+  {optional_context if optional_context else "None provided"}
+
 === YOUR TASK ===
-Using ALL the signals above, prescribe today's training. Apply this decision logic:
+Using ALL the signals above AND the athlete's optional notes (if any), prescribe today's training. Apply this decision logic:
 
 1. VETO CONDITIONS (if any are true, prescribe REST or active recovery only):
    - HRV < 30 ms
    - Orthostatic peak > RHR + 25 bpm
-   - Sleep < 6 hours
+   - Sleep < 6 hours (unless athlete manually noted different sleep hours in context)
    - Walking asymmetry > 8%
    - HRR 1-min < 10 bpm
+   - Athlete mentions pain, injury, or feeling terrible in notes
 
 2. REDUCED LOAD (if any are true, prescribe Zone 1-2 only, no intensity):
    - HRV 30-45 ms
-   - Sleep 6-7.5 hours
+   - Sleep 6-7.5 hours (unless athlete manually noted different sleep hours in context)
    - Diet rating = "fully_bad" OR "minor_bad"
    - Orthostatic peak > RHR + 15 bpm
+   - Athlete mentions soreness, fatigue, or feeling suboptimal in notes
 
 3. FULL SEND (all clear):
    - Sleep > 7.5 hours (ideally 8+)
    - HRV > 45 ms
    - Diet rating = "nailed_it" OR "minor_good"
+   - No concerning athlete notes
    - Prescribe based on yesterday's workouts and today's completed workouts. Alternate muscle groups, allow intensity.
    - If today's workout is already complete (e.g. a walk or session done), factor that in and recommend what still makes sense for the rest of the day or tomorrow's direction.
+
+IMPORTANT: If the athlete provides manual sleep hours in their notes (e.g., "6 hrs sleep"), use that instead of the proxy sleep estimate. If they mention specific conditions like "sore knees" or "tight hamstrings", adjust the workout accordingly (e.g., avoid high-impact, prescribe mobility work).
 
 Output STRICT JSON:
 {{
@@ -1184,12 +1205,13 @@ DECISION LOGIC:
 
 Output STRICT JSON:
 {{
-  "preview_workout_type": "e.g. Zone 2 Run / Upper Body Strength / Mobility Flow / Rest",
-  "preview_duration_range": "e.g. 30-45 min",
-  "preview_intensity_ceiling": "Easy / Moderate / Hard",
+  "preview_workout_type": "EXACT workout type: e.g. 'Zone 2 Run' / 'Upper Body Strength' / 'Mobility Flow' / 'Rest Day'",
+  "preview_duration_range": "EXACT duration: e.g. '35 min' (provide single number, not range)",
+  "preview_intensity_ceiling": "EXACT intensity: 'Easy' / 'Moderate' / 'Hard'",
   "preview_headline": "CONFIDENT one-liner that builds excitement. E.g. 'Tomorrow: Upper body strength — your legs earned a break.' or 'Tomorrow: Easy Zone 2 run to flush yesterday's damage.'",
   "preview_reasoning": "2-3 sentences. First: explain what today taxed. Second: explain how diet unlocked (or limited) tomorrow. Third (optional): motivate good sleep/recovery tonight.",
-  "caveat": "Morning HRV and sleep will confirm this plan."
+  "preview_exact_prescription": "Detailed workout breakdown with sets/reps/pace. E.g. '4 x 8min at Zone 2 (130-145 bpm), 2min walk rest between sets' OR '4 sets: Bench Press 8-10 reps, Rows 10-12 reps, Shoulder Press 8-10 reps, rest 90sec'",
+  "caveat": "Morning HRV and sleep will fine-tune this plan if needed."
 }}
 
 EXAMPLES:
@@ -1199,26 +1221,32 @@ After heavy strength + good diet:
   "preview_headline": "Tomorrow: Zone 2 cardio to flush the lactic acid and keep momentum.",
   "preview_reasoning": "Today's strength session taxed your muscular system hard (448 kcal burned). Because you nailed your diet, your glycogen is topped up for tomorrow's work. Get 8+ hours of sleep tonight to lock in those gains and clear tomorrow for cardio.",
   "preview_workout_type": "Zone 2 Run",
-  "preview_duration_range": "35-45 min",
-  "preview_intensity_ceiling": "Moderate"
+  "preview_duration_range": "40 min",
+  "preview_intensity_ceiling": "Moderate",
+  "preview_exact_prescription": "40 min continuous run. Target HR: 130-145 bpm (Zone 2). Pace: conversational (should be able to talk easily). No intervals, keep it steady. Focus on nose breathing if possible.",
+  "caveat": "Morning HRV and sleep will fine-tune this plan if needed."
 }}
 
 After light run + bad diet:
 {{
-  "preview_headline": "Tomorrow: Likely rest or very light mobility — tonight's diet limited your options.",
+  "preview_headline": "Tomorrow: Light mobility flow — tonight's diet limited your options.",
   "preview_reasoning": "Today's run was moderate (300 kcal), so your legs could handle more tomorrow. But your poor diet choice compromised recovery capacity — inflammation will be elevated and fuel stores are compromised. Fix tonight's meal and sleep to unlock a real session the day after.",
-  "preview_workout_type": "Rest or Light Yoga",
-  "preview_duration_range": "15-20 min",
-  "preview_intensity_ceiling": "Easy"
+  "preview_workout_type": "Mobility & Stretching",
+  "preview_duration_range": "20 min",
+  "preview_intensity_ceiling": "Easy",
+  "preview_exact_prescription": "20 min flow: 5min dynamic warmup (leg swings, arm circles), 10min yoga sequence (downward dog, pigeon pose, hip flexor stretches), 5min breathing work. Keep heart rate below 100 bpm.",
+  "caveat": "Morning HRV and sleep will fine-tune this plan if needed."
 }}
 
 After rest day + good diet:
 {{
   "preview_headline": "Tomorrow: You're fueled and rested — time to attack a hard session.",
   "preview_reasoning": "You rested today and nailed your diet, which means your recovery tank is full. Tomorrow is your chance to capitalize on this readiness with intensity. Prioritize sleep tonight to confirm green lights across the board.",
-  "preview_workout_type": "Tempo Run or Strength",
-  "preview_duration_range": "40-50 min",
-  "preview_intensity_ceiling": "Hard"
+  "preview_workout_type": "Tempo Run",
+  "preview_duration_range": "45 min",
+  "preview_intensity_ceiling": "Hard",
+  "preview_exact_prescription": "10min easy warmup, 25min tempo at Zone 3-4 (150-165 bpm, comfortably hard pace), 10min easy cooldown. Target: sustain tempo pace, not sprint intervals.",
+  "caveat": "Morning HRV and sleep will fine-tune this plan if needed."
 }}
 
 RULES:
@@ -1561,3 +1589,263 @@ RULES:
 
         except Exception as e:
             return json.dumps({"message": f"I am having trouble replying. ({str(e)})"})
+
+    # ==================== MCP INTEGRATION: GROCERY & FOOD ORDERING ====================
+
+    @observe(as_type="generation")
+    def search_groceries_mcp(self, data: dict):
+        """
+        Search for groceries across MCP services (Swiggy Instamart, Zepto).
+
+        Request body:
+        {
+            "user_id": "...",
+            "query": "chicken breast",
+            "service": "swiggy_instamart" (optional, default: search all)
+        }
+        """
+        try:
+            if not self.grocery_tools:
+                return json.dumps({"error": "MCP tools not available"})
+
+            query = data.get('query', '')
+            service = data.get('service')
+
+            if not query:
+                return json.dumps({"error": "Missing 'query' parameter"})
+
+            # Search across all services or specific service
+            if service:
+                results = self.grocery_tools.search_groceries(query, service=service)
+            else:
+                # Search all and compare
+                results = self.grocery_tools.compare_prices(query)
+
+            return json.dumps({
+                "query": query,
+                "results": results,
+                "count": len(results)
+            })
+
+        except Exception as e:
+            return json.dumps({"error": str(e)})
+
+    @observe(as_type="generation")
+    def compare_prices_mcp(self, data: dict):
+        """
+        Compare prices of an item across all services.
+
+        Request body:
+        {
+            "user_id": "...",
+            "query": "brown rice 1kg"
+        }
+        """
+        try:
+            if not self.grocery_tools:
+                return json.dumps({"error": "MCP tools not available"})
+
+            query = data.get('query', '')
+            if not query:
+                return json.dumps({"error": "Missing 'query' parameter"})
+
+            results = self.grocery_tools.compare_prices(query)
+
+            # Find cheapest
+            cheapest = results[0] if results else None
+
+            return json.dumps({
+                "query": query,
+                "all_options": results,
+                "cheapest": cheapest,
+                "savings": results[0]['price'] - results[-1]['price'] if len(results) > 1 else 0
+            })
+
+        except Exception as e:
+            return json.dumps({"error": str(e)})
+
+    @observe(as_type="generation")
+    def suggest_protein_sources_mcp(self, data: dict):
+        """
+        AI-powered protein source suggestions based on budget and goals.
+
+        Request body:
+        {
+            "user_id": "...",
+            "budget": 500,
+            "goal_protein_g": 150
+        }
+        """
+        try:
+            if not self.grocery_tools:
+                return json.dumps({"error": "MCP tools not available"})
+
+            budget = float(data.get('budget', 500))
+            goal_protein = float(data.get('goal_protein_g', 150))
+
+            suggestions = self.grocery_tools.suggest_protein_sources(
+                budget=budget,
+                goal_protein_g=goal_protein
+            )
+
+            total_cost = sum(item['price'] for item in suggestions)
+            total_protein = sum(item.get('nutrition', {}).get('protein_g', 0) for item in suggestions)
+
+            return json.dumps({
+                "suggestions": suggestions,
+                "total_cost": total_cost,
+                "total_protein": total_protein,
+                "goal_protein": goal_protein,
+                "budget": budget,
+                "budget_remaining": budget - total_cost
+            })
+
+        except Exception as e:
+            return json.dumps({"error": str(e)})
+
+    @observe(as_type="generation")
+    def smart_order_from_prompt_mcp(self, data: dict):
+        """
+        AI-powered natural language food ordering.
+
+        Example prompts:
+        - "Order 500g chicken breast from cheapest source"
+        - "Get me post-workout meal ingredients under ₹300"
+        - "Order groceries for high protein breakfast"
+
+        Request body:
+        {
+            "user_id": "...",
+            "prompt": "Order chicken breast and eggs"
+        }
+        """
+        try:
+            if not self.grocery_tools:
+                return json.dumps({"error": "MCP tools not available"})
+
+            user_id = data.get('user_id')
+            prompt = data.get('prompt', '')
+
+            if not prompt:
+                return json.dumps({"error": "Missing 'prompt' parameter"})
+
+            # Use Gemini to parse the prompt
+            parse_prompt = f"""
+            You are a nutrition-aware shopping assistant. Parse this user request:
+            "{prompt}"
+
+            Extract:
+            1. Items they want (e.g., ["chicken breast", "eggs", "brown rice"])
+            2. Budget constraint (if mentioned)
+            3. Nutrition goals (e.g., high protein, low carb)
+            4. Quantity preferences
+
+            Output JSON:
+            {{
+                "items": ["item1", "item2"],
+                "budget": 500,
+                "nutrition_goal": "high_protein",
+                "quantities": {{"chicken breast": "500g"}}
+            }}
+            """
+
+            response = self.model.generate_content(parse_prompt)
+            parsed = json.loads(response.text)
+
+            # Search for each item and find best options
+            shopping_list = []
+            total_cost = 0
+
+            for item in parsed.get('items', []):
+                # Compare prices across services
+                options = self.grocery_tools.compare_prices(item)
+
+                if options:
+                    # Pick cheapest or best nutrition match
+                    best_option = options[0]
+                    shopping_list.append(best_option)
+                    total_cost += best_option['price']
+
+            return json.dumps({
+                "original_prompt": prompt,
+                "parsed_intent": parsed,
+                "shopping_list": shopping_list,
+                "total_cost": total_cost,
+                "ready_to_order": True
+            })
+
+        except Exception as e:
+            return json.dumps({"error": str(e)})
+
+    @observe(as_type="generation")
+    def search_restaurants_mcp(self, data: dict):
+        """
+        Search for restaurants via Zomato/Swiggy Food MCP.
+
+        Request body:
+        {
+            "user_id": "...",
+            "lat": 12.9716,
+            "lng": 77.5946,
+            "cuisine": "North Indian" (optional)
+        }
+        """
+        try:
+            if not self.grocery_tools:
+                return json.dumps({"error": "MCP tools not available"})
+
+            lat = data.get('lat')
+            lng = data.get('lng')
+            cuisine = data.get('cuisine')
+            service = data.get('service', 'zomato')
+
+            location = {'lat': lat, 'lng': lng} if lat and lng else None
+
+            restaurants = self.grocery_tools.search_restaurants(
+                location=location,
+                cuisine=cuisine,
+                service=service
+            )
+
+            return json.dumps({
+                "restaurants": restaurants,
+                "count": len(restaurants),
+                "location": location,
+                "cuisine": cuisine
+            })
+
+        except Exception as e:
+            return json.dumps({"error": str(e)})
+
+    @observe(as_type="generation")
+    def get_menu_mcp(self, data: dict):
+        """
+        Get restaurant menu with nutrition info.
+
+        Request body:
+        {
+            "user_id": "...",
+            "restaurant_id": "...",
+            "service": "zomato"
+        }
+        """
+        try:
+            if not self.grocery_tools:
+                return json.dumps({"error": "MCP tools not available"})
+
+            restaurant_id = data.get('restaurant_id')
+            service = data.get('service', 'zomato')
+
+            if not restaurant_id:
+                return json.dumps({"error": "Missing 'restaurant_id' parameter"})
+
+            menu = self.grocery_tools.get_menu(restaurant_id, service=service)
+
+            return json.dumps({
+                "restaurant_id": restaurant_id,
+                "menu": menu,
+                "count": len(menu)
+            })
+
+        except Exception as e:
+            return json.dumps({"error": str(e)})
