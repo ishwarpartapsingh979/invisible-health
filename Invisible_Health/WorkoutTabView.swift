@@ -74,14 +74,13 @@ struct WorkoutTabView: View {
     // MARK: - On Appear
 
     func onViewAppear() {
-        // If morning audit already auto-computed a recommendation, show it immediately
+        // Check if we have cached recommendation but don't auto-load
         if let cached = agentManager.cachedMorningRecommendation {
             recommendation = cached
             // Clear yesterday's preview now that today's recommendation is ready
             agentManager.cachedTomorrowPreview = nil
-        } else {
-            load()
         }
+        // Don't auto-load - wait for user to click Generate
     }
 
     // MARK: - Header
@@ -119,7 +118,7 @@ struct WorkoutTabView: View {
                     .foregroundColor(.white)
             }
 
-            TextField("e.g., 6 hrs sleep, sore knees, feeling tired...", text: $optionalContext)
+            TextField("e.g., 8 hrs sleep, sore knees, feeling tired...", text: $optionalContext)
                 .padding(12)
                 .background(Color.white.opacity(0.08))
                 .foregroundColor(.white)
@@ -132,6 +131,21 @@ struct WorkoutTabView: View {
             Text("This info will help personalize your workout recommendation")
                 .font(.caption2)
                 .foregroundColor(.gray)
+
+            // Generate Button
+            Button(action: load) {
+                HStack(spacing: 10) {
+                    Image(systemName: "sparkles")
+                        .font(.subheadline)
+                    Text("Generate Workout Recommendation")
+                        .font(.subheadline).bold()
+                }
+                .foregroundColor(.white)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity)
+                .background(Color.blue)
+                .cornerRadius(12)
+            }
         }
         .padding()
         .background(Color.blue.opacity(0.08))
@@ -506,9 +520,19 @@ struct WorkoutTabView: View {
         errorMessage = nil
         watchSendState = .idle
         let context = optionalContext.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if !context.isEmpty {
+            print("📝 User context: \(context)")
+        } else {
+            print("📝 No user context provided")
+        }
+
         AgentManager.shared.fetchWorkoutRecommendation(optionalContext: context.isEmpty ? nil : context) { rec in
             isLoading = false
-            if let rec = rec { recommendation = rec }
+            if let rec = rec {
+                recommendation = rec
+                print("✅ Recommendation received")
+            }
             else { errorMessage = "Could not load recommendation. Check your connection." }
         }
     }

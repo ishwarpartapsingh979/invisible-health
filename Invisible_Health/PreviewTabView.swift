@@ -54,14 +54,17 @@ struct PreviewTabView: View {
         // Load persisted diet rating for today
         todayDietRating = NotificationManager.dietRating(for: NotificationManager.todayDateString())
 
-        // Restore cached tomorrow preview ONLY if it's from today
-        if let cached = agentManager.cachedTomorrowPreview,
+        // Only restore preview if user has already rated their diet today
+        if let rating = todayDietRating,
+           let cached = agentManager.cachedTomorrowPreview,
            let previewDate = agentManager.value(forKey: "tomorrowPreviewDate") as? String,
            previewDate == NotificationManager.todayDateString() {
             tomorrowPreview = cached
+            print("✅ Restored today's preview (diet: \(rating))")
         } else {
-            // Stale preview from yesterday — clear it
+            // No rating yet or stale preview — clear it
             tomorrowPreview = nil
+            print("📝 No preview - waiting for diet rating")
         }
     }
 
@@ -173,12 +176,19 @@ struct PreviewTabView: View {
         let key = "diet_rating_\(NotificationManager.todayDateString())"
         UserDefaults.standard.set(rating, forKey: key)
         todayDietRating = rating
+        print("💾 Diet rating saved: \(rating)")
 
         // Immediately trigger tomorrow preview in background
         isFetchingPreview = true
+        print("🔄 Generating tomorrow's preview...")
         AgentManager.shared.fetchTomorrowPreview(dietRating: rating) { preview in
             isFetchingPreview = false
             tomorrowPreview = preview
+            if preview != nil {
+                print("✅ Preview generated successfully")
+            } else {
+                print("❌ Failed to generate preview")
+            }
         }
     }
 

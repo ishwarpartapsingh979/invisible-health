@@ -946,6 +946,11 @@ class NutritionAgent:
             # Optional context from user (sleep hrs, sore knees, etc.)
             optional_context = data.get("optional_context", "")
 
+            if optional_context:
+                print(f"📝 User provided context: {optional_context}")
+            else:
+                print("📝 No optional context provided")
+
             prompt = f"""
 You are an elite Athletic Performance Director making today's training prescription.
 You have access to the athlete's full biometric morning audit. Be precise, direct, and decisive.

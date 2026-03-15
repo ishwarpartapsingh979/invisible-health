@@ -107,7 +107,10 @@ struct GlobalCoachView: View {
             }
         }
         .pickerStyle(SegmentedPickerStyle())
-        .onChange(of: selectedTimeRange) { _ in
+        .onChange(of: selectedTimeRange) { newValue in
+            print("🔄 Time range changed to: \(newValue.rawValue) (\(newValue.days) days)")
+            workouts = [] // Clear workouts immediately
+            globalSummary = ""
             loadWorkouts()
         }
     }
