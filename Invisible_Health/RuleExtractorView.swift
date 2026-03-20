@@ -577,6 +577,18 @@ struct AudioFilePicker: UIViewControllerRepresentable {
         func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
             guard let url = urls.first else { return }
 
+            // Request access to security-scoped resource (required for File Providers)
+            guard url.startAccessingSecurityScopedResource() else {
+                print("❌ Failed to access security-scoped resource")
+                parent.presentationMode.wrappedValue.dismiss()
+                return
+            }
+
+            defer {
+                // Always stop accessing when done
+                url.stopAccessingSecurityScopedResource()
+            }
+
             // Copy to app's documents directory
             let docPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             let destURL = docPath.appendingPathComponent("uploaded_\(url.lastPathComponent)")
