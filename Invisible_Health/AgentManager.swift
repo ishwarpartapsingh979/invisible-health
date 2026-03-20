@@ -1374,7 +1374,7 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
 
     // MARK: - Equipment Analysis
 
-    func sendEquipmentInput(image: UIImage?, userId: String = "00000000-0000-0000-0000-000000000001", completion: @escaping (Result<EquipmentResponse, Error>) -> Void) {
+    func sendEquipmentInput(image: UIImage? = nil, videoURL: URL? = nil, userId: String = "00000000-0000-0000-0000-000000000001", completion: @escaping (Result<EquipmentResponse, Error>) -> Void) {
         guard let url = URL(string: agentURL) else {
             completion(.failure(NSError(domain: "Invalid URL", code: -1, userInfo: nil)))
             return
@@ -1395,6 +1395,20 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             let base64String = imageData.base64EncodedString()
             body["image_data"] = base64String
             body["mime_type"] = "image/jpeg"
+            print("🏋️ Uploading equipment image for analysis...")
+        }
+        // Convert video to base64
+        else if let videoURL = videoURL {
+            do {
+                let videoData = try Data(contentsOf: videoURL)
+                let base64String = videoData.base64EncodedString()
+                body["video_data"] = base64String
+                body["mime_type"] = "video/mp4"
+                print("🎥 Uploading equipment video for analysis... (Size: \(videoData.count / 1024)KB)")
+            } catch {
+                completion(.failure(error))
+                return
+            }
         }
 
         do {
@@ -1403,8 +1417,6 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             completion(.failure(error))
             return
         }
-
-        print("🏋️ Uploading equipment image for analysis...")
 
         URLSession.shared.dataTask(with: request) { data, response, error in
             if let error = error {

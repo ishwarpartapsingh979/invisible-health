@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 // MARK: - Data Models
 
@@ -53,8 +54,11 @@ struct EquipmentView: View {
     @State private var isLoading = false
     @State private var showCamera = false
     @State private var showGallery = false
+    @State private var showVideoCamera = false
+    @State private var showVideoLibrary = false
     @State private var showActionSheet = false
     @State private var selectedImage: UIImage?
+    @State private var selectedVideoURL: URL?
     @State private var isUploading = false
     @State private var errorMessage: String?
     @State private var showError = false
@@ -161,6 +165,12 @@ struct EquipmentView: View {
                     .default(Text("Choose from Gallery")) {
                         showGallery = true
                     },
+                    .default(Text("Record Video")) {
+                        showVideoCamera = true
+                    },
+                    .default(Text("Choose Video")) {
+                        showVideoLibrary = true
+                    },
                     .cancel()
                 ]
             )
@@ -175,6 +185,18 @@ struct EquipmentView: View {
             ImagePicker(sourceType: .photoLibrary) { image in
                 selectedImage = image
                 uploadEquipment(image: image)
+            }
+        }
+        .sheet(isPresented: $showVideoCamera) {
+            VideoPicker(sourceType: .camera) { videoURL in
+                selectedVideoURL = videoURL
+                uploadEquipment(videoURL: videoURL)
+            }
+        }
+        .sheet(isPresented: $showVideoLibrary) {
+            VideoPicker(sourceType: .photoLibrary) { videoURL in
+                selectedVideoURL = videoURL
+                uploadEquipment(videoURL: videoURL)
             }
         }
         .sheet(item: $selectedSubmission) { submission in
@@ -214,10 +236,10 @@ struct EquipmentView: View {
 
     // MARK: - Upload Equipment
 
-    func uploadEquipment(image: UIImage) {
+    func uploadEquipment(image: UIImage? = nil, videoURL: URL? = nil) {
         isUploading = true
 
-        AgentManager.shared.sendEquipmentInput(image: image) { result in
+        AgentManager.shared.sendEquipmentInput(image: image, videoURL: videoURL) { result in
             DispatchQueue.main.async {
                 isUploading = false
 
@@ -503,6 +525,46 @@ struct ImagePicker: UIViewControllerRepresentable {
         func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
             if let image = info[.originalImage] as? UIImage {
                 parent.onImagePicked(image)
+            }
+            parent.presentationMode.wrappedValue.dismiss()
+        }
+    }
+}
+
+// MARK: - Video Picker for Equipment
+
+struct VideoPicker: UIViewControllerRepresentable {
+    var sourceType: UIImagePickerController.SourceType = .photoLibrary
+    var onVideoPicked: (URL) -> Void
+
+    @Environment(\.presentationMode) private var presentationMode
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = sourceType
+        picker.mediaTypes = [UTType.movie.identifier] // Only allow videos
+        picker.videoQuality = .typeMedium // Balance quality and size
+        picker.videoMaximumDuration = 60 // Max 60 seconds
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        var parent: VideoPicker
+
+        init(_ parent: VideoPicker) {
+            self.parent = parent
+        }
+
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
+            if let videoURL = info[.mediaURL] as? URL {
+                parent.onVideoPicked(videoURL)
             }
             parent.presentationMode.wrappedValue.dismiss()
         }
