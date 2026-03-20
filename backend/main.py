@@ -123,6 +123,11 @@ def run_agent(request):
                 response_json = agent.delete_all_equipment(data)
                 return response_json, 200, {'Content-Type': 'application/json'}
 
+            # --- EXTRACT DAD OS RULE FROM AUDIO ---
+            if data.get('action') == 'extract_dad_os_rule':
+                response_json = agent.extract_dad_os_rule(data)
+                return response_json, 200, {'Content-Type': 'application/json'}
+
             user_id = data.get('user_id')
             text = data.get('text')
             

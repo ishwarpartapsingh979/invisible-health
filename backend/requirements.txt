@@ -16,3 +16,9 @@ packaging==24.0
 mcp==1.1.2
 # 8. httpx: Async HTTP client for MCP server communication
 httpx==0.28.1
+# 9. openai: For Whisper audio transcription API
+openai==1.59.5
+# 10. pydantic: For JSON schema validation
+pydantic==2.10.5
+# 11. pydub: For audio format conversion to m4a
+pydub==0.25.1

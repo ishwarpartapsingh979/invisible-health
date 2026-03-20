@@ -1,11 +1,19 @@
 import os
 import json
+import base64
 import vertexai
 from vertexai.generative_models import GenerativeModel, Part
 from supabase import create_client, Client
 from tools.google_tools import GoogleTools  # <--- NEW: Import the Eyes
 from langfuse.decorators import observe  # <--- NEW: Import Observer
 from grocery_tools import GroceryTools  # <--- NEW: Import Grocery/Food MCP Tools
+from rule_extractor import (  # <--- NEW: Import Dad OS Rule Extractor
+    convert_to_m4a,
+    upload_to_storage,
+    transcribe_audio,
+    extract_rule_with_gemini,
+    validate_and_insert_rule
+)
 class NutritionAgent:
     """
     The Brain of our Application (Level 2 + MCP Integration).
@@ -2224,3 +2232,157 @@ EXAMPLE for 3 resistance bands:
             import traceback
             traceback.print_exc()
             return json.dumps({"error": str(e), "success": False})
+
+    @observe(as_type="generation")
+    def extract_dad_os_rule(self, data):
+        """
+        Extract Dad OS Rule from audio file.
+
+        Flow:
+        1. Receive audio data (base64 encoded)
+        2. Convert to m4a format
+        3. Upload to Supabase Storage (dad_audio bucket)
+        4. Transcribe with Whisper
+        5. Extract rule with Gemini
+        6. Validate and insert into Dad_OS_Rules table
+
+        Expected input:
+        {
+            "audio_data": "base64_encoded_audio",
+            "audio_format": "mp3" | "wav" | "m4a"  (optional, default: m4a)
+        }
+
+        Returns:
+        {
+            "success": true,
+            "transcript": "...",
+            "extracted_rule": {...},
+            "rule_id": "uuid",
+            "audio_url": "https://..."
+        }
+        OR
+        {
+            "success": false,
+            "error": "...",
+            "stage": "transcription" | "extraction" | "validation"
+        }
+        """
+        try:
+            # --- STEP 1: Extract Audio Data ---
+            audio_b64 = data.get('audio_data')
+            audio_format = data.get('audio_format', 'm4a')
+
+            if not audio_b64:
+                return json.dumps({
+                    "success": False,
+                    "error": "Missing audio_data",
+                    "stage": "input"
+                })
+
+            # Decode base64
+            try:
+                audio_bytes = base64.b64decode(audio_b64)
+                print(f"📥 Received audio: {len(audio_bytes)} bytes, format: {audio_format}")
+            except Exception as e:
+                return json.dumps({
+                    "success": False,
+                    "error": f"Invalid base64 audio data: {str(e)}",
+                    "stage": "input"
+                })
+
+            # --- STEP 2: Convert to M4A (if needed) ---
+            if audio_format.lower() != 'm4a':
+                print(f"🔄 Converting {audio_format} to m4a...")
+                try:
+                    audio_bytes = convert_to_m4a(audio_bytes, audio_format)
+                except Exception as e:
+                    return json.dumps({
+                        "success": False,
+                        "error": str(e),
+                        "stage": "conversion"
+                    })
+
+            # --- STEP 3: Upload to Supabase Storage ---
+            print("☁️ Uploading to Supabase Storage...")
+            try:
+                audio_url = upload_to_storage(audio_bytes, self.supabase)
+            except Exception as e:
+                return json.dumps({
+                    "success": False,
+                    "error": str(e),
+                    "stage": "storage"
+                })
+
+            # --- STEP 4: Transcribe with Whisper ---
+            print("🎤 Transcribing audio...")
+            try:
+                transcript = transcribe_audio(audio_bytes)
+            except Exception as e:
+                return json.dumps({
+                    "success": False,
+                    "error": str(e),
+                    "stage": "transcription",
+                    "audio_url": audio_url  # Return URL even if transcription fails
+                })
+
+            # --- STEP 5: Extract Rule with Gemini ---
+            print("🧠 Extracting rule with Gemini...")
+            try:
+                extracted_rule = extract_rule_with_gemini(transcript, self.model)
+            except Exception as e:
+                return json.dumps({
+                    "success": False,
+                    "error": str(e),
+                    "stage": "extraction",
+                    "audio_url": audio_url,
+                    "transcript": transcript  # Return transcript for debugging
+                })
+
+            # --- STEP 6: Validate and Insert ---
+            print("✅ Validating and inserting rule...")
+            try:
+                success, message, rule_id = validate_and_insert_rule(
+                    extracted_rule,
+                    audio_url,
+                    self.supabase
+                )
+
+                if not success:
+                    return json.dumps({
+                        "success": False,
+                        "error": message,
+                        "stage": "validation",
+                        "audio_url": audio_url,
+                        "transcript": transcript,
+                        "extracted_rule": extracted_rule  # Return for debugging
+                    })
+
+                # Success!
+                return json.dumps({
+                    "success": True,
+                    "transcript": transcript,
+                    "extracted_rule": extracted_rule,
+                    "rule_id": rule_id,
+                    "audio_url": audio_url,
+                    "message": message
+                })
+
+            except Exception as e:
+                return json.dumps({
+                    "success": False,
+                    "error": str(e),
+                    "stage": "database",
+                    "audio_url": audio_url,
+                    "transcript": transcript,
+                    "extracted_rule": extracted_rule
+                })
+
+        except Exception as e:
+            print(f"❌ Unexpected error in extract_dad_os_rule: {e}")
+            import traceback
+            traceback.print_exc()
+            return json.dumps({
+                "success": False,
+                "error": f"Unexpected error: {str(e)}",
+                "stage": "unknown"
+            })

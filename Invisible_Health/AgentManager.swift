@@ -1592,4 +1592,59 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             }
         }.resume()
     }
+
+    // MARK: - Dad OS Rule Extraction
+
+    func extractDadOsRule(audioData: String, audioFormat: String, completion: @escaping (String) -> Void) {
+        guard let url = URL(string: agentURL) else {
+            completion("{\"success\": false, \"error\": \"Invalid URL\"}")
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let body: [String: Any] = [
+            "action": "extract_dad_os_rule",
+            "audio_data": audioData,
+            "audio_format": audioFormat
+        ]
+
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
+        } catch {
+            completion("{\"success\": false, \"error\": \"Failed to encode request\"}")
+            return
+        }
+
+        print("🎙️ Extracting Dad OS Rule from audio...")
+
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                DispatchQueue.main.async {
+                    completion("{\"success\": false, \"error\": \"\(error.localizedDescription)\"}")
+                }
+                return
+            }
+
+            guard let data = data else {
+                DispatchQueue.main.async {
+                    completion("{\"success\": false, \"error\": \"No data received\"}")
+                }
+                return
+            }
+
+            // Return raw JSON string for decoding in the view
+            if let jsonString = String(data: data, encoding: .utf8) {
+                DispatchQueue.main.async {
+                    completion(jsonString)
+                }
+            } else {
+                DispatchQueue.main.async {
+                    completion("{\"success\": false, \"error\": \"Invalid response format\"}")
+                }
+            }
+        }.resume()
+    }
 }
