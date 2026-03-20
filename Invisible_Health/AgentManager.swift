@@ -1371,4 +1371,102 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             }
         }.resume()
     }
+
+    // MARK: - Equipment Analysis
+
+    func sendEquipmentInput(image: UIImage?, userId: String = "00000000-0000-0000-0000-000000000001", completion: @escaping (Result<EquipmentResponse, Error>) -> Void) {
+        guard let url = URL(string: agentURL) else {
+            completion(.failure(NSError(domain: "Invalid URL", code: -1, userInfo: nil)))
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        var body: [String: Any] = [
+            "action": "analyze_equipment",
+            "user_id": userId
+        ]
+
+        // Convert image to base64
+        if let image = image,
+           let imageData = image.jpegData(compressionQuality: 0.8) {
+            let base64String = imageData.base64EncodedString()
+            body["image_data"] = base64String
+            body["mime_type"] = "image/jpeg"
+        }
+
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
+        } catch {
+            completion(.failure(error))
+            return
+        }
+
+        print("🏋️ Uploading equipment image for analysis...")
+
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                completion(.failure(error))
+                return
+            }
+
+            guard let data = data else {
+                completion(.failure(NSError(domain: "No data received", code: -1, userInfo: nil)))
+                return
+            }
+
+            do {
+                let decoder = JSONDecoder()
+                let equipmentResponse = try decoder.decode(EquipmentResponse.self, from: data)
+                print("✅ Equipment analyzed: \(equipmentResponse.message ?? "Success")")
+                completion(.success(equipmentResponse))
+            } catch {
+                print("❌ Decoding error: \(error)")
+                completion(.failure(error))
+            }
+        }.resume()
+    }
+
+    func getEquipmentHistory(userId: String = "00000000-0000-0000-0000-000000000001", completion: @escaping (Result<EquipmentHistoryResponse, Error>) -> Void) {
+        guard var components = URLComponents(string: agentURL) else {
+            completion(.failure(NSError(domain: "Invalid URL", code: -1, userInfo: nil)))
+            return
+        }
+
+        components.queryItems = [
+            URLQueryItem(name: "action", value: "get_equipment"),
+            URLQueryItem(name: "user_id", value: userId)
+        ]
+
+        guard let url = components.url else {
+            completion(.failure(NSError(domain: "Invalid URL", code: -1, userInfo: nil)))
+            return
+        }
+
+        print("📥 Fetching equipment history...")
+
+        URLSession.shared.dataTask(with: url) { data, response, error in
+            if let error = error {
+                completion(.failure(error))
+                return
+            }
+
+            guard let data = data else {
+                completion(.failure(NSError(domain: "No data received", code: -1, userInfo: nil)))
+                return
+            }
+
+            do {
+                let decoder = JSONDecoder()
+                let historyResponse = try decoder.decode(EquipmentHistoryResponse.self, from: data)
+                print("✅ Equipment history loaded: \(historyResponse.total_submissions) submissions")
+                completion(.success(historyResponse))
+            } catch {
+                print("❌ Decoding error: \(error)")
+                completion(.failure(error))
+            }
+        }.resume()
+    }
 }

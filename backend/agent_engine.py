@@ -1859,3 +1859,195 @@ RULES:
 
         except Exception as e:
             return json.dumps({"error": str(e)})
+
+    @observe(as_type="generation")
+    def analyze_equipment(self, data):
+        """
+        Analyzes gym equipment from image/video using Gemini Vision Pro.
+        Stores result in users.equipment_access JSONB.
+        Uploads media to gym_media bucket using user's gym_media_url path.
+        """
+        from langfuse.decorators import langfuse_context
+        import base64
+        import uuid
+        from datetime import datetime
+
+        try:
+            user_id = data.get('user_id')
+            media_data = data.get('image_data') or data.get('video_data')
+            mime_type = data.get('mime_type', 'image/jpeg')
+
+            if not user_id or not media_data:
+                return json.dumps({"error": "Missing user_id or media_data"})
+
+            # 1. Get or set user's gym_media_url (folder path in bucket)
+            user_response = self.supabase.table("users").select("gym_media_url, equipment_access").eq("id", user_id).execute()
+
+            if not user_response.data:
+                return json.dumps({"error": "User not found"})
+
+            user_data = user_response.data[0]
+            gym_media_path = user_data.get('gym_media_url')
+
+            # Initialize gym_media_url if not set
+            if not gym_media_path:
+                gym_media_path = f"{user_id}/"
+                self.supabase.table("users").update({"gym_media_url": gym_media_path}).eq("id", user_id).execute()
+
+            # 2. Upload media to gym_media bucket
+            media_bytes = base64.b64decode(media_data)
+            file_extension = 'jpg' if 'image' in mime_type else 'mp4'
+            filename = f"{uuid.uuid4()}.{file_extension}"
+            full_path = f"{gym_media_path}{filename}"  # e.g., "user_id/abc-123.jpg"
+
+            # Upload to gym_media bucket
+            storage_response = self.supabase.storage.from_('gym_media').upload(
+                full_path,
+                media_bytes,
+                {'content-type': mime_type}
+            )
+
+            # Get public URL
+            media_url = self.supabase.storage.from_('gym_media').get_public_url(full_path)
+
+            # 3. Analyze with Gemini Vision Pro
+            system_prompt = """
+You are an expert gym equipment analyzer. Analyze this image/video and identify all visible workout equipment.
+
+INSTRUCTIONS:
+- Identify equipment by specific name (e.g., "Olympic Barbell", "Adjustable Dumbbells", "Lat Pulldown Machine")
+- Categorize by type: "cardio", "strength", "free_weights", "machine", "accessory", "bench"
+- Estimate quantity if multiple units (e.g., "set of 5-50 lbs" for dumbbells)
+- Note special features (e.g., "adjustable", "cable-based", "plate-loaded")
+- Identify environment: "home_gym", "commercial_gym", "outdoor", "apartment"
+- Be specific about brands/models if visible
+- If you see multiple of the same equipment, list them separately
+
+OUTPUT STRICT JSON ONLY (no markdown, no code blocks):
+{
+    "equipment": [
+        {
+            "name": "Equipment Name",
+            "type": "cardio|strength|free_weights|machine|accessory|bench",
+            "quantity": "1" or "set" or "2-5",
+            "details": "Weight range, brand, condition, special features",
+            "confidence": "high|medium|low"
+        }
+    ],
+    "environment": "home_gym|commercial_gym|outdoor|apartment",
+    "total_items": 5
+}
+"""
+
+            # Create multimodal request
+            media_part = Part.from_data(
+                data=base64.b64decode(media_data),
+                mime_type=mime_type
+            )
+
+            response = self.model.generate_content([
+                system_prompt,
+                "Analyze this gym equipment image/video:",
+                media_part
+            ])
+
+            # Parse Gemini response (handle markdown code blocks if present)
+            response_text = response.text.strip()
+            if response_text.startswith('```'):
+                # Remove markdown code blocks
+                response_text = response_text.split('```')[1]
+                if response_text.startswith('json'):
+                    response_text = response_text[4:]
+                response_text = response_text.strip()
+
+            equipment_data = json.loads(response_text)
+
+            # 4. Get existing equipment_access
+            existing_equipment = user_data.get('equipment_access', [])
+            if not isinstance(existing_equipment, list):
+                existing_equipment = []
+
+            # 5. Create new submission entry
+            new_submission = {
+                "id": str(uuid.uuid4()),
+                "timestamp": datetime.utcnow().isoformat(),
+                "media_url": media_url,
+                "media_type": "image" if 'image' in mime_type else "video",
+                "filename": filename,
+                "equipment": equipment_data.get('equipment', []),
+                "environment": equipment_data.get('environment', 'unknown'),
+                "total_items": equipment_data.get('total_items', len(equipment_data.get('equipment', [])))
+            }
+
+            # 6. Append to existing array
+            existing_equipment.append(new_submission)
+
+            # 7. Update users.equipment_access (keep last 100 submissions)
+            updated_equipment = existing_equipment[-100:]
+
+            self.supabase.table("users").update({
+                "equipment_access": updated_equipment
+            }).eq("id", user_id).execute()
+
+            # Log to Langfuse
+            langfuse_context.update_current_trace(
+                user_id=user_id,
+                tags=["equipment_analysis"],
+                metadata={
+                    "equipment_count": len(equipment_data.get('equipment', [])),
+                    "environment": equipment_data.get('environment'),
+                    "media_type": "image" if 'image' in mime_type else "video"
+                }
+            )
+
+            print(f"✅ Equipment analyzed for user {user_id}: {len(equipment_data.get('equipment', []))} items")
+
+            return json.dumps({
+                "success": True,
+                "message": f"Analyzed {len(equipment_data.get('equipment', []))} equipment items!",
+                "submission": new_submission
+            })
+
+        except Exception as e:
+            print(f"❌ Error analyzing equipment: {e}")
+            import traceback
+            traceback.print_exc()
+            return json.dumps({"error": str(e), "success": False})
+
+    def get_equipment_history(self, data):
+        """
+        Fetches user's equipment submission history from equipment_access JSONB.
+        Returns in reverse chronological order (newest first).
+        """
+        try:
+            user_id = data.get('user_id')
+            if not user_id:
+                return json.dumps({"error": "Missing user_id"})
+
+            # Fetch equipment_access from users table
+            response = self.supabase.table("users").select("equipment_access").eq("id", user_id).execute()
+
+            if not response.data:
+                return json.dumps({"success": True, "equipment_history": []})
+
+            equipment_history = response.data[0].get('equipment_access', [])
+
+            if not isinstance(equipment_history, list):
+                equipment_history = []
+
+            # Return in reverse chronological order (newest first)
+            equipment_history_sorted = sorted(
+                equipment_history,
+                key=lambda x: x.get('timestamp', ''),
+                reverse=True
+            )
+
+            return json.dumps({
+                "success": True,
+                "equipment_history": equipment_history_sorted,
+                "total_submissions": len(equipment_history_sorted)
+            })
+
+        except Exception as e:
+            print(f"❌ Error fetching equipment history: {e}")
+            return json.dumps({"error": str(e), "success": False})

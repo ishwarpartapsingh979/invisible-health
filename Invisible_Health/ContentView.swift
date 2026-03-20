@@ -17,7 +17,7 @@ struct ContentView: View {
     @State private var pulseEvaluate: Bool = false
     
     // Tab Selection
-    // 0: Home/Mic, 1: DataFeed, 2: Workout (logging), 3: Summary, 4: Chat, 5: SOS, 6: Preview (tomorrow), 7: Coach, 8: Today (workout)
+    // 0: Home/Mic, 1: DataFeed, 2: Workout (logging), 3: Summary, 4: Chat, 5: SOS, 6: Preview (tomorrow), 7: Coach, 8: Today (workout), 9: Equipment
     @State private var selectedTab: Int = 2
     
     // Image Annotation State (Phase 2.1)
@@ -61,6 +61,8 @@ struct ContentView: View {
                     GlobalCoachView() // Tab 7 — Global Coach
                 case 8:
                     WorkoutTabView() // Tab 8 — Today's Workout
+                case 9:
+                    EquipmentView() // Tab 9 — Equipment
                 default:
                     // Tab 0: Home / Mic Screen
                     micView
@@ -93,6 +95,8 @@ struct ContentView: View {
                         TabButton(icon: "bolt.fill", text: "TODAY", isSelected: selectedTab == 8) { selectedTab = 8 }
 
                         TabButton(icon: "chart.line.uptrend.xyaxis", text: "COACH", isSelected: selectedTab == 7) { selectedTab = 7 }
+
+                        TabButton(icon: "dumbbell", text: "EQUIPMENT", isSelected: selectedTab == 9) { selectedTab = 9 }
 
                         /*
                         TabButton(icon: "brain.head.profile", text: "SUMMARY", isSelected: selectedTab == 3) { selectedTab = 3 }
@@ -159,6 +163,8 @@ struct ContentView: View {
                 selectedTab = 2
             } else if url.absoluteString.contains("summary") {
                 selectedTab = 3
+            } else if url.absoluteString.contains("equipment") {
+                selectedTab = 9
             }
         }
         // Annotation Sheet (Phase 2.1)

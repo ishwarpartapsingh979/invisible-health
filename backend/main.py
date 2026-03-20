@@ -108,6 +108,11 @@ def run_agent(request):
                 response_json = agent.get_menu_mcp(data)
                 return response_json, 200, {'Content-Type': 'application/json'}
 
+            # --- EQUIPMENT ANALYSIS ---
+            if data.get('action') == 'analyze_equipment':
+                response_json = agent.analyze_equipment(data)
+                return response_json, 200, {'Content-Type': 'application/json'}
+
             user_id = data.get('user_id')
             text = data.get('text')
             
@@ -185,6 +190,11 @@ def run_agent(request):
             user_input = request_args.get('input')
             strategies = agent.get_sos_strategies(target_user_id, user_input=user_input)
             return strategies, 200, {'Content-Type': 'application/json'}
+
+        # --- GET EQUIPMENT HISTORY ---
+        if request_args.get('action') == 'get_equipment':
+            equipment_history = agent.get_equipment_history({"user_id": target_user_id})
+            return equipment_history, 200, {'Content-Type': 'application/json'}
 
         # Default: Check Status (Silent Guardian)
         decision = agent.check_user_status(target_user_id, lat=lat, lng=lng, steps=steps)
