@@ -1901,14 +1901,25 @@ RULES:
             full_path = f"{gym_media_path}{filename}"  # e.g., "user_id/abc-123.jpg"
 
             # Upload to gym_media bucket
-            storage_response = self.supabase.storage.from_('gym_media').upload(
-                full_path,
-                media_bytes,
-                {'content-type': mime_type}
-            )
+            try:
+                storage_response = self.supabase.storage.from_('gym_media').upload(
+                    full_path,
+                    media_bytes,
+                    {'content-type': mime_type}
+                )
+                print(f"📤 Uploaded to storage: {full_path}")
+            except Exception as upload_error:
+                print(f"❌ Storage upload error: {upload_error}")
+                return json.dumps({"error": f"Storage upload failed: {str(upload_error)}", "success": False, "message": "Failed to upload media"})
 
-            # Get public URL
+            # Get public URL and clean it
             media_url = self.supabase.storage.from_('gym_media').get_public_url(full_path)
+
+            # Remove trailing query parameters if any
+            if '?' in media_url and media_url.endswith('?'):
+                media_url = media_url.rstrip('?')
+
+            print(f"🔗 Generated media URL: {media_url}")
 
             # 3. Analyze with Gemini Vision Pro
             system_prompt = """
@@ -2084,3 +2095,125 @@ EXAMPLE for 3 resistance bands:
         except Exception as e:
             print(f"❌ Error fetching equipment history: {e}")
             return json.dumps({"error": str(e), "success": False, "equipment_history": [], "total_submissions": 0})
+
+    def delete_equipment(self, data):
+        """
+        Deletes a specific equipment submission by ID.
+        Also deletes the corresponding media file from storage.
+        """
+        try:
+            user_id = data.get('user_id')
+            submission_id = data.get('submission_id')
+
+            if not user_id or not submission_id:
+                return json.dumps({"error": "Missing user_id or submission_id", "success": False})
+
+            # Fetch current equipment_access
+            response = self.supabase.table("users").select("equipment_access, gym_media_url").eq("id", user_id).execute()
+
+            if not response.data:
+                return json.dumps({"error": "User not found", "success": False})
+
+            user_data = response.data[0]
+            equipment_history = user_data.get('equipment_access', [])
+
+            if not isinstance(equipment_history, list):
+                equipment_history = []
+
+            # Find the submission to delete
+            submission_to_delete = None
+            updated_history = []
+
+            for submission in equipment_history:
+                if submission.get('id') == submission_id:
+                    submission_to_delete = submission
+                else:
+                    updated_history.append(submission)
+
+            if not submission_to_delete:
+                return json.dumps({"error": "Submission not found", "success": False})
+
+            # Delete media file from storage
+            try:
+                gym_media_path = user_data.get('gym_media_url', f"{user_id}/")
+                filename = submission_to_delete.get('filename')
+                if filename:
+                    full_path = f"{gym_media_path}{filename}"
+                    self.supabase.storage.from_('gym_media').remove([full_path])
+                    print(f"🗑️ Deleted media file: {full_path}")
+            except Exception as storage_error:
+                print(f"⚠️ Error deleting storage file: {storage_error}")
+                # Continue even if storage deletion fails
+
+            # Update equipment_access in database
+            self.supabase.table("users").update({
+                "equipment_access": updated_history
+            }).eq("id", user_id).execute()
+
+            print(f"✅ Deleted equipment submission {submission_id} for user {user_id}")
+
+            return json.dumps({
+                "success": True,
+                "message": "Equipment deleted successfully",
+                "deleted_id": submission_id
+            })
+
+        except Exception as e:
+            print(f"❌ Error deleting equipment: {e}")
+            import traceback
+            traceback.print_exc()
+            return json.dumps({"error": str(e), "success": False})
+
+    def delete_all_equipment(self, data):
+        """
+        Deletes all equipment submissions for a user.
+        Also deletes all media files from the gym_media bucket.
+        """
+        try:
+            user_id = data.get('user_id')
+
+            if not user_id:
+                return json.dumps({"error": "Missing user_id", "success": False})
+
+            # Fetch current equipment_access
+            response = self.supabase.table("users").select("equipment_access, gym_media_url").eq("id", user_id).execute()
+
+            if not response.data:
+                return json.dumps({"error": "User not found", "success": False})
+
+            user_data = response.data[0]
+            equipment_history = user_data.get('equipment_access', [])
+            gym_media_path = user_data.get('gym_media_url', f"{user_id}/")
+
+            # Delete all media files from storage
+            deleted_count = 0
+            if isinstance(equipment_history, list):
+                for submission in equipment_history:
+                    try:
+                        filename = submission.get('filename')
+                        if filename:
+                            full_path = f"{gym_media_path}{filename}"
+                            self.supabase.storage.from_('gym_media').remove([full_path])
+                            deleted_count += 1
+                    except Exception as storage_error:
+                        print(f"⚠️ Error deleting file {filename}: {storage_error}")
+                        # Continue deleting other files
+
+            # Clear equipment_access in database
+            self.supabase.table("users").update({
+                "equipment_access": []
+            }).eq("id", user_id).execute()
+
+            print(f"🗑️ Deleted all equipment for user {user_id}: {deleted_count} files")
+
+            return json.dumps({
+                "success": True,
+                "message": f"All equipment deleted ({deleted_count} items)",
+                "deleted_count": deleted_count
+            })
+
+        except Exception as e:
+            print(f"❌ Error deleting all equipment: {e}")
+            import traceback
+            traceback.print_exc()
+            return json.dumps({"error": str(e), "success": False})

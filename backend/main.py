@@ -113,6 +113,16 @@ def run_agent(request):
                 response_json = agent.analyze_equipment(data)
                 return response_json, 200, {'Content-Type': 'application/json'}
 
+            # --- DELETE EQUIPMENT ---
+            if data.get('action') == 'delete_equipment':
+                response_json = agent.delete_equipment(data)
+                return response_json, 200, {'Content-Type': 'application/json'}
+
+            # --- DELETE ALL EQUIPMENT ---
+            if data.get('action') == 'delete_all_equipment':
+                response_json = agent.delete_all_equipment(data)
+                return response_json, 200, {'Content-Type': 'application/json'}
+
             user_id = data.get('user_id')
             text = data.get('text')
             

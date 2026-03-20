@@ -32,6 +32,28 @@ struct Equipment: Identifiable, Codable {
     let quantity: String
     let details: String
     let confidence: String
+
+    // Custom decoding to handle quantity as both Int and String
+    enum CodingKeys: String, CodingKey {
+        case name, type, quantity, details, confidence
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decode(String.self, forKey: .name)
+        type = try container.decode(String.self, forKey: .type)
+        details = try container.decode(String.self, forKey: .details)
+        confidence = try container.decode(String.self, forKey: .confidence)
+
+        // Handle quantity as either Int or String
+        if let quantityInt = try? container.decode(Int.self, forKey: .quantity) {
+            quantity = String(quantityInt)
+        } else if let quantityString = try? container.decode(String.self, forKey: .quantity) {
+            quantity = quantityString
+        } else {
+            quantity = "1"
+        }
+    }
 }
 
 struct EquipmentResponse: Codable {
@@ -66,6 +88,18 @@ struct EquipmentHistoryResponse: Codable {
     }
 }
 
+struct DeleteEquipmentResponse: Codable {
+    let success: Bool?
+    let message: String?
+    let deleted_id: String?
+    let deleted_count: Int?
+    let error: String?
+
+    var isSuccess: Bool {
+        return success ?? false
+    }
+}
+
 // MARK: - Main View
 
 struct EquipmentView: View {
@@ -82,6 +116,8 @@ struct EquipmentView: View {
     @State private var errorMessage: String?
     @State private var showError = false
     @State private var selectedSubmission: EquipmentSubmission?
+    @State private var showDeleteAllConfirmation = false
+    @State private var isDeleting = false
 
     var body: some View {
         ZStack {
@@ -96,6 +132,15 @@ struct EquipmentView: View {
                         .foregroundColor(.white)
 
                     Spacer()
+
+                    // Delete All button (only show if there are items)
+                    if !submissions.isEmpty && !isLoading && !isUploading {
+                        Button(action: { showDeleteAllConfirmation = true }) {
+                            Image(systemName: "trash.circle.fill")
+                                .font(.title2)
+                                .foregroundColor(.red)
+                        }
+                    }
 
                     Button(action: { showActionSheet = true }) {
                         Image(systemName: "plus.circle.fill")
@@ -163,6 +208,13 @@ struct EquipmentView: View {
                                     .onTapGesture {
                                         selectedSubmission = submission
                                     }
+                                    .contextMenu {
+                                        Button(role: .destructive) {
+                                            deleteEquipment(submissionId: submission.id)
+                                        } label: {
+                                            Label("Delete", systemImage: "trash")
+                                        }
+                                    }
                             }
                         }
                         .padding()
@@ -226,6 +278,14 @@ struct EquipmentView: View {
         } message: {
             Text(errorMessage ?? "Unknown error occurred")
         }
+        .alert("Delete All Equipment", isPresented: $showDeleteAllConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete All", role: .destructive) {
+                deleteAllEquipment()
+            }
+        } message: {
+            Text("Are you sure you want to delete all \(submissions.count) equipment submissions? This cannot be undone.")
+        }
     }
 
     // MARK: - Load History
@@ -267,10 +327,64 @@ struct EquipmentView: View {
                     if response.isSuccess {
                         // Add new submission to the list
                         if let newSubmission = response.submission {
+                            print("✅ New submission added - Media URL: \(newSubmission.media_url)")
+                            print("   Media Type: \(newSubmission.media_type)")
+                            print("   Equipment count: \(newSubmission.total_items)")
                             self.submissions.insert(newSubmission, at: 0)
                         }
                     } else {
                         self.errorMessage = response.error ?? "Failed to analyze equipment"
+                        self.showError = true
+                    }
+                case .failure(let error):
+                    print("❌ Upload failed: \(error.localizedDescription)")
+                    self.errorMessage = error.localizedDescription
+                    self.showError = true
+                }
+            }
+        }
+    }
+
+    // MARK: - Delete Equipment
+
+    func deleteEquipment(submissionId: String) {
+        isDeleting = true
+
+        AgentManager.shared.deleteEquipment(submissionId: submissionId) { result in
+            DispatchQueue.main.async {
+                isDeleting = false
+
+                switch result {
+                case .success(let response):
+                    if response.isSuccess {
+                        // Remove from local array
+                        self.submissions.removeAll { $0.id == submissionId }
+                    } else {
+                        self.errorMessage = response.error ?? "Failed to delete equipment"
+                        self.showError = true
+                    }
+                case .failure(let error):
+                    self.errorMessage = error.localizedDescription
+                    self.showError = true
+                }
+            }
+        }
+    }
+
+    func deleteAllEquipment() {
+        isDeleting = true
+
+        AgentManager.shared.deleteAllEquipment { result in
+            DispatchQueue.main.async {
+                isDeleting = false
+
+                switch result {
+                case .success(let response):
+                    if response.isSuccess {
+                        // Clear local array
+                        self.submissions.removeAll()
+                    } else {
+                        self.errorMessage = response.error ?? "Failed to delete all equipment"
                         self.showError = true
                     }
                 case .failure(let error):
@@ -339,6 +453,10 @@ struct EquipmentCard: View {
                                         .foregroundColor(.gray)
                                 }
                             )
+                            .onAppear {
+                                print("❌ Image failed to load: \(submission.media_url)")
+                                print("   Error: \(error)")
+                            }
                     @unknown default:
                         EmptyView()
                     }

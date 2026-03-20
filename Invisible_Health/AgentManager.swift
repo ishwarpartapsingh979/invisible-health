@@ -1489,4 +1489,107 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             }
         }.resume()
     }
+
+    // MARK: - Delete Equipment
+
+    func deleteEquipment(submissionId: String, userId: String = "00000000-0000-0000-0000-000000000001", completion: @escaping (Result<DeleteEquipmentResponse, Error>) -> Void) {
+        guard let url = URL(string: agentURL) else {
+            completion(.failure(NSError(domain: "Invalid URL", code: -1, userInfo: nil)))
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let body: [String: Any] = [
+            "action": "delete_equipment",
+            "user_id": userId,
+            "submission_id": submissionId
+        ]
+
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
+        } catch {
+            completion(.failure(error))
+            return
+        }
+
+        print("🗑️ Deleting equipment submission: \(submissionId)")
+
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                completion(.failure(error))
+                return
+            }
+
+            guard let data = data else {
+                completion(.failure(NSError(domain: "No data received", code: -1, userInfo: nil)))
+                return
+            }
+
+            do {
+                let decoder = JSONDecoder()
+                let deleteResponse = try decoder.decode(DeleteEquipmentResponse.self, from: data)
+                print("✅ Equipment deleted: \(deleteResponse.message ?? "Success")")
+                completion(.success(deleteResponse))
+            } catch {
+                print("❌ Decoding error: \(error)")
+                if let errorString = String(data: data, encoding: .utf8) {
+                    print("Raw response: \(errorString)")
+                }
+                completion(.failure(error))
+            }
+        }.resume()
+    }
+
+    func deleteAllEquipment(userId: String = "00000000-0000-0000-0000-000000000001", completion: @escaping (Result<DeleteEquipmentResponse, Error>) -> Void) {
+        guard let url = URL(string: agentURL) else {
+            completion(.failure(NSError(domain: "Invalid URL", code: -1, userInfo: nil)))
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let body: [String: Any] = [
+            "action": "delete_all_equipment",
+            "user_id": userId
+        ]
+
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
+        } catch {
+            completion(.failure(error))
+            return
+        }
+
+        print("🗑️ Deleting all equipment for user: \(userId)")
+
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                completion(.failure(error))
+                return
+            }
+
+            guard let data = data else {
+                completion(.failure(NSError(domain: "No data received", code: -1, userInfo: nil)))
+                return
+            }
+
+            do {
+                let decoder = JSONDecoder()
+                let deleteResponse = try decoder.decode(DeleteEquipmentResponse.self, from: data)
+                print("✅ All equipment deleted: \(deleteResponse.message ?? "Success")")
+                completion(.success(deleteResponse))
+            } catch {
+                print("❌ Decoding error: \(error)")
+                if let errorString = String(data: data, encoding: .utf8) {
+                    print("Raw response: \(errorString)")
+                }
+                completion(.failure(error))
+            }
+        }.resume()
+    }
 }
