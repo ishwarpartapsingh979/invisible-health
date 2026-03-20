@@ -11,7 +11,7 @@ struct EquipmentSubmission: Identifiable, Codable {
     let media_type: String
     let filename: String
     let equipment: [Equipment]
-    let environment: String
+    let environment: String?
     let total_items: Int
 
     var displayDate: String {
@@ -23,10 +23,15 @@ struct EquipmentSubmission: Identifiable, Codable {
         }
         return timestamp
     }
+
+    var safeEnvironment: String {
+        return environment ?? "unknown"
+    }
 }
 
 struct Equipment: Identifiable, Codable {
-    var id: String { name + type }
+    // Use name + type + details to create unique ID (since multiple items can have same name+type)
+    var id: String { name + type + details }
     let name: String
     let type: String
     let quantity: String
@@ -422,8 +427,10 @@ struct EquipmentCard: View {
                 }
                 .cornerRadius(10)
             } else {
-                // Image
-                AsyncImage(url: URL(string: submission.media_url)) { phase in
+                // Image with better error handling
+                let cleanedURL = submission.media_url.trimmingCharacters(in: CharacterSet(charactersIn: "?"))
+
+                AsyncImage(url: URL(string: cleanedURL)) { phase in
                     switch phase {
                     case .empty:
                         Rectangle()
@@ -433,6 +440,9 @@ struct EquipmentCard: View {
                                 ProgressView()
                                     .progressViewStyle(CircularProgressViewStyle(tint: .orange))
                             )
+                            .onAppear {
+                                print("⏳ Loading image: \(cleanedURL)")
+                            }
                     case .success(let image):
                         image
                             .resizable()
@@ -440,22 +450,41 @@ struct EquipmentCard: View {
                             .frame(height: 120)
                             .frame(maxWidth: .infinity)
                             .background(Color.black)
+                            .onAppear {
+                                print("✅ Image loaded successfully: \(cleanedURL)")
+                            }
                     case .failure(let error):
                         Rectangle()
                             .fill(Color.gray.opacity(0.2))
                             .frame(height: 120)
                             .overlay(
-                                VStack {
+                                VStack(spacing: 4) {
                                     Image(systemName: "exclamationmark.triangle")
                                         .foregroundColor(.orange)
                                     Text("Failed to load")
                                         .font(.caption2)
                                         .foregroundColor(.gray)
+                                    Text("Tap to retry")
+                                        .font(.caption2)
+                                        .foregroundColor(.gray.opacity(0.7))
                                 }
                             )
                             .onAppear {
-                                print("❌ Image failed to load: \(submission.media_url)")
+                                print("❌ Image failed to load")
+                                print("   Original URL: \(submission.media_url)")
+                                print("   Cleaned URL: \(cleanedURL)")
                                 print("   Error: \(error)")
+
+                                // Check if URL is valid
+                                if URL(string: cleanedURL) == nil {
+                                    print("   ⚠️ INVALID URL FORMAT")
+                                }
+                            }
+                            .onTapGesture {
+                                // User can tap to open in browser for debugging
+                                if let url = URL(string: cleanedURL) {
+                                    print("🔗 Opening URL in browser: \(cleanedURL)")
+                                }
                             }
                     @unknown default:
                         EmptyView()
@@ -487,7 +516,7 @@ struct EquipmentCard: View {
             }
 
             // Environment Badge
-            Text(submission.environment.replacingOccurrences(of: "_", with: " ").capitalized)
+            Text(submission.safeEnvironment.replacingOccurrences(of: "_", with: " ").capitalized)
                 .font(.caption2)
                 .foregroundColor(.gray)
 
@@ -568,7 +597,7 @@ struct EquipmentDetailView: View {
                                 Text("Environment:")
                                     .foregroundColor(.gray)
                                 Spacer()
-                                Text(submission.environment.replacingOccurrences(of: "_", with: " ").capitalized)
+                                Text(submission.safeEnvironment.replacingOccurrences(of: "_", with: " ").capitalized)
                                     .foregroundColor(.white)
                                     .fontWeight(.semibold)
                             }

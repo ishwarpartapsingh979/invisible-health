@@ -2011,16 +2011,23 @@ EXAMPLE for 3 resistance bands:
             if not isinstance(existing_equipment, list):
                 existing_equipment = []
 
-            # 5. Create new submission entry
+            # 5. Create new submission entry with validation
+            equipment_list = equipment_data.get('equipment', [])
+            environment_value = equipment_data.get('environment', 'unknown')
+
+            # Ensure environment is never null
+            if environment_value is None or environment_value == "":
+                environment_value = "unknown"
+
             new_submission = {
                 "id": str(uuid.uuid4()),
                 "timestamp": datetime.utcnow().isoformat(),
                 "media_url": media_url,
                 "media_type": "image" if 'image' in mime_type else "video",
                 "filename": filename,
-                "equipment": equipment_data.get('equipment', []),
-                "environment": equipment_data.get('environment', 'unknown'),
-                "total_items": equipment_data.get('total_items', len(equipment_data.get('equipment', [])))
+                "equipment": equipment_list if isinstance(equipment_list, list) else [],
+                "environment": environment_value,
+                "total_items": equipment_data.get('total_items', len(equipment_list) if isinstance(equipment_list, list) else 0)
             }
 
             # 6. Append to existing array
