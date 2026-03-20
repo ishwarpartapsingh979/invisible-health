@@ -34,17 +34,35 @@ struct Equipment: Identifiable, Codable {
 }
 
 struct EquipmentResponse: Codable {
-    let success: Bool
+    let success: Bool?
     let message: String?
     let submission: EquipmentSubmission?
     let error: String?
+
+    // Default to false if not present
+    var isSuccess: Bool {
+        return success ?? false
+    }
 }
 
 struct EquipmentHistoryResponse: Codable {
-    let success: Bool
-    let equipment_history: [EquipmentSubmission]
-    let total_submissions: Int
+    let success: Bool?
+    let equipment_history: [EquipmentSubmission]?
+    let total_submissions: Int?
     let error: String?
+
+    // Default values
+    var isSuccess: Bool {
+        return success ?? false
+    }
+
+    var submissions: [EquipmentSubmission] {
+        return equipment_history ?? []
+    }
+
+    var count: Int {
+        return total_submissions ?? 0
+    }
 }
 
 // MARK: - Main View
@@ -176,25 +194,25 @@ struct EquipmentView: View {
             )
         }
         .sheet(isPresented: $showCamera) {
-            ImagePicker(sourceType: .camera) { image in
+            EquipmentImagePicker(sourceType: .camera) { image in
                 selectedImage = image
                 uploadEquipment(image: image)
             }
         }
         .sheet(isPresented: $showGallery) {
-            ImagePicker(sourceType: .photoLibrary) { image in
+            EquipmentImagePicker(sourceType: .photoLibrary) { image in
                 selectedImage = image
                 uploadEquipment(image: image)
             }
         }
         .sheet(isPresented: $showVideoCamera) {
-            VideoPicker(sourceType: .camera) { videoURL in
+            EquipmentVideoPicker(sourceType: .camera) { videoURL in
                 selectedVideoURL = videoURL
                 uploadEquipment(videoURL: videoURL)
             }
         }
         .sheet(isPresented: $showVideoLibrary) {
-            VideoPicker(sourceType: .photoLibrary) { videoURL in
+            EquipmentVideoPicker(sourceType: .photoLibrary) { videoURL in
                 selectedVideoURL = videoURL
                 uploadEquipment(videoURL: videoURL)
             }
@@ -220,8 +238,8 @@ struct EquipmentView: View {
 
                 switch result {
                 case .success(let response):
-                    if response.success {
-                        self.submissions = response.equipment_history
+                    if response.isSuccess {
+                        self.submissions = response.submissions
                     } else {
                         self.errorMessage = response.error ?? "Failed to load equipment"
                         self.showError = true
@@ -245,7 +263,7 @@ struct EquipmentView: View {
 
                 switch result {
                 case .success(let response):
-                    if response.success {
+                    if response.isSuccess {
                         // Add new submission to the list
                         if let newSubmission = response.submission {
                             self.submissions.insert(newSubmission, at: 0)
@@ -495,7 +513,7 @@ struct EquipmentRow: View {
 
 // MARK: - Image Picker for Equipment
 
-struct ImagePicker: UIViewControllerRepresentable {
+struct EquipmentImagePicker: UIViewControllerRepresentable {
     var sourceType: UIImagePickerController.SourceType = .photoLibrary
     var onImagePicked: (UIImage) -> Void
 
@@ -516,9 +534,9 @@ struct ImagePicker: UIViewControllerRepresentable {
     }
 
     class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
-        var parent: ImagePicker
+        var parent: EquipmentImagePicker
 
-        init(_ parent: ImagePicker) {
+        init(_ parent: EquipmentImagePicker) {
             self.parent = parent
         }
 
@@ -533,7 +551,7 @@ struct ImagePicker: UIViewControllerRepresentable {
 
 // MARK: - Video Picker for Equipment
 
-struct VideoPicker: UIViewControllerRepresentable {
+struct EquipmentVideoPicker: UIViewControllerRepresentable {
     var sourceType: UIImagePickerController.SourceType = .photoLibrary
     var onVideoPicked: (URL) -> Void
 
@@ -556,9 +574,9 @@ struct VideoPicker: UIViewControllerRepresentable {
     }
 
     class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
-        var parent: VideoPicker
+        var parent: EquipmentVideoPicker
 
-        init(_ parent: VideoPicker) {
+        init(_ parent: EquipmentVideoPicker) {
             self.parent = parent
         }
 

@@ -1436,6 +1436,10 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
                 completion(.success(equipmentResponse))
             } catch {
                 print("❌ Decoding error: \(error)")
+                // Try to parse as plain error response
+                if let errorString = String(data: data, encoding: .utf8) {
+                    print("Raw response: \(errorString)")
+                }
                 completion(.failure(error))
             }
         }.resume()
@@ -1473,10 +1477,14 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             do {
                 let decoder = JSONDecoder()
                 let historyResponse = try decoder.decode(EquipmentHistoryResponse.self, from: data)
-                print("✅ Equipment history loaded: \(historyResponse.total_submissions) submissions")
+                print("✅ Equipment history loaded: \(historyResponse.count) submissions")
                 completion(.success(historyResponse))
             } catch {
                 print("❌ Decoding error: \(error)")
+                // Try to parse as plain error response
+                if let errorString = String(data: data, encoding: .utf8) {
+                    print("Raw response: \(errorString)")
+                }
                 completion(.failure(error))
             }
         }.resume()

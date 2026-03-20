@@ -1878,13 +1878,13 @@ RULES:
             mime_type = data.get('mime_type', 'image/jpeg')
 
             if not user_id or not media_data:
-                return json.dumps({"error": "Missing user_id or media_data"})
+                return json.dumps({"error": "Missing user_id or media_data", "success": False, "message": "Missing required parameters"})
 
             # 1. Get or set user's gym_media_url (folder path in bucket)
             user_response = self.supabase.table("users").select("gym_media_url, equipment_access").eq("id", user_id).execute()
 
             if not user_response.data:
-                return json.dumps({"error": "User not found"})
+                return json.dumps({"error": "User not found", "success": False, "message": "User does not exist in database"})
 
             user_data = user_response.data[0]
             gym_media_path = user_data.get('gym_media_url')
@@ -2022,13 +2022,13 @@ OUTPUT STRICT JSON ONLY (no markdown, no code blocks):
         try:
             user_id = data.get('user_id')
             if not user_id:
-                return json.dumps({"error": "Missing user_id"})
+                return json.dumps({"error": "Missing user_id", "success": False, "equipment_history": [], "total_submissions": 0})
 
             # Fetch equipment_access from users table
             response = self.supabase.table("users").select("equipment_access").eq("id", user_id).execute()
 
             if not response.data:
-                return json.dumps({"success": True, "equipment_history": []})
+                return json.dumps({"success": True, "equipment_history": [], "total_submissions": 0})
 
             equipment_history = response.data[0].get('equipment_access', [])
 
@@ -2050,4 +2050,4 @@ OUTPUT STRICT JSON ONLY (no markdown, no code blocks):
 
         except Exception as e:
             print(f"❌ Error fetching equipment history: {e}")
-            return json.dumps({"error": str(e), "success": False})
+            return json.dumps({"error": str(e), "success": False, "equipment_history": [], "total_submissions": 0})
