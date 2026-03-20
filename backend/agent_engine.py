@@ -1912,30 +1912,63 @@ RULES:
 
             # 3. Analyze with Gemini Vision Pro
             system_prompt = """
-You are an expert gym equipment analyzer. Analyze this image/video and identify all visible workout equipment.
+You are an expert gym equipment analyzer. Analyze this image/video and identify EACH INDIVIDUAL piece of equipment separately.
 
-INSTRUCTIONS:
-- Identify equipment by specific name (e.g., "Olympic Barbell", "Adjustable Dumbbells", "Lat Pulldown Machine")
-- Categorize by type: "cardio", "strength", "free_weights", "machine", "accessory", "bench"
-- Estimate quantity if multiple units (e.g., "set of 5-50 lbs" for dumbbells)
-- Note special features (e.g., "adjustable", "cable-based", "plate-loaded")
-- Identify environment: "home_gym", "commercial_gym", "outdoor", "apartment"
-- Be specific about brands/models if visible
-- If you see multiple of the same equipment, list them separately
+CRITICAL INSTRUCTIONS:
+- Count and list EACH item individually - do NOT group identical items together
+- For resistance bands: Look carefully at COLOR, THICKNESS, and any printed text/markings
+  * Different colors usually mean different resistance levels (e.g., red=light, black=medium, blue=heavy)
+  * List each band separately with its unique characteristics
+  * Common colors: Yellow (lightest), Red (light), Green (medium), Blue (heavy), Black (extra heavy)
+- For dumbbells/weights: Note the EXACT weight if visible (look for numbers printed on them)
+- For multiple similar items: Create separate entries for EACH one with their specific details
+- Be specific about brands/models if visible on the equipment
+- Note condition: new, used, worn, damaged
+
+IDENTIFICATION CHECKLIST:
+1. Count total number of distinct items
+2. Examine each item for unique characteristics (color, size, markings, weight)
+3. Create ONE entry per physical item (not per category)
+4. In "details" field, describe what makes this item unique
+
+EQUIPMENT TYPES:
+- "cardio": treadmill, bike, rower, elliptical
+- "strength": cable machines, smith machine, power rack
+- "free_weights": dumbbells, barbells, kettlebells, weight plates
+- "machine": leg press, chest press, lat pulldown
+- "accessory": resistance bands, yoga mat, foam roller, pull-up bar, ab wheel
+- "bench": flat bench, adjustable bench, decline bench
+
+ENVIRONMENT:
+- "home_gym": residential setting, limited equipment
+- "commercial_gym": gym facility with extensive equipment
+- "outdoor": park, outdoor fitness area
+- "apartment": compact space, minimal equipment
 
 OUTPUT STRICT JSON ONLY (no markdown, no code blocks):
 {
     "equipment": [
         {
-            "name": "Equipment Name",
+            "name": "Specific equipment name",
             "type": "cardio|strength|free_weights|machine|accessory|bench",
-            "quantity": "1" or "set" or "2-5",
-            "details": "Weight range, brand, condition, special features",
+            "quantity": "1",
+            "details": "Exact color, resistance level/weight, brand, unique markings, condition",
             "confidence": "high|medium|low"
         }
     ],
     "environment": "home_gym|commercial_gym|outdoor|apartment",
-    "total_items": 5
+    "total_items": <count of individual items>
+}
+
+EXAMPLE for 3 resistance bands:
+{
+    "equipment": [
+        {"name": "Resistance Band", "type": "accessory", "quantity": "1", "details": "Red color, light resistance (15 lbs equivalent), fabric loop style", "confidence": "high"},
+        {"name": "Resistance Band", "type": "accessory", "quantity": "1", "details": "Blue color, heavy resistance (25 lbs equivalent), fabric loop style", "confidence": "high"},
+        {"name": "Resistance Band", "type": "accessory", "quantity": "1", "details": "Black color, extra heavy resistance (35 lbs equivalent), fabric loop style", "confidence": "high"}
+    ],
+    "environment": "home_gym",
+    "total_items": 3
 }
 """
 

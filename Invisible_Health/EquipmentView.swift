@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import AVKit
 
 // MARK: - Data Models
 
@@ -288,38 +289,64 @@ struct EquipmentCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Image
-            AsyncImage(url: URL(string: submission.media_url)) { phase in
-                switch phase {
-                case .empty:
+            // Image or Video
+            if submission.media_type == "video" {
+                // Video thumbnail
+                ZStack {
                     Rectangle()
                         .fill(Color.gray.opacity(0.2))
                         .frame(height: 120)
-                        .overlay(
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .orange))
-                        )
-                case .success(let image):
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(height: 120)
-                        .clipped()
-                case .failure:
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.2))
-                        .frame(height: 120)
-                        .overlay(
-                            Image(systemName: "photo")
-                                .foregroundColor(.gray)
-                        )
-                @unknown default:
-                    EmptyView()
-                }
-            }
-            .cornerRadius(10)
 
-            // Equipment Count
+                    VStack {
+                        Image(systemName: "play.circle.fill")
+                            .font(.system(size: 40))
+                            .foregroundColor(.white)
+                        Text("VIDEO")
+                            .font(.caption2)
+                            .foregroundColor(.white)
+                    }
+                }
+                .cornerRadius(10)
+            } else {
+                // Image
+                AsyncImage(url: URL(string: submission.media_url)) { phase in
+                    switch phase {
+                    case .empty:
+                        Rectangle()
+                            .fill(Color.gray.opacity(0.2))
+                            .frame(height: 120)
+                            .overlay(
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .orange))
+                            )
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(height: 120)
+                            .frame(maxWidth: .infinity)
+                            .background(Color.black)
+                    case .failure(let error):
+                        Rectangle()
+                            .fill(Color.gray.opacity(0.2))
+                            .frame(height: 120)
+                            .overlay(
+                                VStack {
+                                    Image(systemName: "exclamationmark.triangle")
+                                        .foregroundColor(.orange)
+                                    Text("Failed to load")
+                                        .font(.caption2)
+                                        .foregroundColor(.gray)
+                                }
+                            )
+                    @unknown default:
+                        EmptyView()
+                    }
+                }
+                .cornerRadius(10)
+            }
+
+            // Equipment Count & Media Type
             HStack {
                 Image(systemName: "dumbbell.fill")
                     .font(.caption)
@@ -328,6 +355,17 @@ struct EquipmentCard: View {
                 Text("\(submission.total_items) items")
                     .font(.caption)
                     .foregroundColor(.white)
+
+                Spacer()
+
+                // Media type badge
+                HStack(spacing: 3) {
+                    Image(systemName: submission.media_type == "video" ? "video.fill" : "photo.fill")
+                        .font(.caption2)
+                    Text(submission.media_type.uppercased())
+                        .font(.caption2)
+                }
+                .foregroundColor(.orange)
             }
 
             // Environment Badge
@@ -359,27 +397,50 @@ struct EquipmentDetailView: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
-                        // Image
-                        AsyncImage(url: URL(string: submission.media_url)) { phase in
-                            switch phase {
-                            case .success(let image):
-                                image
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fit)
+                        // Image or Video
+                        if submission.media_type == "video" {
+                            if let url = URL(string: submission.media_url) {
+                                VideoPlayer(player: AVPlayer(url: url))
+                                    .frame(height: 300)
                                     .cornerRadius(15)
-                            case .failure:
+                            } else {
                                 Rectangle()
                                     .fill(Color.gray.opacity(0.2))
-                                    .frame(height: 200)
+                                    .frame(height: 300)
                                     .overlay(
-                                        Image(systemName: "photo")
+                                        Text("Invalid video URL")
                                             .foregroundColor(.gray)
                                     )
-                            case .empty:
-                                ProgressView()
-                                    .frame(height: 200)
-                            @unknown default:
-                                EmptyView()
+                                    .cornerRadius(15)
+                            }
+                        } else {
+                            // Image
+                            AsyncImage(url: URL(string: submission.media_url)) { phase in
+                                switch phase {
+                                case .success(let image):
+                                    image
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fit)
+                                        .cornerRadius(15)
+                                case .failure:
+                                    Rectangle()
+                                        .fill(Color.gray.opacity(0.2))
+                                        .frame(height: 200)
+                                        .overlay(
+                                            VStack {
+                                                Image(systemName: "exclamationmark.triangle")
+                                                    .foregroundColor(.orange)
+                                                Text("Failed to load image")
+                                                    .font(.caption)
+                                                    .foregroundColor(.gray)
+                                            }
+                                        )
+                                case .empty:
+                                    ProgressView()
+                                        .frame(height: 200)
+                                @unknown default:
+                                    EmptyView()
+                                }
                             }
                         }
 
