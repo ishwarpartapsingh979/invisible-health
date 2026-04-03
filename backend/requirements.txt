@@ -22,3 +22,7 @@ openai==1.59.5
 pydantic==2.10.5
 # 11. pydub: For audio format conversion to m4a
 pydub==0.25.1
+# 12. aiohttp: Async WebSocket server for Gemini Live streaming
+aiohttp==3.9.3
+# 13. google-genai: New Gemini SDK with Live API support
+google-genai==0.2.2
