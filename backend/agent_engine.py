@@ -7,6 +7,9 @@ from supabase import create_client, Client
 from tools.google_tools import GoogleTools  # <--- NEW: Import the Eyes
 from langfuse.decorators import observe  # <--- NEW: Import Observer
 from grocery_tools import GroceryTools  # <--- NEW: Import Grocery/Food MCP Tools
+from dad_os_engine import DadOSEngine  # <--- NEW: Import Dad OS Rule Matching Engine
+from exercise_selector import ExerciseSelector  # <--- NEW: Import Exercise Selector
+from gemini_flash_live import GeminiFlashLive  # <--- NEW: Import Gemini Flash Live
 from rule_extractor import (  # <--- NEW: Import Dad OS Rule Extractor
     convert_to_m4a,
     upload_to_storage,
@@ -48,6 +51,30 @@ class NutritionAgent:
         except Exception as e:
             print(f"⚠️ MCP Tools initialization failed: {str(e)}")
             self.grocery_tools = None
+
+        # --- 5. SETUP DAD OS ENGINE (Rule Matching) ---
+        try:
+            self.dad_os_engine = DadOSEngine(supabase=self.supabase)
+            print("✅ Dad OS Rule Matching Engine initialized")
+        except Exception as e:
+            print(f"⚠️ Dad OS Engine initialization failed: {str(e)}")
+            self.dad_os_engine = None
+
+        # --- 6. SETUP EXERCISE SELECTOR ---
+        try:
+            self.exercise_selector = ExerciseSelector(supabase=self.supabase)
+            print("✅ Exercise Selector initialized")
+        except Exception as e:
+            print(f"⚠️ Exercise Selector initialization failed: {str(e)}")
+            self.exercise_selector = None
+
+        # --- 7. SETUP GEMINI FLASH LIVE (Voice Conversations) ---
+        try:
+            self.gemini_flash = GeminiFlashLive(supabase=self.supabase)
+            print("✅ Gemini Flash Live initialized")
+        except Exception as e:
+            print(f"⚠️ Gemini Flash Live initialization failed: {str(e)}")
+            self.gemini_flash = None
     @observe(as_type="generation")
     def check_user_status(self, user_id: str, lat: float = None, lng: float = None, steps: int = None):
         """
@@ -959,6 +986,82 @@ class NutritionAgent:
             else:
                 print("📝 No optional context provided")
 
+            # --- DAD OS RULE MATCHING (NEW) ---
+            dad_rules_section = ""
+            dad_context = {}
+
+            if self.dad_os_engine:
+                try:
+                    # Build self-report from optional_context if available
+                    self_report = {}
+                    if optional_context:
+                        # Parse optional context for self-report signals
+                        context_lower = optional_context.lower()
+
+                        # Extract energy level (if mentioned)
+                        if "tired" in context_lower or "exhausted" in context_lower:
+                            self_report['energy_level'] = 2
+                            self_report['physical_state'] = 'very tired'
+                        elif "fatigued" in context_lower:
+                            self_report['energy_level'] = 3
+                            self_report['physical_state'] = 'fatigued'
+
+                        # Extract pain (if mentioned)
+                        if "knee" in context_lower:
+                            self_report['pain_location'] = 'knee'
+                        if "hamstring" in context_lower:
+                            self_report['pain_location'] = 'hamstring'
+                        if "pain" in context_lower:
+                            self_report['pain_severity'] = 5  # Default moderate
+
+                        # Extract feeling
+                        if "rhythm" in context_lower or "good" in context_lower:
+                            self_report['subjective_feeling'] = 'in the rhythm'
+
+                    # Match rules against current state
+                    matched_rules, dad_context = self.dad_os_engine.match_rules(
+                        user_id=user_id,
+                        self_report=self_report if self_report else None,
+                        current_hrv=hrv,
+                        current_rhr=rhr
+                    )
+
+                    if matched_rules:
+                        print(f"🎯 Dad OS: {len(matched_rules)} rules triggered")
+
+                        # Build rules section for prompt
+                        vetoes = []
+                        forces = []
+                        rationales = []
+
+                        for rule in matched_rules:
+                            vetoes.extend(rule['action_vetoes'])
+                            forces.extend(rule['action_forces'])
+                            rationales.append(rule['veteran_rationale'])
+
+                        dad_rules_section = f"""
+=== DAD'S RULES (VETERAN GUIDANCE) ===
+{len(matched_rules)} rule(s) triggered based on athlete's state:
+
+VETOES (DO NOT PRESCRIBE):
+{chr(10).join(['  - ' + v for v in vetoes]) if vetoes else '  None'}
+
+FORCES (MUST INCLUDE):
+{chr(10).join(['  - ' + f for f in forces]) if forces else '  None'}
+
+RATIONALE:
+{chr(10).join(['  • ' + r for r in rationales])}
+
+CRITICAL: Dad's rules override all other signals. If a veto is listed, you MUST NOT prescribe that exercise type. If a force is listed, you MUST include it in the prescription.
+"""
+                        print(f"📋 Vetoes: {vetoes}")
+                        print(f"✅ Forces: {forces}")
+                    else:
+                        print("🎯 Dad OS: No rules triggered")
+
+                except Exception as e:
+                    print(f"⚠️ Dad OS rule matching failed: {e}")
+
             prompt = f"""
 You are an elite Athletic Performance Director making today's training prescription.
 You have access to the athlete's full biometric morning audit. Be precise, direct, and decisive.
@@ -996,6 +1099,8 @@ Long-Term Capacity:
 
 === ATHLETE NOTES (OPTIONAL CONTEXT) ===
   {optional_context if optional_context else "None provided"}
+
+{dad_rules_section}
 
 === YOUR TASK ===
 Using ALL the signals above AND the athlete's optional notes (if any), prescribe today's training. Apply this decision logic:
@@ -2386,3 +2491,278 @@ EXAMPLE for 3 resistance bands:
                 "error": f"Unexpected error: {str(e)}",
                 "stage": "unknown"
             })
+
+    # --- DAD OS: VOICE CONVERSATION ENDPOINTS ---
+    @observe(as_type="generation")
+    def dad_start_conversation(self, data: dict):
+        """
+        Start a new Dad OS voice conversation session
+
+        Expected data:
+        {
+            "user_id": str,
+            "conversation_type": str (default: "morning_checkin")
+        }
+
+        Returns:
+        {
+            "session_id": str,
+            "greeting": str,
+            "next_step": str
+        }
+        """
+        try:
+            if not self.gemini_flash:
+                return json.dumps({"error": "Gemini Flash Live not initialized"})
+
+            user_id = data.get("user_id")
+            conversation_type = data.get("conversation_type", "morning_checkin")
+
+            if not user_id:
+                return json.dumps({"error": "Missing user_id"})
+
+            result = self.gemini_flash.start_conversation(user_id, conversation_type)
+
+            return json.dumps(result)
+
+        except Exception as e:
+            print(f"❌ Error in dad_start_conversation: {e}")
+            import traceback
+            traceback.print_exc()
+            return json.dumps({"error": str(e)})
+
+    @observe(as_type="generation")
+    def dad_process_input(self, data: dict):
+        """
+        Process user's voice/text input in ongoing conversation
+
+        Expected data:
+        {
+            "session_id": str,
+            "user_id": str,
+            "text_input": str (for now, until audio streaming implemented),
+            "current_step": str (energy_level, pain_check, subjective_feeling, etc.),
+            "conversation_type": str (optional: "morning_checkin", "manual_workout_logging", or "workout_annotation")
+        }
+
+        Returns:
+        {
+            "response_text": str,
+            "next_step": str,
+            "self_report": dict (for morning_checkin),
+            "exercises": list (if ready),
+            "logged": bool (for manual_workout_logging),
+            "workout": dict (for workout_annotation),
+            "annotated": bool (for workout_annotation)
+        }
+        """
+        try:
+            if not self.gemini_flash:
+                return json.dumps({"error": "Gemini Flash Live not initialized"})
+
+            session_id = data.get("session_id")
+            user_id = data.get("user_id")
+            text_input = data.get("text_input")
+            current_step = data.get("current_step", "energy_level")
+            conversation_type = data.get("conversation_type", "morning_checkin")
+
+            if not session_id or not user_id:
+                return json.dumps({"error": "Missing session_id or user_id"})
+
+            # Route to appropriate handler based on conversation type
+            if conversation_type == "manual_workout_logging":
+                result = self.gemini_flash.process_manual_workout_logging(
+                    session_id=session_id,
+                    user_id=user_id,
+                    text_input=text_input,
+                    current_step=current_step
+                )
+            elif conversation_type == "workout_annotation":
+                result = self.gemini_flash.process_workout_annotation(
+                    session_id=session_id,
+                    user_id=user_id,
+                    text_input=text_input,
+                    current_step=current_step
+                )
+            else:
+                # Default: morning checkin
+                result = self.gemini_flash.process_voice_input(
+                    session_id=session_id,
+                    user_id=user_id,
+                    text_input=text_input,
+                    current_step=current_step
+                )
+
+            return json.dumps(result)
+
+        except Exception as e:
+            print(f"❌ Error in dad_process_input: {e}")
+            import traceback
+            traceback.print_exc()
+            return json.dumps({"error": str(e)})
+
+    @observe(as_type="generation")
+    def dad_explain_exercise(self, data: dict):
+        """
+        Get Dad's explanation of a specific exercise with form cues
+
+        Expected data:
+        {
+            "exercise_id": str,
+            "user_context": dict (optional, contains energy_level, pain, etc.)
+        }
+
+        Returns:
+        {
+            "exercise_name": str,
+            "explanation": str,
+            "images": list,
+            "instructions": list
+        }
+        """
+        try:
+            if not self.gemini_flash:
+                return json.dumps({"error": "Gemini Flash Live not initialized"})
+
+            exercise_id = data.get("exercise_id")
+            user_context = data.get("user_context")
+
+            if not exercise_id:
+                return json.dumps({"error": "Missing exercise_id"})
+
+            # Get exercise from database
+            result = self.supabase.table('exercises') \
+                .select('*') \
+                .eq('id', exercise_id) \
+                .execute()
+
+            if not result.data:
+                return json.dumps({"error": "Exercise not found"})
+
+            exercise = result.data[0]
+
+            # Generate Dad's explanation
+            explanation = self.gemini_flash.explain_exercise(exercise, user_context)
+
+            return json.dumps({
+                "exercise_name": exercise.get('name'),
+                "explanation": explanation,
+                "images": exercise.get('images', []),
+                "instructions": exercise.get('instructions', []),
+                "equipment": exercise.get('equipment'),
+                "level": exercise.get('level'),
+                "primary_muscles": exercise.get('primary_muscles')
+            })
+
+        except Exception as e:
+            print(f"❌ Error in dad_explain_exercise: {e}")
+            import traceback
+            traceback.print_exc()
+            return json.dumps({"error": str(e)})
+
+    # --- APPLE WATCH WORKOUT SYNC ---
+    @observe(as_type="generation")
+    def sync_apple_watch_workout(self, data: dict):
+        """
+        Sync Apple Watch workout to Supabase
+
+        Expected data:
+        {
+            "user_id": str,
+            "healthkit_uuid": str,
+            "workout_name": str,
+            "workout_type": str (optional),
+            "is_indoor": bool,
+            "start_date": str (ISO format),
+            "end_date": str (ISO format),
+            "duration_seconds": float,
+            "active_calories": float,
+            "avg_hr": float,
+            "max_hr": float,
+            "min_hr": float,
+            "distance_meters": float (optional),
+            "avg_cadence": float (optional),
+            "avg_stride_length": float (optional),
+            "avg_oscillation_cm": float (optional),
+            "avg_gct_ms": float (optional),
+            "avg_power_watts": float (optional),
+            "total_strokes": float (optional),
+            "raw_metrics": dict (optional)
+        }
+
+        Returns:
+        {
+            "success": bool,
+            "workout_id": str (if success),
+            "message": str
+        }
+        """
+        try:
+            user_id = data.get("user_id")
+            healthkit_uuid = data.get("healthkit_uuid")
+
+            if not user_id or not healthkit_uuid:
+                return json.dumps({"success": False, "error": "Missing user_id or healthkit_uuid"})
+
+            # Check if workout already synced (deduplication)
+            existing = self.supabase.table('apple_watch_workouts') \
+                .select('id') \
+                .eq('healthkit_uuid', healthkit_uuid) \
+                .execute()
+
+            if existing.data:
+                print(f"⚠️ Workout {healthkit_uuid} already synced")
+                return json.dumps({
+                    "success": True,
+                    "workout_id": existing.data[0]['id'],
+                    "message": "Workout already synced (deduplicated)",
+                    "is_duplicate": True
+                })
+
+            # Build workout record
+            workout_record = {
+                "user_id": user_id,
+                "healthkit_uuid": healthkit_uuid,
+                "workout_name": data.get("workout_name"),
+                "workout_type": data.get("workout_type"),
+                "is_indoor": data.get("is_indoor", False),
+                "start_date": data.get("start_date"),
+                "end_date": data.get("end_date"),
+                "duration_seconds": data.get("duration_seconds"),
+                "active_calories": data.get("active_calories"),
+                "avg_hr": data.get("avg_hr"),
+                "max_hr": data.get("max_hr"),
+                "min_hr": data.get("min_hr"),
+                "distance_meters": data.get("distance_meters"),
+                "avg_cadence": data.get("avg_cadence"),
+                "avg_stride_length": data.get("avg_stride_length"),
+                "avg_oscillation_cm": data.get("avg_oscillation_cm"),
+                "avg_gct_ms": data.get("avg_gct_ms"),
+                "avg_power_watts": data.get("avg_power_watts"),
+                "total_strokes": data.get("total_strokes"),
+                "raw_metrics": data.get("raw_metrics", {})
+            }
+
+            # Remove None values
+            workout_record = {k: v for k, v in workout_record.items() if v is not None}
+
+            # Insert into Supabase
+            result = self.supabase.table('apple_watch_workouts').insert(workout_record).execute()
+
+            if result.data:
+                workout_id = result.data[0]['id']
+                print(f"✅ Workout synced: {healthkit_uuid} → {workout_id}")
+                return json.dumps({
+                    "success": True,
+                    "workout_id": workout_id,
+                    "message": f"Workout synced successfully: {data.get('workout_name')}",
+                    "is_duplicate": False
+                })
+            else:
+                return json.dumps({"success": False, "error": "Failed to insert workout"})
+
+        except Exception as e:
+            print(f"❌ Error in sync_apple_watch_workout: {e}")
+            import traceback
+            traceback.print_exc()
+            return json.dumps({"success": False, "error": str(e)})

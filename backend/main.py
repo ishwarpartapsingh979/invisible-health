@@ -128,6 +128,26 @@ def run_agent(request):
                 response_json = agent.extract_dad_os_rule(data)
                 return response_json, 200, {'Content-Type': 'application/json'}
 
+            # --- DAD OS: START CONVERSATION ---
+            if data.get('action') == 'dad_start_conversation':
+                response_json = agent.dad_start_conversation(data)
+                return response_json, 200, {'Content-Type': 'application/json'}
+
+            # --- DAD OS: PROCESS VOICE INPUT ---
+            if data.get('action') == 'dad_process_input':
+                response_json = agent.dad_process_input(data)
+                return response_json, 200, {'Content-Type': 'application/json'}
+
+            # --- DAD OS: EXPLAIN EXERCISE ---
+            if data.get('action') == 'dad_explain_exercise':
+                response_json = agent.dad_explain_exercise(data)
+                return response_json, 200, {'Content-Type': 'application/json'}
+
+            # --- SYNC APPLE WATCH WORKOUT ---
+            if data.get('action') == 'sync_apple_watch_workout':
+                response_json = agent.sync_apple_watch_workout(data)
+                return response_json, 200, {'Content-Type': 'application/json'}
+
             user_id = data.get('user_id')
             text = data.get('text')
             
