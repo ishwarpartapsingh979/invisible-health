@@ -17,7 +17,7 @@ struct ContentView: View {
     @State private var pulseEvaluate: Bool = false
     
     // Tab Selection
-    // 0: Home/Mic, 1: DataFeed, 2: Workout (logging), 3: Summary, 4: Chat, 5: SOS, 6: Preview (tomorrow), 7: Coach, 8: Today (workout), 9: Equipment, 10: Dad OS Rules
+    // 0: Home/Mic, 1: DataFeed, 2: Workout (logging), 3: Summary, 4: Chat, 5: SOS, 6: Preview (tomorrow), 7: Coach, 8: Today (workout), 9: Equipment, 10: Dad OS Rules, 11: Dad Voice Chat
     @State private var selectedTab: Int = 2
     
     // Image Annotation State (Phase 2.1)
@@ -65,6 +65,8 @@ struct ContentView: View {
                     EquipmentView() // Tab 9 — Equipment
                 case 10:
                     RuleExtractorView() // Tab 10 — Dad OS Rules
+                case 11:
+                    DadVoiceChatView() // Tab 11 — Dad Voice Chat
                 default:
                     // Tab 0: Home / Mic Screen
                     micView
@@ -101,6 +103,8 @@ struct ContentView: View {
                         TabButton(icon: "dumbbell", text: "EQUIPMENT", isSelected: selectedTab == 9) { selectedTab = 9 }
 
                         TabButton(icon: "brain.head.profile", text: "RULES", isSelected: selectedTab == 10) { selectedTab = 10 }
+
+                        TabButton(icon: "person.wave.2.fill", text: "DAD", isSelected: selectedTab == 11) { selectedTab = 11 }
 
                         /*
                         TabButton(icon: "brain.head.profile", text: "SUMMARY", isSelected: selectedTab == 3) { selectedTab = 3 }
@@ -171,6 +175,8 @@ struct ContentView: View {
                 selectedTab = 9
             } else if url.absoluteString.contains("rules") {
                 selectedTab = 10
+            } else if url.absoluteString.contains("dad") {
+                selectedTab = 11
             }
         }
         // Annotation Sheet (Phase 2.1)

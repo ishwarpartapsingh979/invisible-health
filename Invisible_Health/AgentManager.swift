@@ -1647,4 +1647,393 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             }
         }.resume()
     }
+
+    // MARK: - Apple Watch Workout Sync
+
+    /// Sync a single workout to Supabase
+    /// - Parameters:
+    ///   - workout: HKWorkout from HealthKit
+    ///   - metrics: Comprehensive metrics from fetchComprehensiveWorkoutData()
+    ///   - userId: User UUID
+    ///   - completion: Success callback
+    func syncWorkoutToSupabase(
+        workout: HKWorkout,
+        metrics: [String: Any],
+        userId: String = "00000000-0000-0000-0000-000000000001",
+        completion: @escaping (Bool, String?) -> Void
+    ) {
+        guard let url = URL(string: agentURL) else {
+            completion(false, "Invalid URL")
+            return
+        }
+
+        // Build payload
+        var payload: [String: Any] = [
+            "action": "sync_apple_watch_workout",
+            "user_id": userId,
+            "healthkit_uuid": workout.uuid.uuidString,
+            "workout_name": metrics["workout_name"] as? String ?? "Workout",
+            "is_indoor": metrics["is_indoor"] as? Bool ?? false,
+            "start_date": ISO8601DateFormatter().string(from: workout.startDate),
+            "end_date": ISO8601DateFormatter().string(from: workout.endDate),
+            "duration_seconds": workout.duration
+        ]
+
+        // Add optional metrics
+        if let calories = metrics["active_calories"] as? Double {
+            payload["active_calories"] = calories
+        }
+        if let avgHR = metrics["avg_hr"] as? Double {
+            payload["avg_hr"] = avgHR
+        }
+        if let maxHR = metrics["max_hr"] as? Double {
+            payload["max_hr"] = maxHR
+        }
+        if let minHR = metrics["min_hr"] as? Double {
+            payload["min_hr"] = minHR
+        }
+        if let distance = metrics["distance_meters"] as? Double {
+            payload["distance_meters"] = distance
+        }
+        if let cadence = metrics["avg_cadence"] as? Double {
+            payload["avg_cadence"] = cadence
+        }
+        if let stride = metrics["avg_stride_len"] as? Double {
+            payload["avg_stride_length"] = stride
+        }
+        if let osc = metrics["avg_oscillation_cm"] as? Double {
+            payload["avg_oscillation_cm"] = osc
+        }
+        if let gct = metrics["avg_gct_ms"] as? Double {
+            payload["avg_gct_ms"] = gct
+        }
+        if let power = metrics["avg_power_watts"] as? Double {
+            payload["avg_power_watts"] = power
+        }
+        if let strokes = metrics["total_strokes"] as? Double {
+            payload["total_strokes"] = strokes
+        }
+
+        // Add all metrics as raw_metrics
+        payload["raw_metrics"] = metrics
+
+        // Make request
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+        } catch {
+            completion(false, "Failed to encode payload: \(error.localizedDescription)")
+            return
+        }
+
+        print("🔄 Syncing workout to Supabase: \(payload["workout_name"] ?? "Unknown")")
+
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                DispatchQueue.main.async {
+                    completion(false, "Network error: \(error.localizedDescription)")
+                }
+                return
+            }
+
+            guard let data = data else {
+                DispatchQueue.main.async {
+                    completion(false, "No data received")
+                }
+                return
+            }
+
+            do {
+                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    let success = json["success"] as? Bool ?? false
+                    let message = json["message"] as? String
+                    let isDuplicate = json["is_duplicate"] as? Bool ?? false
+
+                    if success {
+                        if isDuplicate {
+                            print("⚠️ Workout already synced (duplicate): \(workout.uuid.uuidString)")
+                        } else {
+                            print("✅ Workout synced successfully: \(json["workout_id"] ?? "unknown")")
+                        }
+                    } else {
+                        print("❌ Workout sync failed: \(json["error"] ?? "unknown error")")
+                    }
+
+                    DispatchQueue.main.async {
+                        completion(success, message)
+                    }
+                } else {
+                    DispatchQueue.main.async {
+                        completion(false, "Invalid response format")
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    completion(false, "Failed to parse response: \(error.localizedDescription)")
+                }
+            }
+        }.resume()
+    }
+
+    /// Sync recent workouts (last N days) to Supabase
+    /// - Parameters:
+    ///   - days: Number of days to look back
+    ///   - userId: User UUID
+    ///   - completion: Callback with (success count, total count)
+    func syncRecentWorkouts(
+        days: Int = 7,
+        userId: String = "00000000-0000-0000-0000-000000000001",
+        completion: @escaping (Int, Int) -> Void
+    ) {
+        print("📥 Fetching last \(days) days of workouts...")
+
+        HealthManager.shared.fetchRecentWorkouts(days: days) { workouts in
+            guard !workouts.isEmpty else {
+                print("ℹ️ No workouts found")
+                DispatchQueue.main.async {
+                    completion(0, 0)
+                }
+                return
+            }
+
+            print("🏋️ Found \(workouts.count) workouts to sync")
+
+            var successCount = 0
+            var processedCount = 0
+            let totalCount = workouts.count
+            let group = DispatchGroup()
+
+            for workout in workouts {
+                group.enter()
+
+                // Fetch comprehensive metrics for this workout
+                HealthManager.shared.fetchComprehensiveWorkoutData(workout: workout) { metrics in
+                    // Sync to Supabase
+                    self.syncWorkoutToSupabase(workout: workout, metrics: metrics, userId: userId) { success, message in
+                        processedCount += 1
+                        if success {
+                            successCount += 1
+                        }
+
+                        print("📊 Progress: \(processedCount)/\(totalCount) (\(successCount) synced)")
+                        group.leave()
+                    }
+                }
+            }
+
+            group.notify(queue: .main) {
+                print("✅ Sync complete: \(successCount)/\(totalCount) workouts synced")
+                completion(successCount, totalCount)
+            }
+        }
+    }
+
+    // MARK: - Dad OS Voice Conversation Methods (Phase 7)
+
+    /// Start a new Dad OS voice conversation
+    /// - Parameters:
+    ///   - conversationType: Type of conversation ("morning_checkin", "manual_workout_logging", "workout_annotation")
+    ///   - userId: User UUID
+    ///   - completion: Callback with session data (session_id, greeting, next_step)
+    func startDadConversation(
+        conversationType: String = "morning_checkin",
+        userId: String = "00000000-0000-0000-0000-000000000001",
+        completion: @escaping ([String: Any]?) -> Void
+    ) {
+        guard let url = URL(string: agentURL) else {
+            print("❌ Invalid agent URL")
+            completion(nil)
+            return
+        }
+
+        let payload: [String: Any] = [
+            "action": "dad_start_conversation",
+            "user_id": userId,
+            "conversation_type": conversationType
+        ]
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+        } catch {
+            print("❌ Failed to encode payload: \(error)")
+            completion(nil)
+            return
+        }
+
+        print("🎤 Starting Dad conversation: \(conversationType)")
+
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                print("❌ Network error: \(error.localizedDescription)")
+                DispatchQueue.main.async { completion(nil) }
+                return
+            }
+
+            guard let data = data else {
+                print("❌ No data received")
+                DispatchQueue.main.async { completion(nil) }
+                return
+            }
+
+            do {
+                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    print("✅ Conversation started: \(json["session_id"] ?? "unknown")")
+                    DispatchQueue.main.async { completion(json) }
+                } else {
+                    print("❌ Invalid response format")
+                    DispatchQueue.main.async { completion(nil) }
+                }
+            } catch {
+                print("❌ Failed to parse response: \(error)")
+                DispatchQueue.main.async { completion(nil) }
+            }
+        }.resume()
+    }
+
+    /// Send user input to ongoing Dad conversation
+    /// - Parameters:
+    ///   - sessionId: Conversation session ID
+    ///   - textInput: User's text input
+    ///   - currentStep: Current step in conversation flow
+    ///   - conversationType: Type of conversation
+    ///   - userId: User UUID
+    ///   - completion: Callback with response data (response_text, next_step, exercises, etc.)
+    func sendDadInput(
+        sessionId: String,
+        textInput: String,
+        currentStep: String,
+        conversationType: String = "morning_checkin",
+        userId: String = "00000000-0000-0000-0000-000000000001",
+        completion: @escaping ([String: Any]?) -> Void
+    ) {
+        guard let url = URL(string: agentURL) else {
+            print("❌ Invalid agent URL")
+            completion(nil)
+            return
+        }
+
+        let payload: [String: Any] = [
+            "action": "dad_process_input",
+            "session_id": sessionId,
+            "user_id": userId,
+            "text_input": textInput,
+            "current_step": currentStep,
+            "conversation_type": conversationType
+        ]
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+        } catch {
+            print("❌ Failed to encode payload: \(error)")
+            completion(nil)
+            return
+        }
+
+        print("💬 Sending input: \(textInput)")
+
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                print("❌ Network error: \(error.localizedDescription)")
+                DispatchQueue.main.async { completion(nil) }
+                return
+            }
+
+            guard let data = data else {
+                print("❌ No data received")
+                DispatchQueue.main.async { completion(nil) }
+                return
+            }
+
+            do {
+                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    print("✅ Dad response: \(json["response_text"] ?? "no response")")
+                    DispatchQueue.main.async { completion(json) }
+                } else {
+                    print("❌ Invalid response format")
+                    DispatchQueue.main.async { completion(nil) }
+                }
+            } catch {
+                print("❌ Failed to parse response: \(error)")
+                DispatchQueue.main.async { completion(nil) }
+            }
+        }.resume()
+    }
+
+    /// Get exercise explanation from Dad
+    /// - Parameters:
+    ///   - exerciseId: Exercise ID from exercises table
+    ///   - userContext: Optional user context (energy_level, pain, etc.)
+    ///   - completion: Callback with exercise data (name, explanation, images, instructions)
+    func getDadExerciseExplanation(
+        exerciseId: String,
+        userContext: [String: Any]? = nil,
+        completion: @escaping ([String: Any]?) -> Void
+    ) {
+        guard let url = URL(string: agentURL) else {
+            print("❌ Invalid agent URL")
+            completion(nil)
+            return
+        }
+
+        var payload: [String: Any] = [
+            "action": "dad_explain_exercise",
+            "exercise_id": exerciseId
+        ]
+
+        if let context = userContext {
+            payload["user_context"] = context
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+        } catch {
+            print("❌ Failed to encode payload: \(error)")
+            completion(nil)
+            return
+        }
+
+        print("📖 Getting exercise explanation: \(exerciseId)")
+
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                print("❌ Network error: \(error.localizedDescription)")
+                DispatchQueue.main.async { completion(nil) }
+                return
+            }
+
+            guard let data = data else {
+                print("❌ No data received")
+                DispatchQueue.main.async { completion(nil) }
+                return
+            }
+
+            do {
+                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    print("✅ Exercise explanation received")
+                    DispatchQueue.main.async { completion(json) }
+                } else {
+                    print("❌ Invalid response format")
+                    DispatchQueue.main.async { completion(nil) }
+                }
+            } catch {
+                print("❌ Failed to parse response: \(error)")
+                DispatchQueue.main.async { completion(nil) }
+            }
+        }.resume()
+    }
 }

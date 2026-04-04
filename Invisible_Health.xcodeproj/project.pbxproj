@@ -51,6 +51,12 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		0D3624AB2F7FE72900AC8A6E /* dad_os_engine.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = dad_os_engine.py; sourceTree = "<group>"; };
+		0D3624AC2F7FE72900AC8A6E /* exercise_selector.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = exercise_selector.py; sourceTree = "<group>"; };
+		0D3624AD2F7FE72900AC8A6E /* gemini_flash_live.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = gemini_flash_live.py; sourceTree = "<group>"; };
+		0D3624AE2F7FE72900AC8A6E /* run_sync.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = run_sync.sh; sourceTree = "<group>"; };
+		0D3624AF2F7FE72900AC8A6E /* schema_dad_os_integration.sql */ = {isa = PBXFileReference; lastKnownFileType = text; path = schema_dad_os_integration.sql; sourceTree = "<group>"; };
+		0D3624B02F7FE72900AC8A6E /* sync_exercises.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = sync_exercises.py; sourceTree = "<group>"; };
 		0D4812062EF42D540002A0D2 /* Invisible_Health.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Invisible_Health.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		0D4812172EF42D550002A0D2 /* Invisible_HealthTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = Invisible_HealthTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		0D4812212EF42D550002A0D2 /* Invisible_HealthUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = Invisible_HealthUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -188,6 +194,12 @@
 		0DF544622EFE4BC800AEE292 /* backend */ = {
 			isa = PBXGroup;
 			children = (
+				0D3624AB2F7FE72900AC8A6E /* dad_os_engine.py */,
+				0D3624AC2F7FE72900AC8A6E /* exercise_selector.py */,
+				0D3624AD2F7FE72900AC8A6E /* gemini_flash_live.py */,
+				0D3624AE2F7FE72900AC8A6E /* run_sync.sh */,
+				0D3624AF2F7FE72900AC8A6E /* schema_dad_os_integration.sql */,
+				0D3624B02F7FE72900AC8A6E /* sync_exercises.py */,
 				0D64DFB12F06C40400A85580 /* tools */,
 				0D64DFB02F06B4C900A85580 /* agent_engine.py */,
 				0DF544602EFE4BC800AEE292 /* main.py */,
