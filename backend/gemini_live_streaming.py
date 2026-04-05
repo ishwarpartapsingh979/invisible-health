@@ -92,7 +92,7 @@ class DadLiveAudioSession:
 
             # Connect to Gemini Live API
             self.gemini_session = client.aio.live.connect(
-                model="gemini-2.0-flash-live-001",  # Correct model name for Live API
+                model="gemini-live-2.5-flash-native-audio",
                 config=config
             )
 
