@@ -84,15 +84,10 @@ class DadLiveAudioSession:
             system_instruction_text = await self._build_dad_system_instruction()
 
             # Configure Gemini Live session
-            # Note: system_instruction format may vary by API version
-            # Trying without system_instruction first to test connection
+            # Starting with minimal config to test connection
+            # TODO: Add back system_instruction and voice config once basic connection works
             config = LiveConnectConfig(
-                response_modalities=["AUDIO"],
-                speech_config=SpeechConfig(
-                    voice_config=PrebuiltVoiceConfig(
-                        voice_name="Kore"  # Deep, warm, authoritative
-                    )
-                )
+                response_modalities=["AUDIO"]
             )
 
             # Connect to Gemini Live API
