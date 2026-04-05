@@ -454,9 +454,18 @@ class DadAudioManager: NSObject, ObservableObject {
     // MARK: - Audio Recording
 
     func startRecording() {
-        audioEngine = AVAudioEngine()
-        inputNode = audioEngine?.inputNode
+        // Initialize shared audio engine if not already created
+        if audioEngine == nil {
+            audioEngine = AVAudioEngine()
 
+            // Set up player node for playback on same engine
+            playerNode = AVAudioPlayerNode()
+            let playbackFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 24000, channels: 1, interleaved: false)!
+            audioEngine?.attach(playerNode!)
+            audioEngine?.connect(playerNode!, to: audioEngine!.mainMixerNode, format: playbackFormat)
+        }
+
+        inputNode = audioEngine?.inputNode
         guard let inputNode = inputNode else { return }
 
         let recordingFormat = inputNode.outputFormat(forBus: 0)
@@ -489,7 +498,7 @@ class DadAudioManager: NSObject, ObservableObject {
     }
 
     func stopRecording() {
-        audioEngine?.stop()
+        // Only remove tap, keep engine running for playback
         inputNode?.removeTap(onBus: 0)
 
         DispatchQueue.main.async {
@@ -531,6 +540,11 @@ class DadAudioManager: NSObject, ObservableObject {
     // MARK: - Audio Playback
 
     private func playAudio(data: Data) {
+        guard let playerNode = playerNode, let audioEngine = audioEngine else {
+            print("❌ Audio engine not initialized")
+            return
+        }
+
         DispatchQueue.main.async {
             self.isSpeaking = true
         }
@@ -556,26 +570,15 @@ class DadAudioManager: NSObject, ObservableObject {
             buffer.int16ChannelData?.pointee.update(from: baseAddress.assumingMemoryBound(to: Int16.self), count: Int(frameCount))
         }
 
-        // Set up player node if needed
-        if playerNode == nil {
-            playerNode = AVAudioPlayerNode()
-            if audioEngine == nil {
-                audioEngine = AVAudioEngine()
-            }
-            audioEngine?.attach(playerNode!)
-            audioEngine?.connect(playerNode!, to: audioEngine!.mainMixerNode, format: format)
-            try? audioEngine?.start()
-        }
-
-        // Schedule and play buffer
-        playerNode?.scheduleBuffer(buffer) {
+        // Schedule and play buffer on existing player node
+        playerNode.scheduleBuffer(buffer) {
             DispatchQueue.main.async {
                 self.isSpeaking = false
             }
         }
 
-        if playerNode?.isPlaying == false {
-            playerNode?.play()
+        if !playerNode.isPlaying {
+            playerNode.play()
         }
     }
 }
