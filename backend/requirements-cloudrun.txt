@@ -1,0 +1,18 @@
+# Cloud Run - WebSocket Audio Streaming Dependencies
+# Minimal set for gemini_live_streaming.py
+
+# 1. aiohttp: Async WebSocket server for Gemini Live streaming
+aiohttp==3.9.3
+
+# 2. google-genai: New Gemini SDK with Live API support
+google-genai==0.2.2
+
+# 3. supabase: To talk to your database (Memory)
+supabase==2.13.0
+
+# 4. python-dotenv: For local testing
+python-dotenv==1.0.0
+
+# Dependencies needed by dad_os_engine and exercise_selector
+# (These are imported in gemini_live_streaming.py)
+requests==2.31.0

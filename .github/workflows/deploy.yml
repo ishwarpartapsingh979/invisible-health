@@ -46,6 +46,8 @@ jobs:
       - name: 'Build and Deploy to Cloud Run'
         run: |
           cd backend
+          # Use minimal requirements for Cloud Run (avoid pydub/ffmpeg issues)
+          cp requirements-cloudrun.txt requirements.txt
           gcloud run deploy dad-live-audio \
             --source . \
             --region=us-central1 \
