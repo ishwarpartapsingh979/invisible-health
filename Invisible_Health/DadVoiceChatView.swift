@@ -327,8 +327,8 @@ class DadAudioManager: NSObject, ObservableObject {
     private var inputNode: AVAudioInputNode?
     private var audioPlayer: AVAudioPlayer?
 
-    // Cloud Run URL (will be set after deployment)
-    private let cloudRunURL = "wss://dad-live-audio-XXXXXX-uc.a.run.app/ws"  // TODO: Update after deployment
+    // Cloud Run URL
+    private let cloudRunURL = "wss://dad-live-audio-zupjde2jpq-uc.a.run.app/ws"
 
     override init() {
         super.init()

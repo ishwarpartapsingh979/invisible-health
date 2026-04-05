@@ -1092,9 +1092,9 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             recoveryMetrics = metrics.map { metric in
                 [
                     "date": ISO8601DateFormatter().string(from: metric.date),
-                    "hrv": metric.hrv ?? 0,
-                    "rhr": metric.restingHR ?? 0,
-                    "sleep_hours": metric.sleepHours ?? 0
+                    "hrv": metric.hrv as Any? ?? 0,
+                    "rhr": metric.restingHR as Any? ?? 0,
+                    "sleep_hours": metric.sleepHours as Any? ?? 0
                 ]
             }
             group.leave()
