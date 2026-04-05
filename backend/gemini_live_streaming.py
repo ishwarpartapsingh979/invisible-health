@@ -56,6 +56,7 @@ class DadLiveAudioSession:
         self.websocket = websocket
         self.supabase = supabase
         self.session_id = None
+        self.gemini_context = None
         self.gemini_session = None
 
         # Initialize Dad OS components
@@ -91,13 +92,13 @@ class DadLiveAudioSession:
             )
 
             # Connect to Gemini Live API
-            self.gemini_session = client.aio.live.connect(
+            self.gemini_context = client.aio.live.connect(
                 model="gemini-live-2.5-flash-native-audio",
                 config=config
             )
 
-            # Start async session
-            await self.gemini_session.__aenter__()
+            # Start async session and get the actual session object
+            self.gemini_session = await self.gemini_context.__aenter__()
 
             logger.info(f"✅ Gemini Live session started for {self.user_id}")
 
@@ -291,8 +292,8 @@ CONVERSATION FLOW - WORKOUT ANNOTATION:
         Clean up session
         """
         try:
-            if self.gemini_session:
-                await self.gemini_session.__aexit__(None, None, None)
+            if self.gemini_context:
+                await self.gemini_context.__aexit__(None, None, None)
             logger.info(f"🔚 Session closed for {self.user_id}")
         except Exception as e:
             logger.error(f"❌ Error closing session: {e}")
