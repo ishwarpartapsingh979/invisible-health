@@ -326,6 +326,8 @@ class DadAudioManager: NSObject, ObservableObject {
     private var audioEngine: AVAudioEngine?
     private var inputNode: AVAudioInputNode?
     private var audioPlayer: AVAudioPlayer?
+    private var playerNode: AVAudioPlayerNode?
+    private var audioFormat: AVAudioFormat?
 
     // Cloud Run URL
     private let cloudRunURL = "wss://dad-live-audio-zupjde2jpq-uc.a.run.app/ws"
@@ -379,6 +381,11 @@ class DadAudioManager: NSObject, ObservableObject {
 
                     // Start receiving messages
                     self.receiveMessage()
+
+                    // Auto-start recording after connection
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        self.startRecording()
+                    }
                 }
             }
         }
@@ -528,15 +535,47 @@ class DadAudioManager: NSObject, ObservableObject {
             self.isSpeaking = true
         }
 
-        do {
-            audioPlayer = try AVAudioPlayer(data: data)
-            audioPlayer?.delegate = self
-            audioPlayer?.play()
-        } catch {
-            print("❌ Failed to play audio: \(error)")
+        // Gemini sends PCM audio at 24kHz, mono, 16-bit linear PCM
+        let sampleRate: Double = 24000
+        guard let format = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: sampleRate, channels: 1, interleaved: false) else {
+            print("❌ Failed to create audio format")
+            DispatchQueue.main.async { self.isSpeaking = false }
+            return
+        }
+
+        let frameCount = UInt32(data.count) / format.streamDescription.pointee.mBytesPerFrame
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+            print("❌ Failed to create PCM buffer")
+            DispatchQueue.main.async { self.isSpeaking = false }
+            return
+        }
+
+        buffer.frameLength = frameCount
+        data.withUnsafeBytes { (ptr: UnsafeRawBufferPointer) in
+            guard let baseAddress = ptr.baseAddress else { return }
+            buffer.int16ChannelData?.pointee.update(from: baseAddress.assumingMemoryBound(to: Int16.self), count: Int(frameCount))
+        }
+
+        // Set up player node if needed
+        if playerNode == nil {
+            playerNode = AVAudioPlayerNode()
+            if audioEngine == nil {
+                audioEngine = AVAudioEngine()
+            }
+            audioEngine?.attach(playerNode!)
+            audioEngine?.connect(playerNode!, to: audioEngine!.mainMixerNode, format: format)
+            try? audioEngine?.start()
+        }
+
+        // Schedule and play buffer
+        playerNode?.scheduleBuffer(buffer) {
             DispatchQueue.main.async {
                 self.isSpeaking = false
             }
+        }
+
+        if playerNode?.isPlaying == false {
+            playerNode?.play()
         }
     }
 }
