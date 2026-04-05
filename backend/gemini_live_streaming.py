@@ -117,12 +117,17 @@ class DadLiveAudioSession:
         Build Dad's system instruction with rules and user context
         """
         # Get user context from Dad OS engine
-        matched_rules, context = self.dad_engine.match_rules(
-            user_id=self.user_id,
-            self_report=None,  # Will be built during conversation
-            current_hrv=None,
-            current_rhr=None
-        )
+        try:
+            matched_rules, context = self.dad_engine.match_rules(
+                user_id=self.user_id,
+                self_report=None,  # Will be built during conversation
+                current_hrv=None,
+                current_rhr=None
+            )
+        except Exception as e:
+            logger.warning(f"⚠️ Could not fetch user context: {e}. Using default rules.")
+            matched_rules = []
+            context = {}
 
         # Base personality
         base_instruction = """
