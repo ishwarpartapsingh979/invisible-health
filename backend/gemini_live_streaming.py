@@ -225,7 +225,7 @@ CONVERSATION FLOW - WORKOUT ANNOTATION:
         greeting = greetings.get(self.conversation_type, "Hey there! How can I help?")
 
         # Send greeting as text (Gemini will convert to audio)
-        await self.gemini_session.send(greeting, end_of_turn=True)
+        await self.gemini_session.send(input=greeting, end_of_turn=True)
 
         # Set initial step
         if self.conversation_type == "morning_checkin":
@@ -241,11 +241,13 @@ CONVERSATION FLOW - WORKOUT ANNOTATION:
         Send to Gemini Live API
         """
         try:
-            # Send audio to Gemini
-            await self.gemini_session.send(audio_data, end_of_turn=True)
+            # Send audio chunk to Gemini (streaming, not end_of_turn)
+            await self.gemini_session.send(input=audio_data)
 
         except Exception as e:
             logger.error(f"❌ Error processing iOS audio: {e}")
+            import traceback
+            traceback.print_exc()
 
     async def stream_audio_to_ios(self):
         """
