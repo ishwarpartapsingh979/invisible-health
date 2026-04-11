@@ -330,6 +330,12 @@ class DadAudioManager: NSObject, ObservableObject {
     private var audioFormat: AVAudioFormat?
     private var audioConverter: AVAudioConverter?
 
+    // Silence detection for natural turn-taking
+    private var silenceTimer: Timer?
+    private var lastSpeechTime: Date = Date()
+    private let silenceThreshold: Float = 0.02 // Audio level threshold for silence
+    private let silenceDuration: TimeInterval = 10.0 // 10 seconds of silence
+
     // Cloud Run URL
     private let cloudRunURL = "wss://dad-live-audio-zupjde2jpq-uc.a.run.app/ws"
 
@@ -397,6 +403,9 @@ class DadAudioManager: NSObject, ObservableObject {
         webSocketTask = nil
         audioEngine?.stop()
         audioEngine = nil
+
+        // Stop silence detection timer
+        stopSilenceDetectionTimer()
 
         DispatchQueue.main.async {
             self.isConnected = false
@@ -494,11 +503,20 @@ class DadAudioManager: NSObject, ObservableObject {
                 self.audioLevel = level
             }
 
+            // Silence detection for natural turn-taking
+            if level > self.silenceThreshold {
+                // User is speaking - reset silence timer
+                self.lastSpeechTime = Date()
+            }
+
             // Convert buffer to Gemini format and send to WebSocket
             if let convertedData = self.convertAndBufferToData(buffer: buffer, converter: converter, targetFormat: geminiFormat) {
                 self.sendAudioData(convertedData)
             }
         }
+
+        // Start silence detection timer
+        startSilenceDetectionTimer()
 
         do {
             try audioEngine?.start()
@@ -515,12 +533,57 @@ class DadAudioManager: NSObject, ObservableObject {
         // Only remove tap, keep engine running for playback
         inputNode?.removeTap(onBus: 0)
 
+        // Stop silence detection timer
+        stopSilenceDetectionTimer()
+
         DispatchQueue.main.async {
             self.isRecording = false
             self.audioLevel = 0.0
         }
 
         print("🛑 Recording stopped")
+    }
+
+    // MARK: - Silence Detection
+
+    private func startSilenceDetectionTimer() {
+        // Reset last speech time
+        lastSpeechTime = Date()
+
+        // Create timer that checks every second
+        silenceTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+
+            let silenceDurationElapsed = Date().timeIntervalSince(self.lastSpeechTime)
+
+            if silenceDurationElapsed >= self.silenceDuration {
+                // 10 seconds of silence detected - signal end of turn
+                print("🤫 Detected 10 seconds of silence - signaling end of turn")
+                self.sendEndOfTurn()
+
+                // Reset timer for next turn
+                self.lastSpeechTime = Date()
+            }
+        }
+    }
+
+    private func stopSilenceDetectionTimer() {
+        silenceTimer?.invalidate()
+        silenceTimer = nil
+    }
+
+    private func sendEndOfTurn() {
+        let message: [String: Any] = ["action": "end_of_turn"]
+        if let jsonData = try? JSONSerialization.data(withJSONObject: message),
+           let jsonString = String(data: jsonData, encoding: .utf8) {
+            webSocketTask?.send(.string(jsonString)) { error in
+                if let error = error {
+                    print("❌ Failed to send end_of_turn: \(error)")
+                } else {
+                    print("✅ Sent end_of_turn signal to backend")
+                }
+            }
+        }
     }
 
     private func sendAudioData(_ data: Data) {

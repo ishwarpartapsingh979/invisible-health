@@ -84,11 +84,15 @@ class DadLiveAudioSession:
             # Build Dad's system instruction with context
             system_instruction_text = await self._build_dad_system_instruction()
 
-            # Configure Gemini Live session
-            # Starting with minimal config to test connection
-            # TODO: Add back system_instruction and voice config once basic connection works
+            # Configure Gemini Live session with speech config
+            speech_config = SpeechConfig(
+                voice_config=PrebuiltVoiceConfig(voice_name="Kore")
+            )
+
             config = LiveConnectConfig(
-                response_modalities=["AUDIO"]
+                response_modalities=["AUDIO"],
+                speech_config=speech_config,
+                system_instruction=system_instruction_text
             )
 
             # Connect to Gemini Live API
@@ -249,6 +253,20 @@ CONVERSATION FLOW - WORKOUT ANNOTATION:
             import traceback
             traceback.print_exc()
 
+    async def signal_end_of_turn(self):
+        """
+        Signal to Gemini that user has stopped speaking (10 seconds of silence detected)
+        """
+        try:
+            logger.info(f"🤫 User silent for 10 seconds - signaling end of turn to Gemini")
+            # Send empty input with end_of_turn=True to trigger Gemini's response
+            await self.gemini_session.send(input="", end_of_turn=True)
+
+        except Exception as e:
+            logger.error(f"❌ Error signaling end of turn: {e}")
+            import traceback
+            traceback.print_exc()
+
     async def stream_audio_to_ios(self):
         """
         Stream Gemini's audio responses to iOS
@@ -361,6 +379,11 @@ async def websocket_handler(request):
                 elif data.get("action") == "stop":
                     # End session
                     break
+
+                elif data.get("action") == "end_of_turn":
+                    # User stopped speaking (10 seconds of silence)
+                    if session:
+                        await session.signal_end_of_turn()
 
             elif msg.type == aiohttp.WSMsgType.BINARY:
                 # Audio data from iOS
