@@ -45,10 +45,20 @@ async def websocket_handler(request):
 
             # Start task to stream Gemini responses to iOS
             async def stream_responses():
-                async for response in session.receive():
-                    if response.data:
-                        # Send audio back to iOS
-                        await ws.send_bytes(response.data)
+                print("👂 Started listening for Gemini responses...")
+                try:
+                    async for response in session.receive():
+                        print(f"📨 Received response from Gemini: {type(response)}")
+                        if response.data:
+                            print(f"🎵 Audio data: {len(response.data)} bytes")
+                            # Send audio back to iOS
+                            await ws.send_bytes(response.data)
+                        if hasattr(response, 'text') and response.text:
+                            print(f"📝 Text response: {response.text}")
+                except Exception as e:
+                    print(f"❌ Error in response streaming: {e}")
+                    import traceback
+                    traceback.print_exc()
 
             response_task = asyncio.create_task(stream_responses())
 
