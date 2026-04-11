@@ -35,14 +35,7 @@ async def websocket_handler(request):
 
         # Connect to Gemini Live API
         config = {
-            "response_modalities": ["AUDIO"],
-            "realtime_input_config": {
-                "automatic_activity_detection": {
-                    "disabled": False,
-                    "end_of_speech_sensitivity": "medium",
-                    "silence_duration_ms": 1500  # 1.5 seconds of silence triggers response
-                }
-            }
+            "response_modalities": ["AUDIO"]
         }
 
         async with client.aio.live.connect(model="gemini-live-2.5-flash-native-audio", config=config) as session:
