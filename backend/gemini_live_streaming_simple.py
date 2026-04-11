@@ -94,11 +94,11 @@ async def websocket_handler(request):
                         )
                     )
 
-                    # Test: After 20 chunks (~2 seconds), send text to see if Gemini responds
-                    if chunk_count == 20:
-                        print(f"🔤 Testing: Sending text input after 20 chunks")
-                        await session.send_realtime_input(text="Testing testing, one two three. Can you hear me?")
-                        print(f"✅ Text sent to Gemini")
+                    # Manual end signal after 60 chunks (~6 seconds)
+                    if chunk_count == 60:
+                        print(f"🏁 Sending manual activity_end after 60 chunks of audio")
+                        await session.send_realtime_input(activity_end=types.ActivityEnd())
+                        print(f"✅ activity_end sent - Gemini should respond now")
 
                 elif msg.type == aiohttp.WSMsgType.ERROR:
                     break
