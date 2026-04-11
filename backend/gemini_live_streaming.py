@@ -225,8 +225,8 @@ CONVERSATION FLOW - WORKOUT ANNOTATION:
         greeting = greetings.get(self.conversation_type, "Hey there! How can I help?")
 
         logger.info(f"👋 Sending initial greeting to Gemini: '{greeting}'")
-        # Send greeting as text (Gemini will convert to audio)
-        await self.gemini_session.send(input=greeting, end_of_turn=True)
+        # Send greeting as text using send_realtime_input (Gemini will convert to audio)
+        await self.gemini_session.send_realtime_input(text=greeting)
         logger.info(f"✅ Initial greeting sent to Gemini")
 
         # Set initial step
@@ -241,6 +241,9 @@ CONVERSATION FLOW - WORKOUT ANNOTATION:
         """
         Process incoming audio from iOS app
         Send to Gemini Live API
+
+        Gemini's built-in Voice Activity Detection (VAD) automatically detects
+        when the user stops speaking and triggers a response.
         """
         try:
             # Log every 20th chunk to avoid spam
@@ -248,22 +251,13 @@ CONVERSATION FLOW - WORKOUT ANNOTATION:
             if random.randint(1, 20) == 1:
                 logger.info(f"📥 Received audio from iOS: {len(audio_data)} bytes, forwarding to Gemini...")
 
-            # Try new method first (google-genai >= 0.3.0), fall back to old method
-            try:
-                # New API (google-genai >= 0.3.0)
-                await self.gemini_session.send_realtime_input(
-                    audio=types.Blob(
-                        data=audio_data,
-                        mime_type="audio/pcm;rate=16000"
-                    )
-                )
-            except AttributeError:
-                # Old API fallback (google-genai 0.2.x)
-                audio_blob = types.Blob(
+            # Send audio chunk using send_realtime_input (google-genai >= 0.3.0)
+            await self.gemini_session.send_realtime_input(
+                audio=types.Blob(
                     data=audio_data,
                     mime_type="audio/pcm;rate=16000"
                 )
-                await self.gemini_session.send(input=audio_blob)
+            )
 
         except Exception as e:
             logger.error(f"❌ Error processing iOS audio: {e}")
@@ -272,23 +266,13 @@ CONVERSATION FLOW - WORKOUT ANNOTATION:
 
     async def signal_end_of_turn(self):
         """
-        Signal to Gemini that user has stopped speaking (6 seconds of silence detected)
+        DEPRECATED: Gemini's built-in VAD automatically detects when user stops speaking.
 
-        Note: With proper audio streaming, Gemini's built-in VAD should detect silence.
-        This is a backup signal in case VAD doesn't trigger.
+        This method is kept for backward compatibility with iOS app but does nothing.
+        The iOS app can still send end_of_turn signals, but Gemini will respond automatically
+        based on its Voice Activity Detection without needing explicit end signals.
         """
-        try:
-            logger.info(f"🤫 User silent for 6 seconds - signaling end of turn to Gemini")
-
-            # Use the same send() method that worked for initial greeting
-            # Just signal end_of_turn without new input
-            await self.gemini_session.send(end_of_turn=True)
-            logger.info(f"✅ End of turn signal sent to Gemini")
-
-        except Exception as e:
-            logger.error(f"❌ Error signaling end of turn: {e}")
-            import traceback
-            traceback.print_exc()
+        logger.info(f"📨 Received end_of_turn signal from iOS (relying on Gemini's automatic VAD)")
 
     async def stream_audio_to_ios(self):
         """
