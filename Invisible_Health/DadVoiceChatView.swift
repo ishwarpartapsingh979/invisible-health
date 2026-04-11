@@ -574,16 +574,29 @@ class DadAudioManager: NSObject, ObservableObject {
             return buffer
         }
 
-        converter.convert(to: convertedBuffer, error: &error, withInputFrom: inputBlock)
+        let status = converter.convert(to: convertedBuffer, error: &error, withInputFrom: inputBlock)
 
         if let error = error {
             print("❌ Audio conversion error: \(error)")
             return nil
         }
 
+        if status == .error || convertedBuffer.frameLength == 0 {
+            print("❌ Conversion failed: status=\(status), frameLength=\(convertedBuffer.frameLength)")
+            return nil
+        }
+
         // Convert PCM16 buffer to Data
         let audioBuffer = convertedBuffer.audioBufferList.pointee.mBuffers
-        return Data(bytes: audioBuffer.mData!, count: Int(audioBuffer.mDataByteSize))
+        let actualByteSize = Int(convertedBuffer.frameLength) * 2  // 2 bytes per PCM16 sample
+
+        // Debug first conversion
+        if Int.random(in: 1...100) == 1 {
+            let data = Data(bytes: audioBuffer.mData!, count: min(20, actualByteSize))
+            print("🔍 Converted audio sample: \(data.map { String(format: "%02x", $0) }.joined())")
+        }
+
+        return Data(bytes: audioBuffer.mData!, count: actualByteSize)
     }
 
     private func calculateAudioLevel(buffer: AVAudioPCMBuffer) -> Float {
