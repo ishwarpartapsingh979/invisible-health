@@ -78,10 +78,11 @@ async def websocket_handler(request):
                         )
                     )
 
-                    # Test: After 100 chunks (~10 seconds), manually signal end
-                    if chunk_count == 100:
-                        print(f"⚡ Testing: Sending manual activity_end after 100 chunks")
-                        await session.send_realtime_input(activity_end=types.ActivityEnd())
+                    # Test: After 50 chunks, send text to see if Gemini responds
+                    if chunk_count == 50:
+                        print(f"🔤 Testing: Sending text input after 50 chunks")
+                        await session.send_realtime_input(text="Hello, can you hear me? Please respond.")
+                        print(f"✅ Text sent to Gemini")
 
                 elif msg.type == aiohttp.WSMsgType.ERROR:
                     break
