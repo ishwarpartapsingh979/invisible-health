@@ -457,16 +457,28 @@ class DadAudioManager: NSObject, ObservableObject {
             case .success(let message):
                 switch message {
                 case .data(let data):
-                    // Audio data from Gemini
-                    print("📥 Received audio from Gemini: \(data.count) bytes")
+                    // Legacy binary audio data (should not happen with new protocol)
+                    print("⚠️ Received legacy binary audio: \(data.count) bytes")
                     self.playAudio(data: data)
 
                 case .string(let text):
-                    // JSON message (transcript, status, etc.)
-                    print("📥 Received JSON from backend: \(text)")
+                    // JSON message (audio, transcript, status, etc.)
+                    print("📥 Received JSON from backend")
                     if let data = text.data(using: .utf8),
                        let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                        self.handleJSONMessage(json)
+
+                        // Check if it's audio data
+                        if json["type"] as? String == "audio",
+                           let base64Audio = json["data"] as? String {
+                            // Decode Base64 audio and play it
+                            if let audioData = Data(base64Encoded: base64Audio) {
+                                print("🎵 Decoded audio: \(audioData.count) bytes")
+                                self.playAudio(data: audioData)
+                            }
+                        } else {
+                            // Handle other JSON messages
+                            self.handleJSONMessage(json)
+                        }
                     }
 
                 @unknown default:
@@ -492,6 +504,15 @@ class DadAudioManager: NSObject, ObservableObject {
     }
 
     private func handleJSONMessage(_ json: [String: Any]) {
+        // Check for status messages
+        if let status = json["status"] as? String {
+            print("📍 Status: \(status)")
+            if let message = json["message"] as? String {
+                print("📍 Message: \(message)")
+            }
+        }
+
+        // Check for typed messages
         if let type = json["type"] as? String {
             if type == "transcript" {
                 if let text = json["text"] as? String,
@@ -520,6 +541,14 @@ class DadAudioManager: NSObject, ObservableObject {
 
         inputNode = audioEngine?.inputNode
         guard let inputNode = inputNode else { return }
+
+        // Enable voice processing for acoustic echo cancellation
+        do {
+            try inputNode.setVoiceProcessingEnabled(true)
+            print("✅ Voice processing enabled (echo cancellation active)")
+        } catch {
+            print("⚠️ Could not enable voice processing: \(error)")
+        }
 
         let recordingFormat = inputNode.outputFormat(forBus: 0)
 
@@ -587,9 +616,23 @@ class DadAudioManager: NSObject, ObservableObject {
             print("📤 Sending audio chunk: \(data.count) bytes (16kHz PCM16)")
         }
 
-        webSocketTask?.send(.data(data)) { error in
-            if let error = error {
-                print("❌ Failed to send audio data: \(error)")
+        // Convert to Base64 and wrap in JSON protocol
+        let base64Audio = data.base64EncodedString()
+        let audioMessage: [String: Any] = [
+            "realtime_input": [
+                "media_chunks": [[
+                    "mime_type": "audio/pcm;rate=16000",
+                    "data": base64Audio
+                ]]
+            ]
+        ]
+
+        if let jsonData = try? JSONSerialization.data(withJSONObject: audioMessage),
+           let jsonString = String(data: jsonData, encoding: .utf8) {
+            webSocketTask?.send(.string(jsonString)) { error in
+                if let error = error {
+                    print("❌ Failed to send audio data: \(error)")
+                }
             }
         }
     }

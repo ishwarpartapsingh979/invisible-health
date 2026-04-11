@@ -6,6 +6,7 @@ Just the basics: receive audio from iOS, send to Gemini, stream response back
 
 import os
 import json
+import base64
 import asyncio
 from aiohttp import web
 import aiohttp
@@ -86,7 +87,13 @@ async def websocket_handler(request):
                                             if hasattr(part, 'inline_data') and part.inline_data:
                                                 audio_bytes = part.inline_data.data
                                                 print(f"🎵 Audio from model_turn: {len(audio_bytes)} bytes")
-                                                await ws.send_bytes(audio_bytes)
+                                                # Send as Base64 JSON to iOS
+                                                audio_response = {
+                                                    "type": "audio",
+                                                    "data": base64.b64encode(audio_bytes).decode('utf-8'),
+                                                    "mime_type": "audio/pcm;rate=24000"
+                                                }
+                                                await ws.send_json(audio_response)
 
                                     if response.server_content.turn_complete:
                                         print(f"✅ Turn complete signal received")
@@ -94,7 +101,13 @@ async def websocket_handler(request):
                             # Legacy format support
                             if hasattr(response, 'data') and response.data:
                                 print(f"🎵 Audio data (legacy): {len(response.data)} bytes")
-                                await ws.send_bytes(response.data)
+                                # Send as Base64 JSON to iOS
+                                audio_response = {
+                                    "type": "audio",
+                                    "data": base64.b64encode(response.data).decode('utf-8'),
+                                    "mime_type": "audio/pcm;rate=24000"
+                                }
+                                await ws.send_json(audio_response)
 
                             if hasattr(response, 'text') and response.text:
                                 print(f"📝 Text response: {response.text}")
@@ -109,9 +122,10 @@ async def websocket_handler(request):
                 chunk_count = 0
                 async for msg in ws:
                     if msg.type == aiohttp.WSMsgType.TEXT:
-                        # Control message from iOS
+                        # JSON message from iOS
                         data = json.loads(msg.data)
 
+                        # Check for control messages
                         if data.get("action") == "end_input":
                             # User pressed "Done Speaking" button
                             print(f"🏁 Manual end signal received from iOS after {chunk_count} chunks")
@@ -126,37 +140,68 @@ async def websocket_handler(request):
                                 print(f"✅ activity_end sent (legacy) - Gemini should respond now")
                             chunk_count = 0  # Reset for next turn
 
+                        # Check for audio data in JSON format
+                        elif "realtime_input" in data:
+                            # Extract Base64-encoded audio from JSON
+                            realtime_input = data["realtime_input"]
+                            if "media_chunks" in realtime_input:
+                                for chunk in realtime_input["media_chunks"]:
+                                    if "data" in chunk:
+                                        # Decode Base64 audio to binary
+                                        audio_bytes = base64.b64decode(chunk["data"])
+                                        chunk_count += 1
+
+                                        # Debug first chunk and periodic updates
+                                        if chunk_count == 1:
+                                            print(f"🎵 First audio chunk: {len(audio_bytes)} bytes (from Base64 JSON)")
+
+                                        if chunk_count % 20 == 0:
+                                            print(f"📥 Forwarded {chunk_count} audio chunks to Gemini")
+
+                                        # Forward audio to Gemini
+                                        try:
+                                            # Try the new send() method with media parameter
+                                            await session.send(
+                                                media=types.Blob(
+                                                    data=audio_bytes,
+                                                    mime_type="audio/pcm;rate=16000"
+                                                )
+                                            )
+                                        except Exception as e:
+                                            # Fallback to legacy method if new method fails
+                                            if "send() got an unexpected keyword argument 'media'" in str(e):
+                                                await session.send_realtime_input(
+                                                    audio=types.Blob(
+                                                        data=audio_bytes,
+                                                        mime_type="audio/pcm;rate=16000"
+                                                    )
+                                                )
+                                            else:
+                                                print(f"❌ Error sending audio: {e}")
+
                     elif msg.type == aiohttp.WSMsgType.BINARY:
-                        # Audio data from iOS
+                        # Legacy binary audio data (for backward compatibility)
                         chunk_count += 1
+                        print(f"⚠️ Received legacy binary audio - iOS should send Base64 JSON instead")
 
-                        # Debug first chunk and periodic updates
                         if chunk_count == 1:
-                            print(f"🎵 First audio chunk: {len(msg.data)} bytes")
+                            print(f"🎵 First audio chunk: {len(msg.data)} bytes (legacy binary)")
 
-                        if chunk_count % 20 == 0:
-                            print(f"📥 Forwarded {chunk_count} audio chunks to Gemini")
-
-                        # Forward audio to Gemini using proper method
+                        # Forward audio to Gemini (legacy support)
                         try:
-                            # Try the new send() method with media parameter
                             await session.send(
                                 media=types.Blob(
                                     data=msg.data,
                                     mime_type="audio/pcm;rate=16000"
                                 )
                             )
-                        except Exception as e:
-                            # Fallback to legacy method if new method fails
-                            if "send() got an unexpected keyword argument 'media'" in str(e):
-                                await session.send_realtime_input(
-                                    audio=types.Blob(
-                                        data=msg.data,
-                                        mime_type="audio/pcm;rate=16000"
-                                    )
+                        except:
+                            await session.send_realtime_input(
+                                audio=types.Blob(
+                                    data=msg.data,
+                                    mime_type="audio/pcm;rate=16000"
                                 )
-                            else:
-                                print(f"❌ Error sending audio: {e}")
+                            )
 
                     elif msg.type == aiohttp.WSMsgType.ERROR:
                         break
