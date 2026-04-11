@@ -40,8 +40,8 @@ async def websocket_handler(request):
 
         async with client.aio.live.connect(model="gemini-live-2.5-flash-native-audio", config=config) as session:
 
-            # Send initial greeting
-            await session.send_realtime_input(text="Hey! How can I help you today?")
+            # Don't send initial greeting - let user speak first
+            print("🎤 Session ready - user can speak first")
 
             # Start task to stream Gemini responses to iOS
             async def stream_responses():
@@ -49,6 +49,12 @@ async def websocket_handler(request):
                 try:
                     async for response in session.receive():
                         print(f"📨 Received response from Gemini: {type(response)}")
+
+                        # Check all possible response fields
+                        if hasattr(response, 'server_content'):
+                            if response.server_content and response.server_content.turn_complete:
+                                print(f"✅ Turn complete signal received")
+
                         if response.data:
                             print(f"🎵 Audio data: {len(response.data)} bytes")
                             # Send audio back to iOS
@@ -88,10 +94,10 @@ async def websocket_handler(request):
                         )
                     )
 
-                    # Test: After 50 chunks, send text to see if Gemini responds
-                    if chunk_count == 50:
-                        print(f"🔤 Testing: Sending text input after 50 chunks")
-                        await session.send_realtime_input(text="Hello, can you hear me? Please respond.")
+                    # Test: After 20 chunks (~2 seconds), send text to see if Gemini responds
+                    if chunk_count == 20:
+                        print(f"🔤 Testing: Sending text input after 20 chunks")
+                        await session.send_realtime_input(text="Testing testing, one two three. Can you hear me?")
                         print(f"✅ Text sent to Gemini")
 
                 elif msg.type == aiohttp.WSMsgType.ERROR:
