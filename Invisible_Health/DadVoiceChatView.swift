@@ -441,6 +441,12 @@ class DadAudioManager: NSObject, ObservableObject {
 
             case .failure(let error):
                 print("❌ WebSocket receive error: \(error)")
+
+                // Clean up recording when connection fails
+                if self.isRecording {
+                    self.stopRecording()
+                }
+
                 DispatchQueue.main.async {
                     self.isConnected = false
                 }
@@ -479,6 +485,11 @@ class DadAudioManager: NSObject, ObservableObject {
         guard let inputNode = inputNode else { return }
 
         let recordingFormat = inputNode.outputFormat(forBus: 0)
+
+        // Remove any existing tap before installing new one
+        if inputNode.numberOfInputs > 0 {
+            inputNode.removeTap(onBus: 0)
+        }
 
         // Create Gemini's required format: 16kHz, PCM16, mono
         guard let geminiFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 16000, channels: 1, interleaved: false) else {
