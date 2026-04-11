@@ -5,6 +5,7 @@ Just the basics: receive audio from iOS, send to Gemini, stream response back
 """
 
 import os
+import json
 import asyncio
 from aiohttp import web
 import aiohttp
@@ -25,6 +26,9 @@ async def websocket_handler(request):
         msg = await ws.receive()
         if msg.type != aiohttp.WSMsgType.TEXT:
             return ws
+
+        data = json.loads(msg.data)
+        print(f"📱 iOS message: {data}")
 
         # Initialize Gemini client
         client = genai.Client(
@@ -68,37 +72,38 @@ async def websocket_handler(request):
 
             response_task = asyncio.create_task(stream_responses())
 
-            # Listen for audio from iOS
+            # Listen for audio and control messages from iOS
             chunk_count = 0
             async for msg in ws:
-                if msg.type == aiohttp.WSMsgType.BINARY:
-                    # Forward audio to Gemini (VAD will detect silence automatically)
+                if msg.type == aiohttp.WSMsgType.TEXT:
+                    # Control message from iOS
+                    data = json.loads(msg.data)
+
+                    if data.get("action") == "end_input":
+                        # User pressed "Done Speaking" button
+                        print(f"🏁 Manual end signal received from iOS after {chunk_count} chunks")
+                        await session.send_realtime_input(activity_end=types.ActivityEnd())
+                        print(f"✅ activity_end sent - Gemini should respond now")
+                        chunk_count = 0  # Reset for next turn
+
+                elif msg.type == aiohttp.WSMsgType.BINARY:
+                    # Audio data from iOS
                     chunk_count += 1
 
-                    # Debug: Check audio data
+                    # Debug first chunk and periodic updates
                     if chunk_count == 1:
-                        print(f"🎵 First chunk: {len(msg.data)} bytes, first 20 bytes: {msg.data[:20].hex()}")
+                        print(f"🎵 First audio chunk: {len(msg.data)} bytes")
 
                     if chunk_count % 20 == 0:
                         print(f"📥 Forwarded {chunk_count} audio chunks to Gemini")
-                        # Check if audio is actually silence
-                        import struct
-                        samples = struct.unpack('<' + 'h' * (len(msg.data) // 2), msg.data)
-                        max_amplitude = max(abs(s) for s in samples) if samples else 0
-                        print(f"🔊 Audio level: {max_amplitude}/32768 (PCM16 amplitude)")
 
+                    # Forward audio to Gemini
                     await session.send_realtime_input(
                         audio=types.Blob(
                             data=msg.data,
                             mime_type="audio/pcm;rate=16000"
                         )
                     )
-
-                    # Manual end signal after 60 chunks (~6 seconds)
-                    if chunk_count == 60:
-                        print(f"🏁 Sending manual activity_end after 60 chunks of audio")
-                        await session.send_realtime_input(activity_end=types.ActivityEnd())
-                        print(f"✅ activity_end sent - Gemini should respond now")
 
                 elif msg.type == aiohttp.WSMsgType.ERROR:
                     break

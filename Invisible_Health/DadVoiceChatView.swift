@@ -242,6 +242,25 @@ struct DadVoiceChatView: View {
                 }
                 .disabled(isConnecting || audioManager.isSpeaking)
 
+                // Done Speaking button - appears when recording
+                if audioManager.isRecording {
+                    Button(action: {
+                        audioManager.sendDoneSpeaking()
+                    }) {
+                        VStack {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 30))
+                                .foregroundColor(.green)
+                            Text("Done")
+                                .font(.caption)
+                                .foregroundColor(.white)
+                        }
+                        .padding()
+                        .background(Color.green.opacity(0.2))
+                        .cornerRadius(15)
+                    }
+                }
+
                 // Disconnect button
                 if audioManager.isConnected {
                     Button(action: {
@@ -404,6 +423,29 @@ class DadAudioManager: NSObject, ObservableObject {
             self.isConnected = false
             self.isRecording = false
             self.isSpeaking = false
+        }
+    }
+
+    func sendDoneSpeaking() {
+        // Send end_input signal to backend
+        let endMessage: [String: Any] = [
+            "action": "end_input"
+        ]
+
+        if let jsonData = try? JSONSerialization.data(withJSONObject: endMessage),
+           let jsonString = String(data: jsonData, encoding: .utf8) {
+            webSocketTask?.send(.string(jsonString)) { error in
+                if let error = error {
+                    print("❌ Failed to send end_input: \(error)")
+                } else {
+                    print("✅ end_input signal sent - Gemini should respond now")
+
+                    // Stop recording to stop sending more audio
+                    DispatchQueue.main.async {
+                        self.stopRecording()
+                    }
+                }
+            }
         }
     }
 
