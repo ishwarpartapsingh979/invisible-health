@@ -51,9 +51,13 @@ async def websocket_handler(request):
             response_task = asyncio.create_task(stream_responses())
 
             # Listen for audio from iOS
+            chunk_count = 0
             async for msg in ws:
                 if msg.type == aiohttp.WSMsgType.BINARY:
                     # Forward audio to Gemini
+                    chunk_count += 1
+                    if chunk_count % 20 == 0:
+                        print(f"📥 Forwarded {chunk_count} audio chunks to Gemini")
                     await session.send_realtime_input(
                         audio=types.Blob(
                             data=msg.data,
@@ -62,6 +66,8 @@ async def websocket_handler(request):
                     )
                 elif msg.type == aiohttp.WSMsgType.ERROR:
                     break
+
+            print(f"✅ Total audio chunks forwarded: {chunk_count}")
 
             response_task.cancel()
 
