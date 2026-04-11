@@ -581,22 +581,37 @@ class DadAudioManager: NSObject, ObservableObject {
             return nil
         }
 
-        if status == .error || convertedBuffer.frameLength == 0 {
-            print("❌ Conversion failed: status=\(status), frameLength=\(convertedBuffer.frameLength)")
+        if status == .error {
+            print("❌ Conversion failed with error status")
             return nil
         }
 
-        // Convert PCM16 buffer to Data
-        let audioBuffer = convertedBuffer.audioBufferList.pointee.mBuffers
-        let actualByteSize = Int(convertedBuffer.frameLength) * 2  // 2 bytes per PCM16 sample
+        // IMPORTANT: Use the actual frame length after conversion
+        convertedBuffer.frameLength = convertedBuffer.frameCapacity
 
-        // Debug first conversion
-        if Int.random(in: 1...100) == 1 {
-            let data = Data(bytes: audioBuffer.mData!, count: min(20, actualByteSize))
-            print("🔍 Converted audio sample: \(data.map { String(format: "%02x", $0) }.joined())")
+        if convertedBuffer.frameLength == 0 {
+            print("❌ No frames converted")
+            return nil
         }
 
-        return Data(bytes: audioBuffer.mData!, count: actualByteSize)
+        // Get PCM16 data - for mono, it's in int16ChannelData
+        guard let pcm16Data = convertedBuffer.int16ChannelData?[0] else {
+            print("❌ Failed to get PCM16 channel data")
+            return nil
+        }
+
+        // Convert to Data
+        let frameCount = Int(convertedBuffer.frameLength)
+        let byteCount = frameCount * 2  // 2 bytes per PCM16 sample
+        let data = Data(bytes: pcm16Data, count: byteCount)
+
+        // Debug
+        if Int.random(in: 1...50) == 1 {
+            let sample = data.prefix(20)
+            print("🔍 Converted audio (\(frameCount) frames, \(byteCount) bytes): \(sample.map { String(format: "%02x", $0) }.joined())")
+        }
+
+        return data
     }
 
     private func calculateAudioLevel(buffer: AVAudioPCMBuffer) -> Float {
