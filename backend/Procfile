@@ -1,1 +1,1 @@
-web: python gemini_live_streaming.py
+web: python gemini_live_streaming_simple.py
