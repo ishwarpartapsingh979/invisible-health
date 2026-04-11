@@ -36,7 +36,7 @@ async def websocket_handler(request):
         # Connect to Gemini Live API
         config = {"response_modalities": ["AUDIO"]}
 
-        async with client.aio.live.connect(model="gemini-2.5-flash-native-audio", config=config) as session:
+        async with client.aio.live.connect(model="gemini-live-2.5-flash-native-audio", config=config) as session:
 
             # Send initial greeting
             await session.send_realtime_input(text="Hey! How can I help you today?")
