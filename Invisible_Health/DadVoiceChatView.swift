@@ -333,7 +333,7 @@ class DadAudioManager: NSObject, ObservableObject {
     // Silence detection for natural turn-taking
     private var silenceTimer: Timer?
     private var lastSpeechTime: Date = Date()
-    private let silenceThreshold: Float = 0.02 // Audio level threshold for silence
+    private let silenceThreshold: Float = 0.30 // Audio level threshold for silence (filters background noise ~0.15)
     private let silenceDuration: TimeInterval = 10.0 // 10 seconds of silence
 
     // Cloud Run URL
@@ -518,6 +518,11 @@ class DadAudioManager: NSObject, ObservableObject {
             if level > self.silenceThreshold {
                 // User is speaking - reset silence timer
                 self.lastSpeechTime = Date()
+
+                // Debug: Log when we detect speech
+                if Int(Date().timeIntervalSince1970) % 3 == 0 {
+                    print("🗣️ Speech detected (level: \(String(format: "%.4f", level)), threshold: \(String(format: "%.4f", self.silenceThreshold)))")
+                }
             }
 
             // Convert buffer to Gemini format and send to WebSocket
@@ -566,6 +571,11 @@ class DadAudioManager: NSObject, ObservableObject {
             guard let self = self else { return }
 
             let silenceDurationElapsed = Date().timeIntervalSince(self.lastSpeechTime)
+
+            // Debug: Log silence duration every 2 seconds
+            if Int(silenceDurationElapsed) % 2 == 0 {
+                print("🔇 Silence duration: \(Int(silenceDurationElapsed))s (threshold: \(Int(self.silenceDuration))s)")
+            }
 
             if silenceDurationElapsed >= self.silenceDuration {
                 // 10 seconds of silence detected - signal end of turn
