@@ -4,8 +4,8 @@
 # 1. aiohttp: Async WebSocket server for Gemini Live streaming
 aiohttp==3.9.3
 
-# 2. google-genai: New Gemini SDK with Live API support
-google-genai==0.2.2
+# 2. google-genai: New Gemini SDK with Live API support (latest version for send_realtime_input)
+google-genai>=0.3.0
 
 # 3. supabase: To talk to your database (Memory)
 supabase==2.13.0

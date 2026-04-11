@@ -248,14 +248,22 @@ CONVERSATION FLOW - WORKOUT ANNOTATION:
             if random.randint(1, 20) == 1:
                 logger.info(f"📥 Received audio from iOS: {len(audio_data)} bytes, forwarding to Gemini...")
 
-            # Send audio chunk to Gemini using proper format
-            # Audio is 16kHz PCM16 from iOS
-            await self.gemini_session.send_realtime_input(
-                audio=types.Blob(
+            # Try new method first (google-genai >= 0.3.0), fall back to old method
+            try:
+                # New API (google-genai >= 0.3.0)
+                await self.gemini_session.send_realtime_input(
+                    audio=types.Blob(
+                        data=audio_data,
+                        mime_type="audio/pcm;rate=16000"
+                    )
+                )
+            except AttributeError:
+                # Old API fallback (google-genai 0.2.x)
+                audio_blob = types.Blob(
                     data=audio_data,
                     mime_type="audio/pcm;rate=16000"
                 )
-            )
+                await self.gemini_session.send(input=audio_blob)
 
         except Exception as e:
             logger.error(f"❌ Error processing iOS audio: {e}")
@@ -265,11 +273,17 @@ CONVERSATION FLOW - WORKOUT ANNOTATION:
     async def signal_end_of_turn(self):
         """
         Signal to Gemini that user has stopped speaking (6 seconds of silence detected)
+
+        Note: With proper audio streaming, Gemini's built-in VAD should detect silence.
+        This is a backup signal in case VAD doesn't trigger.
         """
         try:
             logger.info(f"🤫 User silent for 6 seconds - signaling end of turn to Gemini")
-            # Send end_of_turn without input to trigger Gemini's response
+
+            # Use the same send() method that worked for initial greeting
+            # Just signal end_of_turn without new input
             await self.gemini_session.send(end_of_turn=True)
+            logger.info(f"✅ End of turn signal sent to Gemini")
 
         except Exception as e:
             logger.error(f"❌ Error signaling end of turn: {e}")
