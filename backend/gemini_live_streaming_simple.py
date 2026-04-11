@@ -34,7 +34,16 @@ async def websocket_handler(request):
         )
 
         # Connect to Gemini Live API
-        config = {"response_modalities": ["AUDIO"]}
+        config = {
+            "response_modalities": ["AUDIO"],
+            "realtime_input_config": {
+                "automatic_activity_detection": {
+                    "disabled": False,
+                    "end_of_speech_sensitivity": "medium",
+                    "silence_duration_ms": 1500  # 1.5 seconds of silence triggers response
+                }
+            }
+        }
 
         async with client.aio.live.connect(model="gemini-live-2.5-flash-native-audio", config=config) as session:
 
@@ -54,7 +63,7 @@ async def websocket_handler(request):
             chunk_count = 0
             async for msg in ws:
                 if msg.type == aiohttp.WSMsgType.BINARY:
-                    # Forward audio to Gemini
+                    # Forward audio to Gemini (VAD will detect silence automatically)
                     chunk_count += 1
                     if chunk_count % 20 == 0:
                         print(f"📥 Forwarded {chunk_count} audio chunks to Gemini")
