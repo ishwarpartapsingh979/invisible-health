@@ -27,6 +27,7 @@ import aiohttp
 
 # Gemini
 from google import genai
+from google.genai import types
 from google.genai.types import LiveConnectConfig, PrebuiltVoiceConfig, SpeechConfig
 
 # Dad OS components
@@ -247,8 +248,14 @@ CONVERSATION FLOW - WORKOUT ANNOTATION:
             if random.randint(1, 20) == 1:
                 logger.info(f"📥 Received audio from iOS: {len(audio_data)} bytes, forwarding to Gemini...")
 
-            # Send audio chunk to Gemini (streaming, not end_of_turn)
-            await self.gemini_session.send(input=audio_data)
+            # Send audio chunk to Gemini using proper format
+            # Audio is 16kHz PCM16 from iOS
+            await self.gemini_session.send_realtime_input(
+                audio=types.Blob(
+                    data=audio_data,
+                    mime_type="audio/pcm;rate=16000"
+                )
+            )
 
         except Exception as e:
             logger.error(f"❌ Error processing iOS audio: {e}")
