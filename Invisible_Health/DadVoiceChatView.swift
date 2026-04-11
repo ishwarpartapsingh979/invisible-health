@@ -334,7 +334,7 @@ class DadAudioManager: NSObject, ObservableObject {
     private var silenceTimer: Timer?
     private var lastSpeechTime: Date = Date()
     private let silenceThreshold: Float = 0.30 // Audio level threshold for silence (filters background noise ~0.15)
-    private let silenceDuration: TimeInterval = 10.0 // 10 seconds of silence
+    private let silenceDuration: TimeInterval = 6.0 // 6 seconds of silence
 
     // Cloud Run URL
     private let cloudRunURL = "wss://dad-live-audio-zupjde2jpq-uc.a.run.app/ws"
@@ -423,10 +423,12 @@ class DadAudioManager: NSObject, ObservableObject {
                 switch message {
                 case .data(let data):
                     // Audio data from Gemini
+                    print("📥 Received audio from Gemini: \(data.count) bytes")
                     self.playAudio(data: data)
 
                 case .string(let text):
                     // JSON message (transcript, status, etc.)
+                    print("📥 Received JSON from backend: \(text)")
                     if let data = text.data(using: .utf8),
                        let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                         self.handleJSONMessage(json)
@@ -594,20 +596,27 @@ class DadAudioManager: NSObject, ObservableObject {
     }
 
     private func sendEndOfTurn() {
+        print("📨 Preparing to send end_of_turn signal...")
         let message: [String: Any] = ["action": "end_of_turn"]
         if let jsonData = try? JSONSerialization.data(withJSONObject: message),
            let jsonString = String(data: jsonData, encoding: .utf8) {
+            print("📨 Sending end_of_turn JSON: \(jsonString)")
             webSocketTask?.send(.string(jsonString)) { error in
                 if let error = error {
                     print("❌ Failed to send end_of_turn: \(error)")
                 } else {
-                    print("✅ Sent end_of_turn signal to backend")
+                    print("✅ end_of_turn signal sent successfully to backend")
                 }
             }
         }
     }
 
     private func sendAudioData(_ data: Data) {
+        // Debug: Log every 50th chunk to avoid spam
+        if Int.random(in: 1...50) == 1 {
+            print("📤 Sending audio chunk: \(data.count) bytes (16kHz PCM16)")
+        }
+
         webSocketTask?.send(.data(data)) { error in
             if let error = error {
                 print("❌ Failed to send audio data: \(error)")

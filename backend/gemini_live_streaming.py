@@ -223,8 +223,10 @@ CONVERSATION FLOW - WORKOUT ANNOTATION:
 
         greeting = greetings.get(self.conversation_type, "Hey there! How can I help?")
 
+        logger.info(f"👋 Sending initial greeting to Gemini: '{greeting}'")
         # Send greeting as text (Gemini will convert to audio)
         await self.gemini_session.send(input=greeting, end_of_turn=True)
+        logger.info(f"✅ Initial greeting sent to Gemini")
 
         # Set initial step
         if self.conversation_type == "morning_checkin":
@@ -240,6 +242,11 @@ CONVERSATION FLOW - WORKOUT ANNOTATION:
         Send to Gemini Live API
         """
         try:
+            # Log every 20th chunk to avoid spam
+            import random
+            if random.randint(1, 20) == 1:
+                logger.info(f"📥 Received audio from iOS: {len(audio_data)} bytes, forwarding to Gemini...")
+
             # Send audio chunk to Gemini (streaming, not end_of_turn)
             await self.gemini_session.send(input=audio_data)
 
@@ -250,12 +257,12 @@ CONVERSATION FLOW - WORKOUT ANNOTATION:
 
     async def signal_end_of_turn(self):
         """
-        Signal to Gemini that user has stopped speaking (10 seconds of silence detected)
+        Signal to Gemini that user has stopped speaking (6 seconds of silence detected)
         """
         try:
-            logger.info(f"🤫 User silent for 10 seconds - signaling end of turn to Gemini")
-            # Send empty input with end_of_turn=True to trigger Gemini's response
-            await self.gemini_session.send(input="", end_of_turn=True)
+            logger.info(f"🤫 User silent for 6 seconds - signaling end of turn to Gemini")
+            # Send end_of_turn without input to trigger Gemini's response
+            await self.gemini_session.send(end_of_turn=True)
 
         except Exception as e:
             logger.error(f"❌ Error signaling end of turn: {e}")
@@ -267,14 +274,19 @@ CONVERSATION FLOW - WORKOUT ANNOTATION:
         Stream Gemini's audio responses to iOS
         """
         try:
+            logger.info("👂 Started listening for Gemini responses...")
             async for response in self.gemini_session.receive():
+                logger.info(f"📨 Received response from Gemini: {type(response)}")
+
                 # Handle different response types
                 if response.data:
                     # Audio data from Gemini
+                    logger.info(f"🔊 Gemini sent audio: {len(response.data)} bytes, forwarding to iOS...")
                     await self.websocket.send_bytes(response.data)
 
                 if response.text:
                     # Text transcript (for accessibility)
+                    logger.info(f"📝 Gemini transcript: {response.text}")
                     await self.websocket.send_json({
                         "type": "transcript",
                         "text": response.text,
@@ -283,11 +295,14 @@ CONVERSATION FLOW - WORKOUT ANNOTATION:
 
                 # Check if turn is complete
                 if response.server_content and response.server_content.turn_complete:
+                    logger.info(f"✅ Gemini turn complete")
                     # Handle conversation flow logic
                     await self._handle_turn_complete(response.text)
 
         except Exception as e:
             logger.error(f"❌ Error streaming to iOS: {e}")
+            import traceback
+            traceback.print_exc()
 
     async def _handle_turn_complete(self, text: Optional[str]):
         """
@@ -376,9 +391,12 @@ async def websocket_handler(request):
                     break
 
                 elif data.get("action") == "end_of_turn":
-                    # User stopped speaking (10 seconds of silence)
+                    # User stopped speaking (6 seconds of silence)
+                    logger.info(f"📨 Received end_of_turn action from iOS")
                     if session:
                         await session.signal_end_of_turn()
+                    else:
+                        logger.warning(f"⚠️ Received end_of_turn but no active session!")
 
             elif msg.type == aiohttp.WSMsgType.BINARY:
                 # Audio data from iOS
