@@ -58,14 +58,31 @@ async def websocket_handler(request):
                 if msg.type == aiohttp.WSMsgType.BINARY:
                     # Forward audio to Gemini (VAD will detect silence automatically)
                     chunk_count += 1
+
+                    # Debug: Check audio data
+                    if chunk_count == 1:
+                        print(f"🎵 First chunk: {len(msg.data)} bytes, first 20 bytes: {msg.data[:20].hex()}")
+
                     if chunk_count % 20 == 0:
                         print(f"📥 Forwarded {chunk_count} audio chunks to Gemini")
+                        # Check if audio is actually silence
+                        import struct
+                        samples = struct.unpack('<' + 'h' * (len(msg.data) // 2), msg.data)
+                        max_amplitude = max(abs(s) for s in samples) if samples else 0
+                        print(f"🔊 Audio level: {max_amplitude}/32768 (PCM16 amplitude)")
+
                     await session.send_realtime_input(
                         audio=types.Blob(
                             data=msg.data,
                             mime_type="audio/pcm;rate=16000"
                         )
                     )
+
+                    # Test: After 100 chunks (~10 seconds), manually signal end
+                    if chunk_count == 100:
+                        print(f"⚡ Testing: Sending manual activity_end after 100 chunks")
+                        await session.send_realtime_input(activity_end=types.ActivityEnd())
+
                 elif msg.type == aiohttp.WSMsgType.ERROR:
                     break
 
