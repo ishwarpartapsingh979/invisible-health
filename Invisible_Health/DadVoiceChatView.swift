@@ -328,6 +328,7 @@ class DadAudioManager: NSObject, ObservableObject {
     private var audioPlayer: AVAudioPlayer?
     private var playerNode: AVAudioPlayerNode?
     private var audioFormat: AVAudioFormat?
+    private var audioConverter: AVAudioConverter?
 
     // Cloud Run URL
     private let cloudRunURL = "wss://dad-live-audio-zupjde2jpq-uc.a.run.app/ws"
@@ -470,19 +471,32 @@ class DadAudioManager: NSObject, ObservableObject {
 
         let recordingFormat = inputNode.outputFormat(forBus: 0)
 
+        // Create Gemini's required format: 16kHz, PCM16, mono
+        guard let geminiFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 16000, channels: 1, interleaved: false) else {
+            print("❌ Failed to create Gemini audio format")
+            return
+        }
+
+        // Create converter from iPhone format to Gemini format
+        guard let converter = AVAudioConverter(from: recordingFormat, to: geminiFormat) else {
+            print("❌ Failed to create audio converter")
+            return
+        }
+        self.audioConverter = converter
+
         // Install tap to capture audio
         inputNode.installTap(onBus: 0, bufferSize: 4096, format: recordingFormat) { [weak self] buffer, time in
             guard let self = self else { return }
 
-            // Calculate audio level for visualization
+            // Calculate audio level for visualization (before conversion)
             let level = self.calculateAudioLevel(buffer: buffer)
             DispatchQueue.main.async {
                 self.audioLevel = level
             }
 
-            // Convert buffer to Data and send to WebSocket
-            if let audioData = self.bufferToData(buffer: buffer) {
-                self.sendAudioData(audioData)
+            // Convert buffer to Gemini format and send to WebSocket
+            if let convertedData = self.convertAndBufferToData(buffer: buffer, converter: converter, targetFormat: geminiFormat) {
+                self.sendAudioData(convertedData)
             }
         }
 
@@ -491,7 +505,7 @@ class DadAudioManager: NSObject, ObservableObject {
             DispatchQueue.main.async {
                 self.isRecording = true
             }
-            print("🎙️ Recording started")
+            print("🎙️ Recording started (converting to 16kHz PCM16 mono for Gemini)")
         } catch {
             print("❌ Failed to start recording: \(error)")
         }
@@ -519,6 +533,35 @@ class DadAudioManager: NSObject, ObservableObject {
 
     private func bufferToData(buffer: AVAudioPCMBuffer) -> Data? {
         let audioBuffer = buffer.audioBufferList.pointee.mBuffers
+        return Data(bytes: audioBuffer.mData!, count: Int(audioBuffer.mDataByteSize))
+    }
+
+    private func convertAndBufferToData(buffer: AVAudioPCMBuffer, converter: AVAudioConverter, targetFormat: AVAudioFormat) -> Data? {
+        // Calculate the converted buffer capacity
+        // Conversion ratio: (targetSampleRate / sourceSampleRate) * sourceFrameLength
+        let ratio = targetFormat.sampleRate / buffer.format.sampleRate
+        let convertedFrameCapacity = UInt32(Double(buffer.frameLength) * ratio)
+
+        guard let convertedBuffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: convertedFrameCapacity) else {
+            print("❌ Failed to create converted buffer")
+            return nil
+        }
+
+        var error: NSError?
+        let inputBlock: AVAudioConverterInputBlock = { inNumPackets, outStatus in
+            outStatus.pointee = .haveData
+            return buffer
+        }
+
+        converter.convert(to: convertedBuffer, error: &error, withInputFrom: inputBlock)
+
+        if let error = error {
+            print("❌ Audio conversion error: \(error)")
+            return nil
+        }
+
+        // Convert PCM16 buffer to Data
+        let audioBuffer = convertedBuffer.audioBufferList.pointee.mBuffers
         return Data(bytes: audioBuffer.mData!, count: Int(audioBuffer.mDataByteSize))
     }
 
