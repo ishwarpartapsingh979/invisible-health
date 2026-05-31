@@ -41,6 +41,13 @@ struct HolisticSummaryView: View {
         }
         .background(Color.black.edgesIgnoringSafeArea(.all))
         .onAppear {
+            // Make sure Whoop data is fresh before asking Gemini for a read,
+            // otherwise the summary fires with stale/empty Whoop fields and
+            // the user has to manually hit Sync Now in Devices first.
+            if openWearables.isConfigured && openWearables.isWhoopConnected {
+                openWearables.triggerProviderSync()
+                openWearables.performSync()
+            }
             if summaryText == nil { refresh() }
         }
     }
