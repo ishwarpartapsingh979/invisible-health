@@ -251,8 +251,15 @@ class OpenWearablesManager: NSObject, ObservableObject {
     }
 
     // MARK: - Sync orchestration
-    func performSync() {
-        guard isConfigured, isWhoopConnected, !isSyncing else { return }
+    /// Fetches recovery/strain/sleep into the published properties.
+    /// Optional completion fires on the main queue after all three calls finish
+    /// (whether they succeeded or not) — useful for chaining a follow-up like
+    /// "now ask Gemini for a summary."
+    func performSync(completion: (() -> Void)? = nil) {
+        guard isConfigured, isWhoopConnected, !isSyncing else {
+            completion?()
+            return
+        }
         DispatchQueue.main.async {
             self.isSyncing = true
             self.syncError = nil
@@ -279,6 +286,7 @@ class OpenWearablesManager: NSObject, ObservableObject {
             self?.isSyncing = false
             self?.lastSyncDate = Date()
             print("OW sync completed at \(Date())")
+            completion?()
         }
     }
 

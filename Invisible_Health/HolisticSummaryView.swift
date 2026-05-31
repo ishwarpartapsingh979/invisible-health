@@ -41,14 +41,20 @@ struct HolisticSummaryView: View {
         }
         .background(Color.black.edgesIgnoringSafeArea(.all))
         .onAppear {
-            // Make sure Whoop data is fresh before asking Gemini for a read,
-            // otherwise the summary fires with stale/empty Whoop fields and
-            // the user has to manually hit Sync Now in Devices first.
+            guard summaryText == nil else { return }
+            // Cold-launch path: refresh Whoop data first, THEN ask Gemini.
+            // performSync's completion fires once all three Whoop fetches
+            // return, so the summary call sees populated chips.
             if openWearables.isConfigured && openWearables.isWhoopConnected {
+                isLoading = true
                 openWearables.triggerProviderSync()
-                openWearables.performSync()
+                openWearables.performSync {
+                    refresh()
+                }
+            } else {
+                // No Whoop configured — skip straight to Gemini with Apple-only data.
+                refresh()
             }
-            if summaryText == nil { refresh() }
         }
     }
 
@@ -144,18 +150,33 @@ struct HolisticSummaryView: View {
     }
 
     private func summaryBody(_ text: String) -> some View {
-        let attributed = (try? AttributedString(
-            markdown: text,
-            options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        )) ?? AttributedString(text)
+        // Defensive: handle any leftover literal "\n" escapes the backend may emit.
+        let normalized = text.replacingOccurrences(of: "\\n", with: "\n")
 
-        return Text(attributed)
-            .font(.body)
-            .foregroundColor(.white)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding()
-            .background(Color.white.opacity(0.04))
-            .cornerRadius(14)
+        // Split into paragraphs (blank-line separated) so newlines actually render
+        // as breaks. Each paragraph keeps inline markdown (**bold**, *italic*, etc.).
+        let paragraphs = normalized
+            .components(separatedBy: "\n\n")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        return VStack(alignment: .leading, spacing: 12) {
+            ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, paragraph in
+                let attributed = (try? AttributedString(
+                    markdown: paragraph,
+                    options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+                )) ?? AttributedString(paragraph)
+
+                Text(attributed)
+                    .font(.body)
+                    .foregroundColor(.white)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding()
+        .background(Color.white.opacity(0.04))
+        .cornerRadius(14)
     }
 
     // MARK: - Actions

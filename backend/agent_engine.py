@@ -2814,13 +2814,32 @@ DATA:
 
             response = self.model.generate_content(prompt)
             summary_text = (response.text or "").strip()
-            # Strip accidental code fences if Gemini wrapped the output
+
+            # 1. Strip code fences if Gemini wrapped the output in ```...```
             if summary_text.startswith("```"):
                 summary_text = summary_text.strip("`")
-                # remove leading 'markdown' / 'md' language hint
                 first_newline = summary_text.find("\n")
                 if first_newline != -1 and len(summary_text[:first_newline]) < 20:
                     summary_text = summary_text[first_newline + 1:].strip()
+
+            # 2. If Gemini ignored "no JSON" and returned {"body": "..."} or
+            #    similar, unwrap it. Try common key names.
+            if summary_text.startswith("{") and summary_text.endswith("}"):
+                try:
+                    parsed = _json.loads(summary_text)
+                    if isinstance(parsed, dict):
+                        for key in ("summary", "body", "text", "markdown",
+                                    "content", "response", "message", "state_of_body"):
+                            v = parsed.get(key)
+                            if isinstance(v, str) and v.strip():
+                                summary_text = v.strip()
+                                break
+                except Exception:
+                    pass
+
+            # 3. Convert any leftover literal "\n" escape sequences to real
+            #    newlines (happens when Gemini double-escapes inside JSON).
+            summary_text = summary_text.replace("\\n", "\n").replace("\\t", "\t")
 
             return _json.dumps({"summary": summary_text})
 
