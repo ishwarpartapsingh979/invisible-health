@@ -2766,3 +2766,179 @@ EXAMPLE for 3 resistance bands:
             import traceback
             traceback.print_exc()
             return json.dumps({"success": False, "error": str(e)})
+
+    # ============================================================
+    # HOLISTIC SUMMARY (Apple Health + Whoop → Gemini Pro)
+    # iOS sends: { "action": "holistic_summary", "user_id": "...",
+    #             "apple": {...}, "whoop": {...} }
+    # Returns:   '{"summary": "<markdown text>"}'
+    # ============================================================
+    @observe(as_type="generation")
+    def generate_holistic_summary(self, data: dict):
+        """
+        Cross-source 'state of body' read using both Apple Health and Whoop.
+        The prompt asks Gemini to synthesize (not list) — flagging divergence
+        between the two sources and producing 2–3 concrete actions for today.
+        """
+        try:
+            import json as _json
+            apple = data.get("apple", {}) or {}
+            whoop = data.get("whoop", {}) or {}
+
+            payload_json = _json.dumps({"apple": apple, "whoop": whoop}, indent=2, default=str)
+
+            prompt = f"""
+You are a precise, no-fluff training coach reading the user's state of body from
+objective signals coming from TWO sources (Apple Health + Whoop). Output
+GitHub-flavored markdown only — no preamble, no JSON, no code fences.
+
+Format strictly:
+
+**State of body — <one-line read>**
+
+1. **Recovery** — Whoop recovery score (if present), HRV (ms), RHR (bpm), SpO₂. Net: <green / yellow / red>.
+2. **Sleep** — duration h:m, efficiency %, REM/deep/light split. Compare to typical (7h+, ≥85% efficiency).
+3. **Strain & activity** — yesterday's strain, recent workouts, steps today.
+4. **Cross-source check** — Apple HRV vs Whoop HRV, Apple RHR vs Whoop RHR. Flag any divergence > 10% explicitly.
+5. **What to do today** — exactly 2 or 3 bullets. Concrete (e.g. "Z2 cardio 45 min" not "exercise"). Tie each to a signal.
+
+Rules:
+- Use only the data provided. If a field is missing or null, omit that point — never speculate.
+- Maximum 220 words total.
+- No emojis. No motivational filler. No "I" or "you" addressing — write in clipped coach voice.
+- If Whoop is not connected, say so once in line 1 and proceed using Apple only.
+
+DATA:
+{payload_json}
+""".strip()
+
+            response = self.model.generate_content(prompt)
+            summary_text = (response.text or "").strip()
+            # Strip accidental code fences if Gemini wrapped the output
+            if summary_text.startswith("```"):
+                summary_text = summary_text.strip("`")
+                # remove leading 'markdown' / 'md' language hint
+                first_newline = summary_text.find("\n")
+                if first_newline != -1 and len(summary_text[:first_newline]) < 20:
+                    summary_text = summary_text[first_newline + 1:].strip()
+
+            return _json.dumps({"summary": summary_text})
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return json.dumps({"summary": f"Error generating holistic summary: {str(e)}"})
+
+    # ============================================================
+    # UNIFIED WORKOUT RECOMMENDATION (Apple + Whoop → Gemini Pro)
+    # iOS sends: { "action": "workout_recommendation_unified",
+    #             "user_id": "...", "apple": {...}, "whoop": {...},
+    #             "active_goals": [...], "optional_context": "..." }
+    # Returns: JSON matching the WorkoutRecommendation Swift struct.
+    # ============================================================
+    @observe(as_type="generation")
+    def get_unified_workout_recommendation(self, data: dict):
+        """
+        Like get_workout_recommendation but takes the new nested apple/whoop
+        payload shape and returns the same WorkoutRecommendation JSON structure
+        that the iOS app already decodes.
+        """
+        try:
+            import json as _json
+            apple = data.get("apple", {}) or {}
+            whoop = data.get("whoop", {}) or {}
+            active_goals = data.get("active_goals", []) or []
+            optional_context = data.get("optional_context", "") or ""
+
+            # Compute has_fresh_vitals: we trust the data if we have at least
+            # one fresh recovery metric from either source today.
+            apple_has_vitals = bool(apple.get("hrv_ms") or apple.get("rhr_bpm"))
+            whoop_recovery = (whoop.get("recovery") or {})
+            whoop_has_vitals = bool(whoop_recovery.get("recovery_score_pct"))
+            has_fresh_vitals = apple_has_vitals or whoop_has_vitals
+
+            payload_json = _json.dumps(
+                {"apple": apple, "whoop": whoop, "active_goals": active_goals, "optional_context": optional_context},
+                indent=2, default=str
+            )
+
+            prompt = f"""
+You are a precise training coach. Combine signals from BOTH Apple Health and
+Whoop to prescribe ONE workout for today.
+
+Synthesis rules:
+- Whoop recovery score (0–100) is the headline if present.
+- If Apple HRV and Whoop HRV disagree by >10 ms, weight Whoop higher (worn during sleep).
+- If Whoop sleep is <6h OR efficiency <75%: cap intensity at moderate.
+- If yesterday's strain ≥15 (Whoop) OR last workout ≥45 min strenuous (Apple): bias toward recovery / Z2.
+- Always honour active_goals when picking workout_type.
+
+OUTPUT — JSON ONLY, matching this exact schema (no prose, no markdown, no code fences):
+
+{{
+  "readiness_score": <int 0-100>,
+  "readiness_label": "<short phrase, e.g. 'Primed', 'Caution', 'Recover'>",
+  "readiness_color": "<green | yellow | red>",
+  "recommended_workout_type": "<e.g. 'Z2 Run', 'Strength Lower', 'Recovery Walk', 'Mobility'>",
+  "recommended_duration_min": <int>,
+  "recommended_intensity": "<low | moderate | high>",
+  "headline": "<one-line prescription>",
+  "reasoning": "<2-3 sentences tying signals to the prescription>",
+  "key_signals": [
+    {{"label": "<signal name>", "value": "<value with unit>", "status": "<good|warning|critical>"}}
+  ],
+  "one_drill": "<single focused drill, exercise, or cue for the session>",
+  "logic_breakdown": ["<short bullet 1>", "<short bullet 2>", "<short bullet 3>"],
+  "has_fresh_vitals": {str(has_fresh_vitals).lower()}
+}}
+
+DATA:
+{payload_json}
+""".strip()
+
+            response = self.model.generate_content(prompt)
+            raw = (response.text or "").strip()
+            # Strip any code fences Gemini wrapped around the JSON
+            clean = raw.replace("```json", "").replace("```", "").strip()
+            # Validate parse, ensure has_fresh_vitals is set
+            try:
+                parsed = _json.loads(clean)
+                parsed.setdefault("has_fresh_vitals", has_fresh_vitals)
+                return _json.dumps(parsed)
+            except Exception as parse_err:
+                print(f"⚠️ Unified recommendation parse failed: {parse_err}\nRaw: {raw[:500]}")
+                # Return a minimal valid response so the iOS decoder doesn't choke
+                fallback = {
+                    "readiness_score": 0,
+                    "readiness_label": "Unknown",
+                    "readiness_color": "yellow",
+                    "recommended_workout_type": "Mobility",
+                    "recommended_duration_min": 20,
+                    "recommended_intensity": "low",
+                    "headline": "Couldn't synthesize a clean recommendation",
+                    "reasoning": "Backend received signals but Gemini response failed to parse. Try again.",
+                    "key_signals": [],
+                    "one_drill": "Walk 15 min, easy nasal breathing",
+                    "logic_breakdown": [f"Parse error: {str(parse_err)[:80]}"],
+                    "has_fresh_vitals": has_fresh_vitals
+                }
+                return _json.dumps(fallback)
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            error_payload = {
+                "readiness_score": 0,
+                "readiness_label": "Error",
+                "readiness_color": "red",
+                "recommended_workout_type": "Rest",
+                "recommended_duration_min": 0,
+                "recommended_intensity": "low",
+                "headline": f"Backend error: {str(e)[:80]}",
+                "reasoning": "An exception was raised before Gemini could respond.",
+                "key_signals": [],
+                "one_drill": "",
+                "logic_breakdown": [],
+                "has_fresh_vitals": False
+            }
+            return json.dumps(error_payload)

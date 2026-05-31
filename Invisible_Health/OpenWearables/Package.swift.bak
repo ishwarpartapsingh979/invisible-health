@@ -1,0 +1,21 @@
+// swift-tools-version:5.5
+import PackageDescription
+
+let package = Package(
+    name: "OpenWearablesIntegration",
+    platforms: [
+        .iOS(.v14)
+    ],
+    dependencies: [
+        // Open Wearables iOS SDK
+        .package(url: "https://github.com/the-momentum/open_wearables_ios_sdk.git", from: "0.1.0")
+    ],
+    targets: [
+        .target(
+            name: "OpenWearablesIntegration",
+            dependencies: [
+                .product(name: "OpenWearablesSDK", package: "open_wearables_ios_sdk")
+            ]
+        )
+    ]
+)

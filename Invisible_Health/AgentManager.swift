@@ -2036,4 +2036,278 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             }
         }.resume()
     }
+
+    // MARK: - Unified Workout Recommendation (Apple + Whoop → Gemini Pro)
+
+    /// Like fetchWorkoutRecommendation but also includes Whoop recovery/sleep/strain
+    /// in the payload and uses action=workout_recommendation_unified so the backend
+    /// can apply a Whoop-aware prompt.
+    func fetchUnifiedWorkoutRecommendation(optionalContext: String? = nil,
+                                           userId: String = "00000000-0000-0000-0000-000000000001",
+                                           completion: @escaping (WorkoutRecommendation?) -> Void) {
+        let group = DispatchGroup()
+        var snapshot = HealthManager.ReadinessSnapshot(
+            hrv: nil, restingHR: nil, vo2Max: nil, bodyMassKg: nil,
+            timeInBedHours: 0, timeAsleepHours: 0,
+            walkingAsymmetryPct: nil, morningHRStream: [],
+            heartRateRecovery: nil
+        )
+        var telemetryGap: HealthManager.TelemetryGapResult? = nil
+        var recentWorkouts: [HKWorkout] = []
+        var steps: Double = 0
+
+        group.enter()
+        HealthManager.shared.fetchReadinessSnapshot { s in snapshot = s; group.leave() }
+        group.enter()
+        HealthManager.shared.calculateTelemetryGapSleep { gap in telemetryGap = gap; group.leave() }
+        group.enter()
+        HealthManager.shared.fetchRecentWorkouts(days: 2) { w in recentWorkouts = w; group.leave() }
+        group.enter()
+        HealthManager.shared.fetchTodaySteps { s in steps = s; group.leave() }
+
+        group.notify(queue: .main) {
+            guard let url = URL(string: self.agentURL) else { completion(nil); return }
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+            // Apple side
+            var apple: [String: Any] = ["steps_today": Int(steps)]
+            if let v = snapshot.hrv             { apple["hrv_ms"] = v }
+            if let v = snapshot.restingHR       { apple["rhr_bpm"] = v }
+            if let v = snapshot.vo2Max          { apple["vo2_max"] = v }
+            if let v = snapshot.bodyMassKg      { apple["body_mass_kg"] = v }
+            if let v = snapshot.heartRateRecovery { apple["hrr_1min"] = v }
+            if let gap = telemetryGap {
+                apple["proxy_sleep_hours"]   = gap.proxyTimeInBed / 3600
+                apple["iphone_in_bed_hours"] = gap.iPhoneInBedSeconds / 3600
+            }
+            apple["recent_workouts"] = recentWorkouts.map { w -> [String: Any] in
+                let cals = w.statistics(for: HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)!)?.sumQuantity()?.doubleValue(for: .kilocalorie()) ?? 0
+                return [
+                    "type": HKWorkoutActivityType(rawValue: w.workoutActivityType.rawValue)?.name ?? "Workout",
+                    "start": ISO8601DateFormatter().string(from: w.startDate),
+                    "duration_min": Int(w.duration / 60),
+                    "calories": Int(cals)
+                ]
+            }
+
+            // Whoop side
+            let ow = OpenWearablesManager.shared
+            var whoop: [String: Any] = ["connected": ow.isWhoopConnected]
+            if let r = ow.whoopRecovery {
+                var rec: [String: Any] = [:]
+                if let v = r.recoveryScore       { rec["recovery_score_pct"] = v }
+                if let v = r.avgHrvSdnnMs        { rec["hrv_ms"] = v }
+                if let v = r.restingHeartRateBpm { rec["rhr_bpm"] = v }
+                if let v = r.avgSpo2Percent      { rec["spo2_pct"] = v }
+                whoop["recovery"] = rec
+            }
+            if let s = ow.whoopSleep {
+                var sl: [String: Any] = [:]
+                if let v = s.durationMinutes   { sl["duration_min"] = v }
+                if let v = s.efficiencyPercent { sl["efficiency_pct"] = v }
+                if let v = s.stages?.deepMinutes { sl["deep_min"] = v }
+                if let v = s.stages?.remMinutes  { sl["rem_min"] = v }
+                whoop["sleep"] = sl
+            }
+            if let st = ow.whoopStrain {
+                var sn: [String: Any] = [:]
+                if let v = st.dayStrain { sn["day_strain"] = v }
+                whoop["strain"] = sn
+            }
+
+            // Active goals (UserDefaults)
+            var activeGoals: [String] = []
+            if let data = UserDefaults.standard.data(forKey: "user_goals"),
+               let goals = try? JSONDecoder().decode([Goal].self, from: data) {
+                activeGoals = goals.map { goal in
+                    if let target = goal.targetDate {
+                        let f = DateFormatter(); f.dateStyle = .medium
+                        return "\(goal.title) (by \(f.string(from: target)))"
+                    }
+                    return goal.title
+                }
+            }
+
+            var body: [String: Any] = [
+                "action":  "workout_recommendation_unified",
+                "user_id": userId,
+                "apple":   apple,
+                "whoop":   whoop,
+                "active_goals": activeGoals
+            ]
+            if let ctx = optionalContext, !ctx.isEmpty { body["optional_context"] = ctx }
+
+            do {
+                request.httpBody = try JSONSerialization.data(withJSONObject: body)
+            } catch {
+                print("❌ Unified workout rec encode error: \(error)")
+                completion(nil); return
+            }
+
+            print("🏋️ Fetching unified workout recommendation (whoop connected: \(ow.isWhoopConnected))")
+
+            URLSession.shared.dataTask(with: request) { data, _, error in
+                guard let data = data, error == nil else {
+                    DispatchQueue.main.async { completion(nil) }
+                    return
+                }
+                do {
+                    let rec = try JSONDecoder().decode(WorkoutRecommendation.self, from: data)
+                    DispatchQueue.main.async { completion(rec) }
+                } catch {
+                    print("❌ Unified workout rec decode error: \(error)")
+                    if let raw = String(data: data, encoding: .utf8) { print("Raw: \(raw)") }
+                    DispatchQueue.main.async { completion(nil) }
+                }
+            }.resume()
+        }
+    }
+
+    // MARK: - Holistic Summary (Apple Health + Whoop → Gemini Pro)
+
+    /// Gathers today's Apple Health + Whoop signals and asks the backend
+    /// (action=holistic_summary) for a Gemini-generated state-of-body read.
+    /// Returns markdown text on success.
+    func fetchHolisticSummary(userId: String = "00000000-0000-0000-0000-000000000001",
+                              completion: @escaping (Result<String, Error>) -> Void) {
+        let group = DispatchGroup()
+
+        var snapshot = HealthManager.ReadinessSnapshot(
+            hrv: nil, restingHR: nil, vo2Max: nil, bodyMassKg: nil,
+            timeInBedHours: 0, timeAsleepHours: 0,
+            walkingAsymmetryPct: nil, morningHRStream: [],
+            heartRateRecovery: nil
+        )
+        var telemetryGap: HealthManager.TelemetryGapResult? = nil
+        var steps: Double = 0
+        var recentWorkouts: [HKWorkout] = []
+
+        group.enter()
+        HealthManager.shared.fetchReadinessSnapshot { s in snapshot = s; group.leave() }
+
+        group.enter()
+        HealthManager.shared.calculateTelemetryGapSleep { gap in telemetryGap = gap; group.leave() }
+
+        group.enter()
+        HealthManager.shared.fetchTodaySteps { s in steps = s; group.leave() }
+
+        group.enter()
+        HealthManager.shared.fetchRecentWorkouts(days: 2) { w in recentWorkouts = w; group.leave() }
+
+        group.notify(queue: .main) {
+            // Build Apple block
+            var apple: [String: Any] = [
+                "steps_today": Int(steps)
+            ]
+            if let v = snapshot.hrv             { apple["hrv_ms"] = v }
+            if let v = snapshot.restingHR       { apple["rhr_bpm"] = v }
+            if let v = snapshot.vo2Max          { apple["vo2_max"] = v }
+            if let v = snapshot.bodyMassKg      { apple["body_mass_kg"] = v }
+            if let v = snapshot.heartRateRecovery { apple["hrr_1min"] = v }
+            if let v = snapshot.walkingAsymmetryPct { apple["walking_asymmetry_pct"] = v }
+            if let gap = telemetryGap {
+                apple["proxy_sleep_hours"]   = gap.proxyTimeInBed / 3600
+                apple["iphone_in_bed_hours"] = gap.iPhoneInBedSeconds / 3600
+            }
+            let workoutSummary: [[String: Any]] = recentWorkouts.map { w in
+                let cals = w.statistics(for: HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)!)?.sumQuantity()?.doubleValue(for: .kilocalorie()) ?? 0
+                return [
+                    "type": HKWorkoutActivityType(rawValue: w.workoutActivityType.rawValue)?.name ?? "Workout",
+                    "start": ISO8601DateFormatter().string(from: w.startDate),
+                    "duration_min": Int(w.duration / 60),
+                    "calories": Int(cals)
+                ]
+            }
+            apple["recent_workouts"] = workoutSummary
+
+            // Build Whoop block (only if connected)
+            let ow = OpenWearablesManager.shared
+            var whoop: [String: Any] = ["connected": ow.isWhoopConnected]
+            if let r = ow.whoopRecovery {
+                var rec: [String: Any] = [:]
+                if let v = r.recoveryScore        { rec["recovery_score_pct"] = v }
+                if let v = r.avgHrvSdnnMs         { rec["hrv_ms"] = v }
+                if let v = r.restingHeartRateBpm  { rec["rhr_bpm"] = v }
+                if let v = r.avgSpo2Percent       { rec["spo2_pct"] = v }
+                if let v = r.date                 { rec["date"] = v }
+                whoop["recovery"] = rec
+            }
+            if let s = ow.whoopSleep {
+                var sl: [String: Any] = [:]
+                if let v = s.durationMinutes      { sl["duration_min"] = v }
+                if let v = s.timeInBedMinutes     { sl["time_in_bed_min"] = v }
+                if let v = s.efficiencyPercent    { sl["efficiency_pct"] = v }
+                if let v = s.stages?.awakeMinutes { sl["awake_min"] = v }
+                if let v = s.stages?.lightMinutes { sl["light_min"] = v }
+                if let v = s.stages?.deepMinutes  { sl["deep_min"] = v }
+                if let v = s.stages?.remMinutes   { sl["rem_min"] = v }
+                if let v = s.date                 { sl["date"] = v }
+                whoop["sleep"] = sl
+            }
+            if let st = ow.whoopStrain {
+                var sn: [String: Any] = [:]
+                if let v = st.dayStrain          { sn["day_strain"] = v }
+                if let v = st.averageHeartRate   { sn["avg_hr"] = v }
+                if let v = st.maxHeartRate       { sn["max_hr"] = v }
+                if let v = st.kilojoules         { sn["kilojoules"] = v }
+                whoop["strain"] = sn
+            }
+
+            let body: [String: Any] = [
+                "action":   "holistic_summary",
+                "user_id":  userId,
+                "apple":    apple,
+                "whoop":    whoop
+            ]
+
+            guard let url = URL(string: self.agentURL) else {
+                completion(.failure(NSError(domain: "AgentManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid agent URL"])))
+                return
+            }
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            do {
+                request.httpBody = try JSONSerialization.data(withJSONObject: body)
+            } catch {
+                completion(.failure(error)); return
+            }
+
+            print("🧠 Holistic summary request — apple keys: \(apple.keys.sorted()), whoop connected: \(ow.isWhoopConnected)")
+
+            URLSession.shared.dataTask(with: request) { data, _, error in
+                if let error = error {
+                    DispatchQueue.main.async { completion(.failure(error)) }
+                    return
+                }
+                guard let data = data else {
+                    DispatchQueue.main.async {
+                        completion(.failure(NSError(domain: "AgentManager", code: -2, userInfo: [NSLocalizedDescriptionKey: "No data from backend"])))
+                    }
+                    return
+                }
+                if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    // Accept either `summary` or `message` as the body text.
+                    let text = (json["summary"] as? String)
+                        ?? (json["message"] as? String)
+                        ?? String(data: data, encoding: .utf8)
+                        ?? ""
+                    if text.isEmpty {
+                        DispatchQueue.main.async {
+                            completion(.failure(NSError(domain: "AgentManager", code: -3, userInfo: [NSLocalizedDescriptionKey: "Empty response from backend"])))
+                        }
+                    } else {
+                        DispatchQueue.main.async { completion(.success(text)) }
+                    }
+                } else {
+                    let raw = String(data: data, encoding: .utf8) ?? ""
+                    DispatchQueue.main.async {
+                        completion(.failure(NSError(domain: "AgentManager", code: -4, userInfo: [NSLocalizedDescriptionKey: "Bad JSON: \(raw.prefix(200))"])))
+                    }
+                }
+            }.resume()
+        }
+    }
 }

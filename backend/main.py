@@ -78,6 +78,16 @@ def run_agent(request):
                 response_json = agent.get_workout_recommendation(data)
                 return response_json, 200, {'Content-Type': 'application/json'}
 
+            # --- DOGFOOD v1: HOLISTIC SUMMARY (Apple + Whoop) ---
+            if data.get('action') == 'holistic_summary':
+                response_json = agent.generate_holistic_summary(data)
+                return response_json, 200, {'Content-Type': 'application/json'}
+
+            # --- DOGFOOD v1: UNIFIED WORKOUT REC (Apple + Whoop) ---
+            if data.get('action') == 'workout_recommendation_unified':
+                response_json = agent.get_unified_workout_recommendation(data)
+                return response_json, 200, {'Content-Type': 'application/json'}
+
             # --- TOMORROW PREVIEW ---
             if data.get('action') == 'tomorrow_preview':
                 response_json = agent.get_tomorrow_preview(data)

@@ -10,10 +10,12 @@ import base64
 import asyncio
 from aiohttp import web
 import aiohttp
+from aiohttp_cors import setup, ResourceOptions
 
 from google import genai
 from google.genai import types
-from google.genai.types import LiveConnectConfig, PrebuiltVoiceConfig, SpeechConfig
+from google.genai.types import LiveConnectConfig, VoiceConfig, SpeechConfig
+import google.generativeai as genai_standard
 
 
 async def websocket_handler(request):
@@ -47,8 +49,10 @@ async def websocket_handler(request):
         config = LiveConnectConfig(
             response_modalities=["AUDIO"],
             speech_config=SpeechConfig(
-                voice_config=PrebuiltVoiceConfig(
-                    voice_name="Kore"  # Deep, warm voice
+                voice_config=VoiceConfig(
+                    prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                        voice_name="Kore"  # Deep, warm voice
+                    )
                 )
             )
         )
@@ -125,8 +129,54 @@ async def websocket_handler(request):
                         # JSON message from iOS
                         data = json.loads(msg.data)
 
+                        # Handle text input
+                        if data.get("type") == "text":
+                            text_input = data.get("text", "")
+                            print(f"📝 Text input from user: {text_input}")
+                            try:
+                                await session.send(text=text_input)
+                                print("✅ Text sent to Gemini")
+                            except Exception as e:
+                                print(f"⚠️ send(text) failed: {e}, trying legacy method...")
+                                await session.send_realtime_input(text=text_input)
+                                print("✅ Text sent (legacy)")
+
+                        # Handle image input
+                        elif data.get("type") == "image":
+                            image_base64 = data.get("image", "")
+                            mime_type = data.get("mime_type", "image/jpeg")
+                            print(f"📷 Image received: {mime_type}, {len(image_base64)} chars")
+                            try:
+                                # Send image with context
+                                await session.send(
+                                    media=types.Blob(
+                                        data=base64.b64decode(image_base64),
+                                        mime_type=mime_type
+                                    )
+                                )
+                                print("✅ Image sent to Gemini")
+                            except Exception as e:
+                                print(f"⚠️ Image send failed: {e}, trying legacy method...")
+                                await session.send_realtime_input(
+                                    image=types.Blob(
+                                        data=base64.b64decode(image_base64),
+                                        mime_type=mime_type
+                                    )
+                                )
+                                print("✅ Image sent (legacy)")
+
+                        # Handle context from health tracker
+                        elif data.get("type") == "start":
+                            context = data.get("context", "")
+                            print(f"📊 Health context: {context}")
+                            try:
+                                await session.send(text=f"Starting health coaching session. {context}")
+                                print("✅ Context sent to Gemini")
+                            except:
+                                await session.send_realtime_input(text=f"Starting health coaching session. {context}")
+
                         # Check for control messages
-                        if data.get("action") == "end_input":
+                        elif data.get("action") == "end_input":
                             # User pressed "Done Speaking" button
                             print(f"🏁 Manual end signal received from iOS after {chunk_count} chunks")
                             try:
@@ -215,7 +265,119 @@ async def websocket_handler(request):
             import traceback
             traceback.print_exc()
 
+    except Exception as e:
+        print(f"WebSocket handler error: {e}")
+        import traceback
+        traceback.print_exc()
+
     return ws
+
+
+async def transcribe_handler(request):
+    """
+    Transcribe audio to text using Gemini
+    """
+    try:
+        data = await request.json()
+        audio_base64 = data.get('audio')
+        mime_type = data.get('mime_type', 'audio/webm')
+
+        if not audio_base64:
+            return web.json_response({"error": "No audio provided"}, status=400)
+
+        # Initialize Gemini standard API
+        genai_standard.configure(api_key=os.environ.get("GEMINI_API_KEY"))
+
+        # Use Gemini 1.5 Flash for transcription
+        model = genai_standard.GenerativeModel('gemini-1.5-flash')
+
+        # Create prompt for transcription
+        prompt = "Transcribe this audio to text. Only return the transcription, nothing else."
+
+        # Process audio
+        response = model.generate_content([
+            prompt,
+            {
+                "mime_type": mime_type,
+                "data": audio_base64
+            }
+        ])
+
+        transcription = response.text.strip()
+        print(f"✅ Transcribed: {transcription}")
+
+        return web.json_response({
+            "transcription": transcription,
+            "status": "success"
+        })
+
+    except Exception as e:
+        print(f"❌ Transcription error: {e}")
+        import traceback
+        traceback.print_exc()
+        return web.json_response({
+            "error": str(e),
+            "status": "error"
+        }, status=500)
+
+
+async def analyze_image_handler(request):
+    """
+    Analyze image and return description using Gemini
+    """
+    try:
+        data = await request.json()
+        image_base64 = data.get('image')
+        mime_type = data.get('mime_type', 'image/jpeg')
+        custom_prompt = data.get('custom_prompt')
+
+        # Initialize Gemini standard API
+        genai_standard.configure(api_key=os.environ.get("GEMINI_API_KEY"))
+
+        # Use Gemini 1.5 Flash for analysis
+        model = genai_standard.GenerativeModel('gemini-1.5-flash')
+
+        # Check if this is a synthesis request (custom prompt provided)
+        if custom_prompt:
+            # Direct synthesis without image
+            response = model.generate_content(custom_prompt)
+        else:
+            # Regular image analysis
+            if not image_base64:
+                return web.json_response({"error": "No image provided"}, status=400)
+
+            # Create context-aware prompt
+            prompt = """Analyze this image in the context of a health tracker app.
+            If it's food: Describe the food items, portions, and estimate if it's healthy or a cheat meal.
+            If it's workout/exercise: Describe the activity, equipment, or setting.
+            If it's something else: Provide a brief relevant description.
+            Keep the response concise (1-2 sentences)."""
+
+            # Process image
+            response = model.generate_content([
+                prompt,
+                {
+                    "mime_type": mime_type,
+                    "data": image_base64
+                }
+            ])
+
+        description = response.text.strip()
+        print(f"✅ Image analyzed: {description}")
+
+        return web.json_response({
+            "description": description,
+            "status": "success"
+        })
+
+    except Exception as e:
+        print(f"❌ Image analysis error: {e}")
+        import traceback
+        traceback.print_exc()
+        return web.json_response({
+            "error": str(e),
+            "status": "error"
+        }, status=500)
 
 
 async def health_check(request):
@@ -224,13 +386,34 @@ async def health_check(request):
 
 def create_app():
     app = web.Application()
+
+    # Add routes
     app.router.add_get('/health', health_check)
     app.router.add_get('/ws', websocket_handler)
+    app.router.add_post('/transcribe', transcribe_handler)
+    app.router.add_post('/analyze-image', analyze_image_handler)
+
+    # Setup CORS
+    cors = setup(app, defaults={
+        "*": ResourceOptions(
+            allow_credentials=True,
+            expose_headers="*",
+            allow_headers="*",
+            allow_methods="*"
+        )
+    })
+
+    # Configure CORS on all routes
+    for route in list(app.router.routes()):
+        cors.add(route)
+
     return app
 
 
 if __name__ == '__main__':
     app = create_app()
     port = int(os.environ.get('PORT', 8080))
-    print(f"Starting server on port {port}")
+    print(f"🚀 Starting server on 0.0.0.0:{port}")
+    print(f"📍 Health check endpoint: http://0.0.0.0:{port}/health")
+    print(f"🔌 WebSocket endpoint: ws://0.0.0.0:{port}/ws")
     web.run_app(app, host='0.0.0.0', port=port)

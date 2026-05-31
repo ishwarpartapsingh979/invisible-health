@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Health Insights</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 32px;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+        }
+
+        .person-card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .person-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .person-name {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            flex-grow: 1;
+        }
+
+        .person-stats {
+            display: flex;
+            gap: 15px;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .stat-badge {
+            padding: 4px 8px;
+            background: #f0f0f0;
+            border-radius: 12px;
+        }
+
+        .input-section {
+            margin-bottom: 20px;
+        }
+
+        .input-label {
+            font-size: 14px;
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .input-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .text-input {
+            flex: 1;
+            padding: 10px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        .text-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .voice-btn {
+            padding: 10px 15px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 18px;
+            transition: all 0.2s;
+        }
+
+        .voice-btn:hover {
+            background: #5a67d8;
+        }
+
+        .voice-btn.recording {
+            background: #fc8181;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(252, 129, 129, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(252, 129, 129, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(252, 129, 129, 0); }
+        }
+
+        .synthesis-section {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .synthesis-label {
+            font-size: 14px;
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .synthesis-text {
+            font-size: 14px;
+            line-height: 1.6;
+            color: #333;
+            min-height: 60px;
+            padding: 10px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .synthesis-loading {
+            color: #999;
+            font-style: italic;
+        }
+
+        .insights-section {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .insights-label {
+            font-size: 14px;
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 10px;
+        }
+
+        .insight-item {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+            border-left: 4px solid #667eea;
+        }
+
+        .insight-date {
+            font-size: 12px;
+            color: #999;
+            margin-bottom: 5px;
+        }
+
+        .insight-type {
+            display: inline-block;
+            padding: 2px 6px;
+            background: #667eea;
+            color: white;
+            border-radius: 4px;
+            font-size: 11px;
+            margin-right: 8px;
+        }
+
+        .insight-text {
+            font-size: 14px;
+            color: #333;
+            margin-top: 5px;
+        }
+
+        .audio-player {
+            margin-top: 8px;
+            width: 100%;
+        }
+
+        .image-thumb {
+            max-width: 100px;
+            max-height: 100px;
+            border-radius: 8px;
+            margin-top: 8px;
+            cursor: pointer;
+        }
+
+        .refresh-btn {
+            padding: 8px 16px;
+            background: #48bb78;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .refresh-btn:hover {
+            background: #38a169;
+        }
+
+        .status-message {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            background: #48bb78;
+            color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            display: none;
+            animation: slideUp 0.3s ease;
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(100px); }
+            to { transform: translateY(0); }
+        }
+
+        .status-message.show {
+            display: block;
+        }
+
+        .status-message.error {
+            background: #fc8181;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏥 Health Insights Dashboard</h1>
+
+        <div class="dashboard-grid">
+            <!-- Ishwar Card -->
+            <div class="person-card">
+                <div class="person-header">
+                    <div class="person-name">Ishwar</div>
+                    <div class="person-stats">
+                        <span class="stat-badge" id="ishwar-entries">0 entries</span>
+                    </div>
+                </div>
+
+                <div class="input-section">
+                    <label class="input-label">Add Admin Insight</label>
+                    <div class="input-container">
+                        <input type="text" id="ishwar-input" class="text-input" placeholder="Type an insight or observation..." />
+                        <button class="voice-btn" data-person="ishwar">🎤</button>
+                    </div>
+                </div>
+
+                <div class="synthesis-section">
+                    <div class="synthesis-label">
+                        <span>🤖 AI Synthesis</span>
+                        <button class="refresh-btn" onclick="generateSynthesis('ishwar')">Refresh</button>
+                    </div>
+                    <div class="synthesis-text synthesis-loading" id="ishwar-synthesis">
+                        Loading synthesis...
+                    </div>
+                </div>
+
+                <div class="insights-section">
+                    <div class="insights-label">📝 Historical Insights</div>
+                    <div id="ishwar-insights"></div>
+                </div>
+            </div>
+
+            <!-- Jasmine Card -->
+            <div class="person-card">
+                <div class="person-header">
+                    <div class="person-name">Jasmine</div>
+                    <div class="person-stats">
+                        <span class="stat-badge" id="jasmine-entries">0 entries</span>
+                    </div>
+                </div>
+
+                <div class="input-section">
+                    <label class="input-label">Add Admin Insight</label>
+                    <div class="input-container">
+                        <input type="text" id="jasmine-input" class="text-input" placeholder="Type an insight or observation..." />
+                        <button class="voice-btn" data-person="jasmine">🎤</button>
+                    </div>
+                </div>
+
+                <div class="synthesis-section">
+                    <div class="synthesis-label">
+                        <span>🤖 AI Synthesis</span>
+                        <button class="refresh-btn" onclick="generateSynthesis('jasmine')">Refresh</button>
+                    </div>
+                    <div class="synthesis-text synthesis-loading" id="jasmine-synthesis">
+                        Loading synthesis...
+                    </div>
+                </div>
+
+                <div class="insights-section">
+                    <div class="insights-label">📝 Historical Insights</div>
+                    <div id="jasmine-insights"></div>
+                </div>
+            </div>
+
+            <!-- Uday Card -->
+            <div class="person-card">
+                <div class="person-header">
+                    <div class="person-name">Uday</div>
+                    <div class="person-stats">
+                        <span class="stat-badge" id="uday-entries">0 entries</span>
+                    </div>
+                </div>
+
+                <div class="input-section">
+                    <label class="input-label">Add Admin Insight</label>
+                    <div class="input-container">
+                        <input type="text" id="uday-input" class="text-input" placeholder="Type an insight or observation..." />
+                        <button class="voice-btn" data-person="uday">🎤</button>
+                    </div>
+                </div>
+
+                <div class="synthesis-section">
+                    <div class="synthesis-label">
+                        <span>🤖 AI Synthesis</span>
+                        <button class="refresh-btn" onclick="generateSynthesis('uday')">Refresh</button>
+                    </div>
+                    <div class="synthesis-text synthesis-loading" id="uday-synthesis">
+                        Loading synthesis...
+                    </div>
+                </div>
+
+                <div class="insights-section">
+                    <div class="insights-label">📝 Historical Insights</div>
+                    <div id="uday-insights"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="status-message" id="status-message"></div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
+        import { getDatabase, ref, set, onValue, get, push } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-database.js";
+
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyDjt1CJeKjMX0gf16q0ds5C2kClfTk2e_4",
+            authDomain: "health-tracker-f8b66.firebaseapp.com",
+            databaseURL: "https://health-tracker-f8b66-default-rtdb.firebaseio.com",
+            projectId: "health-tracker-f8b66",
+            storageBucket: "health-tracker-f8b66.firebasestorage.app",
+            messagingSenderId: "869573272233",
+            appId: "1:869573272233:web:fc979f61dae8e3f0d83fb8"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const database = getDatabase(app);
+
+        let healthData = {};
+        let adminInsights = {};
+
+        // Initialize
+        async function init() {
+            loadHealthData();
+            loadAdminInsights();
+            setupEventListeners();
+
+            // Generate initial synthesis after data loads
+            setTimeout(() => {
+                generateSynthesis('ishwar');
+                generateSynthesis('jasmine');
+                generateSynthesis('uday');
+            }, 2000);
+        }
+
+        // Setup event listeners
+        function setupEventListeners() {
+            // Text input handlers
+            ['ishwar', 'jasmine', 'uday'].forEach(person => {
+                const input = document.getElementById(`${person}-input`);
+                input.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter' && input.value.trim()) {
+                        saveAdminInsight(person, input.value.trim(), 'text');
+                        input.value = '';
+                    }
+                });
+            });
+
+            // Voice button handlers
+            document.querySelectorAll('.voice-btn').forEach(btn => {
+                btn.addEventListener('click', () => handleVoiceRecording(btn));
+            });
+        }
+
+        // Load health data from Firebase
+        function loadHealthData() {
+            const dataRef = ref(database, 'healthData');
+            onValue(dataRef, (snapshot) => {
+                healthData = snapshot.val() || {};
+                updateInsightsDisplay();
+            });
+        }
+
+        // Load admin insights
+        function loadAdminInsights() {
+            const insightsRef = ref(database, 'adminInsights');
+            onValue(insightsRef, (snapshot) => {
+                adminInsights = snapshot.val() || {};
+                updateInsightsDisplay();
+            });
+        }
+
+        // Save admin insight
+        async function saveAdminInsight(person, text, type = 'text') {
+            const insightsRef = ref(database, `adminInsights/${person}`);
+            await push(insightsRef, {
+                text: text,
+                type: type,
+                timestamp: Date.now(),
+                date: new Date().toISOString()
+            });
+            showStatus(`Insight saved for ${person}`, false);
+        }
+
+        // Handle voice recording
+        async function handleVoiceRecording(btn) {
+            const person = btn.dataset.person;
+
+            if (btn.classList.contains('recording')) {
+                // Stop recording
+                stopRecording(btn);
+            } else {
+                // Start recording
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    const mediaRecorder = new MediaRecorder(stream);
+                    const audioChunks = [];
+
+                    btn.classList.add('recording');
+                    btn.recordingData = { mediaRecorder, stream, audioChunks };
+
+                    mediaRecorder.ondataavailable = (event) => {
+                        audioChunks.push(event.data);
+                    };
+
+                    mediaRecorder.onstop = async () => {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                        await processVoiceRecording(person, audioBlob);
+                    };
+
+                    mediaRecorder.start();
+
+                    // Auto-stop after 30 seconds
+                    setTimeout(() => {
+                        if (btn.classList.contains('recording')) {
+                            stopRecording(btn);
+                        }
+                    }, 30000);
+
+                } catch (error) {
+                    showStatus('Microphone access denied', true);
+                    console.error(error);
+                }
+            }
+        }
+
+        // Stop recording
+        function stopRecording(btn) {
+            if (btn.recordingData) {
+                btn.recordingData.mediaRecorder.stop();
+                btn.recordingData.stream.getTracks().forEach(track => track.stop());
+                btn.recordingData = null;
+            }
+            btn.classList.remove('recording');
+        }
+
+        // Process voice recording
+        async function processVoiceRecording(person, audioBlob) {
+            showStatus('Processing voice...', false);
+
+            const base64Audio = await blobToBase64(audioBlob);
+
+            try {
+                const response = await fetch('http://localhost:8080/transcribe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        audio: base64Audio,
+                        mime_type: 'audio/webm'
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.transcription) {
+                    await saveAdminInsight(person, result.transcription, 'voice');
+                    document.getElementById(`${person}-input`).value = result.transcription;
+                } else {
+                    showStatus('Transcription failed', true);
+                }
+            } catch (error) {
+                console.error('Transcription error:', error);
+                showStatus('Error processing voice', true);
+            }
+        }
+
+        // Update insights display
+        function updateInsightsDisplay() {
+            ['ishwar', 'jasmine', 'uday'].forEach(person => {
+                const insightsEl = document.getElementById(`${person}-insights`);
+                const entriesEl = document.getElementById(`${person}-entries`);
+                insightsEl.innerHTML = '';
+
+                // Combine health data and admin insights
+                const allInsights = [];
+
+                // Add health data insights
+                Object.entries(healthData).forEach(([date, data]) => {
+                    // Add workout comments
+                    const workoutComment = data[`${person}WorkoutComment`];
+                    const workoutVoiceText = data[`${person}WorkoutVoiceText`];
+                    const workoutImageText = data[`${person}WorkoutImageText`];
+
+                    if (workoutComment) {
+                        allInsights.push({
+                            date: date,
+                            type: 'Workout',
+                            text: workoutComment,
+                            source: 'text'
+                        });
+                    }
+                    if (workoutVoiceText) {
+                        allInsights.push({
+                            date: date,
+                            type: 'Workout',
+                            text: workoutVoiceText,
+                            source: 'voice',
+                            audio: data[`${person}WorkoutVoice`]
+                        });
+                    }
+                    if (workoutImageText) {
+                        allInsights.push({
+                            date: date,
+                            type: 'Workout',
+                            text: workoutImageText,
+                            source: 'image',
+                            image: data[`${person}WorkoutImage`]
+                        });
+                    }
+
+                    // Add food comments
+                    const foodComment = data[`${person}FoodComment`];
+                    const foodVoiceText = data[`${person}FoodVoiceText`];
+                    const foodImageText = data[`${person}FoodImageText`];
+
+                    if (foodComment) {
+                        allInsights.push({
+                            date: date,
+                            type: 'Food',
+                            text: foodComment,
+                            source: 'text'
+                        });
+                    }
+                    if (foodVoiceText) {
+                        allInsights.push({
+                            date: date,
+                            type: 'Food',
+                            text: foodVoiceText,
+                            source: 'voice',
+                            audio: data[`${person}FoodVoice`]
+                        });
+                    }
+                    if (foodImageText) {
+                        allInsights.push({
+                            date: date,
+                            type: 'Food',
+                            text: foodImageText,
+                            source: 'image',
+                            image: data[`${person}FoodImage`]
+                        });
+                    }
+                });
+
+                // Add admin insights
+                if (adminInsights[person]) {
+                    Object.values(adminInsights[person]).forEach(insight => {
+                        allInsights.push({
+                            date: new Date(insight.timestamp).toISOString().split('T')[0],
+                            type: 'Admin',
+                            text: insight.text,
+                            source: insight.type
+                        });
+                    });
+                }
+
+                // Sort by date (newest first)
+                allInsights.sort((a, b) => b.date.localeCompare(a.date));
+
+                // Update entries count
+                entriesEl.textContent = `${allInsights.length} entries`;
+
+                // Display insights
+                allInsights.forEach(insight => {
+                    const item = document.createElement('div');
+                    item.className = 'insight-item';
+
+                    item.innerHTML = `
+                        <div class="insight-date">${formatDate(insight.date)}</div>
+                        <span class="insight-type">${insight.type}</span>
+                        <span class="insight-type" style="background: #999;">${insight.source}</span>
+                        <div class="insight-text">${insight.text}</div>
+                    `;
+
+                    // Add audio player if voice
+                    if (insight.audio) {
+                        const audio = document.createElement('audio');
+                        audio.className = 'audio-player';
+                        audio.controls = true;
+                        audio.src = `data:audio/webm;base64,${insight.audio}`;
+                        item.appendChild(audio);
+                    }
+
+                    // Add image thumbnail if image
+                    if (insight.image) {
+                        const img = document.createElement('img');
+                        img.className = 'image-thumb';
+                        img.src = `data:image/jpeg;base64,${insight.image}`;
+                        img.onclick = () => window.open(img.src);
+                        item.appendChild(img);
+                    }
+
+                    insightsEl.appendChild(item);
+                });
+            });
+        }
+
+        // Generate AI synthesis
+        window.generateSynthesis = async function(person) {
+            const synthesisEl = document.getElementById(`${person}-synthesis`);
+            synthesisEl.innerHTML = '<span class="synthesis-loading">Generating synthesis...</span>';
+
+            // Collect all text for this person
+            const allTexts = [];
+
+            // From health data
+            Object.entries(healthData).forEach(([date, data]) => {
+                const texts = [
+                    data[`${person}WorkoutComment`],
+                    data[`${person}WorkoutVoiceText`],
+                    data[`${person}WorkoutImageText`],
+                    data[`${person}FoodComment`],
+                    data[`${person}FoodVoiceText`],
+                    data[`${person}FoodImageText`]
+                ].filter(Boolean);
+
+                texts.forEach(text => {
+                    allTexts.push(`${date}: ${text}`);
+                });
+            });
+
+            // From admin insights
+            if (adminInsights[person]) {
+                Object.values(adminInsights[person]).forEach(insight => {
+                    allTexts.push(`Admin note: ${insight.text}`);
+                });
+            }
+
+            if (allTexts.length === 0) {
+                synthesisEl.textContent = 'No data available for synthesis.';
+                return;
+            }
+
+            // Call synthesis endpoint (we'll use the analyze-image endpoint with a special prompt)
+            try {
+                const response = await fetch('http://localhost:8080/analyze-image', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image: btoa('dummy'), // Send dummy image
+                        mime_type: 'text/plain',
+                        custom_prompt: `Synthesize these health insights for ${person} into a concise summary (2-3 sentences) highlighting patterns, progress, and areas of concern:\n\n${allTexts.join('\n')}`
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.description) {
+                    synthesisEl.textContent = result.description;
+                } else {
+                    synthesisEl.textContent = 'Unable to generate synthesis.';
+                }
+            } catch (error) {
+                console.error('Synthesis error:', error);
+                synthesisEl.textContent = 'Error generating synthesis.';
+            }
+        };
+
+        // Utility functions
+        function formatDate(dateStr) {
+            const date = new Date(dateStr);
+            return date.toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric'
+            });
+        }
+
+        function blobToBase64(blob) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result.split(',')[1]);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+        }
+
+        function showStatus(message, isError = false) {
+            const statusEl = document.getElementById('status-message');
+            statusEl.textContent = message;
+            statusEl.className = `status-message show ${isError ? 'error' : ''}`;
+
+            setTimeout(() => {
+                statusEl.classList.remove('show');
+            }, 3000);
+        }
+
+        // Start the app
+        init();
+    </script>
+</body>
+</html>

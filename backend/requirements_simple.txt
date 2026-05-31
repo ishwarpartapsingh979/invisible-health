@@ -1,0 +1,11 @@
+# Simple API Server Requirements
+# For Health Tracker transcription and image analysis
+
+# 1. aiohttp: Async HTTP server
+aiohttp==3.9.3
+
+# 2. aiohttp-cors: CORS support for aiohttp
+aiohttp-cors==0.7.0
+
+# 3. google-generativeai: Gemini API for transcription and image analysis
+google-generativeai==0.8.0

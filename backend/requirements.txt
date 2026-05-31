@@ -25,4 +25,8 @@ pydub==0.25.1
 # 12. aiohttp: Async WebSocket server for Gemini Live streaming
 aiohttp==3.9.3
 # 13. google-genai: New Gemini SDK with Live API support
-google-genai==0.2.2
+google-genai>=0.3.0
+# 14. aiohttp-cors: CORS support for aiohttp
+aiohttp-cors==0.7.0
+# 15. google-generativeai: Standard Gemini API for transcription/image analysis
+google-generativeai==0.8.0

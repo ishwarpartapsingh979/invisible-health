@@ -17,8 +17,9 @@ struct ContentView: View {
     @State private var pulseEvaluate: Bool = false
     
     // Tab Selection
-    // 0: Home/Mic, 1: DataFeed, 2: Workout (logging), 3: Summary, 4: Chat, 5: SOS, 6: Preview (tomorrow), 7: Coach, 8: Today (workout), 9: Equipment, 10: Dad OS Rules, 11: Dad Voice Chat
-    @State private var selectedTab: Int = 2
+    // 0: Home/Mic, 1: DataFeed, 2: Workout (logging), 3: Summary, 4: Chat, 5: SOS, 6: Preview (tomorrow), 7: Coach, 8: Today (workout), 9: Equipment, 10: Dad OS Rules, 11: Dad Voice Chat, 12: Devices, 13: Holistic Summary, 14: All Apple Metrics, 15: All Whoop Metrics, 16: Unified Workout Rec
+    // Dogfood v1 default lands on SUMMARY (13)
+    @State private var selectedTab: Int = 13
     
     // Image Annotation State (Phase 2.1)
     @State private var imageToAnnotate: AnnotatableImage?
@@ -67,6 +68,16 @@ struct ContentView: View {
                     RuleExtractorView() // Tab 10 — Dad OS Rules
                 case 11:
                     DadVoiceChatView() // Tab 11 — Dad Voice Chat
+                case 12:
+                    WhoopConnectionView() // Tab 12 — Connected Devices
+                case 13:
+                    HolisticSummaryView() // Tab 13 — State of Body summary
+                case 14:
+                    AllAppleMetricsView() // Tab 14 — All Apple Health metrics
+                case 15:
+                    AllWhoopMetricsView() // Tab 15 — All Whoop metrics
+                case 16:
+                    GeminiWorkoutRecommendationView() // Tab 16 — Unified Apple+Whoop workout rec
                 default:
                     // Tab 0: Home / Mic Screen
                     micView
@@ -92,6 +103,21 @@ struct ContentView: View {
                         TabButton(icon: "chart.bar", text: "DATA", isSelected: selectedTab == 1) { selectedTab = 1 }
                         */
                         
+                        // Dogfood v1 tab bar: SUMMARY, APPLE, WHOOP, WORKOUT, DEVICES.
+                        // Older tabs are temporarily commented out below — the views
+                        // and switch cases above are intact, so deep links + re-enabling
+                        // later is just an uncomment.
+                        TabButton(icon: "sparkles", text: "SUMMARY", isSelected: selectedTab == 13) { selectedTab = 13 }
+
+                        TabButton(icon: "heart.fill", text: "APPLE", isSelected: selectedTab == 14) { selectedTab = 14 }
+
+                        TabButton(icon: "waveform.path.ecg", text: "WHOOP", isSelected: selectedTab == 15) { selectedTab = 15 }
+
+                        TabButton(icon: "figure.strengthtraining.traditional", text: "WORKOUT", isSelected: selectedTab == 16) { selectedTab = 16 }
+
+                        TabButton(icon: "applewatch.and.arrow.forward", text: "DEVICES", isSelected: selectedTab == 12) { selectedTab = 12 }
+
+                        /*
                         TabButton(icon: "figure.run", text: "WORKOUT", isSelected: selectedTab == 2) { selectedTab = 2 }
 
                         TabButton(icon: "moon.stars", text: "PREVIEW", isSelected: selectedTab == 6) { selectedTab = 6 }
@@ -105,6 +131,7 @@ struct ContentView: View {
                         TabButton(icon: "brain.head.profile", text: "RULES", isSelected: selectedTab == 10) { selectedTab = 10 }
 
                         TabButton(icon: "person.wave.2.fill", text: "DAD", isSelected: selectedTab == 11) { selectedTab = 11 }
+                        */
 
                         /*
                         TabButton(icon: "brain.head.profile", text: "SUMMARY", isSelected: selectedTab == 3) { selectedTab = 3 }
@@ -177,6 +204,10 @@ struct ContentView: View {
                 selectedTab = 10
             } else if url.absoluteString.contains("dad") {
                 selectedTab = 11
+            } else if url.absoluteString.contains("devices") {
+                selectedTab = 12
+            } else if url.absoluteString.contains("holistic") || url.absoluteString.contains("state") {
+                selectedTab = 13
             }
         }
         // Annotation Sheet (Phase 2.1)

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Coach Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        button {
+            padding: 15px 30px;
+            font-size: 18px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        button.recording {
+            background: #fc8181;
+        }
+        #status {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f0f0f0;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Simple Coach Test</h1>
+    <button id="startBtn">Start Coach Session</button>
+    <div id="status">Status: Not connected</div>
+
+    <script>
+        let ws = null;
+        let mediaRecorder = null;
+        let audioContext = null;
+
+        document.getElementById('startBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('startBtn');
+            const status = document.getElementById('status');
+
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                // Stop session
+                if (mediaRecorder) {
+                    mediaRecorder.stop();
+                    mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                }
+                ws.close();
+                ws = null;
+                btn.textContent = 'Start Coach Session';
+                btn.classList.remove('recording');
+                status.textContent = 'Status: Disconnected';
+                return;
+            }
+
+            // Start session
+            status.textContent = 'Status: Connecting...';
+
+            ws = new WebSocket('ws://localhost:8080/ws');
+
+            ws.onopen = async () => {
+                status.textContent = 'Status: Connected! Initializing...';
+
+                // Send start message
+                ws.send(JSON.stringify({
+                    type: 'start',
+                    context: 'Testing coach connection'
+                }));
+
+                // Start microphone
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+                    mediaRecorder = new MediaRecorder(stream);
+
+                    mediaRecorder.ondataavailable = async (event) => {
+                        if (event.data.size > 0 && ws.readyState === WebSocket.OPEN) {
+                            // Convert to base64
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                                const base64 = reader.result.split(',')[1];
+                                ws.send(JSON.stringify({
+                                    realtime_input: {
+                                        media_chunks: [{
+                                            data: base64,
+                                            mime_type: 'audio/webm'
+                                        }]
+                                    }
+                                }));
+                            };
+                            reader.readAsDataURL(event.data);
+                        }
+                    };
+
+                    mediaRecorder.start(250); // Send chunks every 250ms
+
+                    btn.textContent = 'Stop Session';
+                    btn.classList.add('recording');
+                    status.textContent = 'Status: Recording! Speak then wait 2 seconds for response';
+
+                    // Send end_input after 5 seconds as a test
+                    setTimeout(() => {
+                        if (ws.readyState === WebSocket.OPEN) {
+                            ws.send(JSON.stringify({
+                                action: 'end_input'
+                            }));
+                            status.textContent = 'Status: Sent audio, waiting for response...';
+                        }
+                    }, 5000);
+
+                } catch (err) {
+                    status.textContent = 'Status: Microphone error - ' + err.message;
+                    console.error(err);
+                }
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                console.log('Received:', data);
+
+                if (data.type === 'audio') {
+                    status.textContent = 'Status: Received audio response!';
+                    // Play audio here if needed
+                } else if (data.status) {
+                    status.textContent = 'Status: ' + data.message;
+                }
+            };
+
+            ws.onerror = (error) => {
+                status.textContent = 'Status: WebSocket error';
+                console.error('WebSocket error:', error);
+            };
+
+            ws.onclose = () => {
+                status.textContent = 'Status: Connection closed';
+                btn.textContent = 'Start Coach Session';
+                btn.classList.remove('recording');
+            };
+        });
+    </script>
+</body>
+</html>
