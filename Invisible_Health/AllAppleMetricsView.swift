@@ -17,6 +17,7 @@ struct AllAppleMetricsView: View {
     @State private var telemetryGap: HealthManager.TelemetryGapResult?
     @State private var todaySteps: Double = 0
     @State private var recentWorkouts: [HKWorkout] = []
+    @State private var todayWaterMl: Double = 0
     @State private var isLoading = false
     @State private var lastUpdated: Date?
 
@@ -28,6 +29,7 @@ struct AllAppleMetricsView: View {
                 vitalsSection
                 sleepSection
                 activitySection
+                hydrationSection
                 cgmSection
 
                 Spacer(minLength: 40)
@@ -110,6 +112,17 @@ struct AllAppleMetricsView: View {
         }
     }
 
+    private var hydrationSection: some View {
+        MetricGroup(title: "Hydration (Today)") {
+            MetricRow(label: "Water", value: todayWaterMl > 0
+                      ? String(format: "%.0f ml  (%.1f L)", todayWaterMl, todayWaterMl / 1000.0)
+                      : "--")
+            MetricRow(label: "vs 2 L target", value: todayWaterMl > 0
+                      ? String(format: "%.0f%%", min(100, todayWaterMl / 2000.0 * 100))
+                      : "--")
+        }
+    }
+
     private var cgmSection: some View {
         MetricGroup(title: "Glucose (CGM via HealthKit)") {
             MetricRow(label: "Current", value: unified.currentGlucose.map { "\(Int($0)) mg/dL" } ?? "--")
@@ -142,6 +155,11 @@ struct AllAppleMetricsView: View {
         group.enter()
         healthManager.fetchRecentWorkouts(days: 2) { w in
             DispatchQueue.main.async { self.recentWorkouts = w }
+            group.leave()
+        }
+        group.enter()
+        healthManager.fetchTodayWater { ml in
+            DispatchQueue.main.async { self.todayWaterMl = ml }
             group.leave()
         }
         // CGM is fetched by UnifiedHealthData on its own timer, but kick it once
