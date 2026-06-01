@@ -2056,6 +2056,8 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         var recentWorkouts: [HKWorkout] = []
         var steps: Double = 0
 
+        var waterMlUnified: Double = 0
+
         group.enter()
         HealthManager.shared.fetchReadinessSnapshot { s in snapshot = s; group.leave() }
         group.enter()
@@ -2064,6 +2066,8 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         HealthManager.shared.fetchRecentWorkouts(days: 2) { w in recentWorkouts = w; group.leave() }
         group.enter()
         HealthManager.shared.fetchTodaySteps { s in steps = s; group.leave() }
+        group.enter()
+        HealthManager.shared.fetchTodayWater { ml in waterMlUnified = ml; group.leave() }
 
         group.notify(queue: .main) {
             guard let url = URL(string: self.agentURL) else { completion(nil); return }
@@ -2072,7 +2076,10 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
             // Apple side
-            var apple: [String: Any] = ["steps_today": Int(steps)]
+            var apple: [String: Any] = [
+                "steps_today": Int(steps),
+                "water_ml_today": Int(waterMlUnified)
+            ]
             if let v = snapshot.hrv             { apple["hrv_ms"] = v }
             if let v = snapshot.restingHR       { apple["rhr_bpm"] = v }
             if let v = snapshot.vo2Max          { apple["vo2_max"] = v }
@@ -2183,6 +2190,7 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         var telemetryGap: HealthManager.TelemetryGapResult? = nil
         var steps: Double = 0
         var recentWorkouts: [HKWorkout] = []
+        var waterMl: Double = 0
 
         group.enter()
         HealthManager.shared.fetchReadinessSnapshot { s in snapshot = s; group.leave() }
@@ -2196,10 +2204,14 @@ class AgentManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         group.enter()
         HealthManager.shared.fetchRecentWorkouts(days: 2) { w in recentWorkouts = w; group.leave() }
 
+        group.enter()
+        HealthManager.shared.fetchTodayWater { ml in waterMl = ml; group.leave() }
+
         group.notify(queue: .main) {
             // Build Apple block
             var apple: [String: Any] = [
-                "steps_today": Int(steps)
+                "steps_today": Int(steps),
+                "water_ml_today": Int(waterMl)
             ]
             if let v = snapshot.hrv             { apple["hrv_ms"] = v }
             if let v = snapshot.restingHR       { apple["rhr_bpm"] = v }

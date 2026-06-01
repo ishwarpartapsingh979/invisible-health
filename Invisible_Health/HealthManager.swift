@@ -96,6 +96,24 @@ class HealthManager: ObservableObject {
         healthStore.execute(query)
     }
     
+    // FETCH WATER (today, in milliliters)
+    func fetchTodayWater(completion: @escaping (Double) -> Void) {
+        let waterType = HKQuantityType.quantityType(forIdentifier: .dietaryWater)!
+        let now = Date()
+        let startOfDay = Calendar.current.startOfDay(for: now)
+        let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: now, options: .strictStartDate)
+
+        let query = HKStatisticsQuery(quantityType: waterType, quantitySamplePredicate: predicate, options: .cumulativeSum) { _, result, error in
+            guard let result = result, let sum = result.sumQuantity() else {
+                DispatchQueue.main.async { completion(0) }
+                return
+            }
+            let ml = sum.doubleValue(for: HKUnit.literUnit(with: .milli))
+            DispatchQueue.main.async { completion(ml) }
+        }
+        healthStore.execute(query)
+    }
+
     // MARK: - 2a. Elite Fetchers (Phase 3.1)
     
     // FETCH WORKOUTS (Last N Days - using device timezone)
