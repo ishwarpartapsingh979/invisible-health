@@ -14,9 +14,9 @@ struct OpenWearablesConfig {
     // ngrok tunnel → localhost:8000. Rotates per ngrok restart on the free
     // plan; remember to update both this string AND the Whoop dev dashboard
     // redirect URL whenever the tunnel changes.
-    static let baseURL = "https://35-238-86-12.nip.io/api/v1"
+    static let baseURL = "https://34-123-30-95.nip.io/api/v1"
     #else
-    static let baseURL = "https://35-238-86-12.nip.io/api/v1"
+    static let baseURL = "https://34-123-30-95.nip.io/api/v1"
     #endif
 
     // MARK: - Endpoint builders

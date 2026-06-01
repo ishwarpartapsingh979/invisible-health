@@ -98,9 +98,16 @@ struct HolisticSummaryView: View {
     private var signalStrip: some View {
         let r = openWearables.whoopRecovery
         let s = openWearables.whoopSleep
+        // Sleep chip: show duration in hours (e.g. "3.6h") — more immediately
+        // legible than "efficiency %" and avoids confusion with Whoop's
+        // "Sleep %" (which is sleep performance vs. sleep need, a different metric).
+        let sleepHoursText: String = {
+            guard let mins = s?.durationMinutes, mins > 0 else { return "--" }
+            return String(format: "%.1fh", mins / 60.0)
+        }()
         return HStack(spacing: 10) {
             SignalChip(label: "Recovery", value: r?.recoveryScore.map { "\(Int($0))%" } ?? "--", tint: .green)
-            SignalChip(label: "Sleep Eff", value: s?.efficiencyPercent.map { "\(Int($0))%" } ?? "--", tint: .indigo)
+            SignalChip(label: "Sleep", value: sleepHoursText, tint: .indigo)
             SignalChip(label: "HRV", value: r?.avgHrvSdnnMs.map { "\(Int($0))" } ?? "--", tint: .blue)
             SignalChip(label: "RHR", value: r?.restingHeartRateBpm.map { "\(Int($0))" } ?? "--", tint: .orange)
         }

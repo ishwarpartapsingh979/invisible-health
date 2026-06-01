@@ -212,9 +212,9 @@ class OpenWearablesManager: NSObject, ObservableObject {
         fetchLatest(req, completion: completion)
     }
 
-    /// OW summary endpoints return a paginated wrapper `{data: [...], pagination, metadata}`.
-    /// We try that shape first, then fall back to a bare `[T]`. Returns the most recent item.
-    /// Always logs the raw body preview while we're still figuring out OW's exact shapes.
+    /// OW summary endpoints return a paginated wrapper `{data: [...], pagination, metadata}`
+    /// with records sorted oldest-first. We decode and then pick the MOST RECENT item
+    /// by `date` (descending). Falls back to a bare `[T]` shape if the wrapper isn't present.
     private func fetchLatest<T: Decodable>(_ req: URLRequest, completion: @escaping (T?) -> Void) {
         session.dataTask(with: req) { [weak self] data, response, error in
             guard let self = self else { completion(nil); return }
@@ -230,24 +230,50 @@ class OpenWearablesManager: NSObject, ObservableObject {
             }
 
             let path = req.url?.path ?? ""
-            let bodyPreview = String(data: data, encoding: .utf8)?.prefix(800) ?? ""
-            print("OW raw \(path): \(bodyPreview)")
 
-            // Try paginated wrapper first
+            // Pull the records out of either shape.
+            var items: [T] = []
             if let page = try? self.jsonDecoder.decode(PageResponse<T>.self, from: data) {
-                print("OW decoded \(T.self) via PageResponse (count=\(page.data.count)) on \(path)")
-                completion(page.data.first); return
+                items = page.data
+                print("OW decoded \(T.self) via PageResponse (count=\(items.count)) on \(path)")
+            } else if let array = try? self.jsonDecoder.decode([T].self, from: data) {
+                items = array
+                print("OW decoded \(T.self) via bare array (count=\(items.count)) on \(path)")
+            } else {
+                let bodyPreview = String(data: data, encoding: .utf8)?.prefix(800) ?? ""
+                print("OW could not decode \(T.self) on \(path). Body: \(bodyPreview)")
+                completion(nil); return
             }
-            // Fallback: bare array
-            if let array = try? self.jsonDecoder.decode([T].self, from: data) {
-                print("OW decoded \(T.self) via bare array (count=\(array.count)) on \(path)")
-                completion(array.first); return
-            }
-            // Last-resort fallback: single object. Skipped for now because with
-            // all-optional model fields it silently "succeeds" on any wrapper.
-            print("OW could not decode \(T.self) as page or array on \(path)")
-            completion(nil)
+
+            // Pick the most recent record by date. OW returns items sorted
+            // oldest-first, so `.last` is normally the freshest — but we also
+            // sort defensively in case that ever changes.
+            let mostRecent = Self.mostRecentByDate(items)
+            completion(mostRecent)
         }.resume()
+    }
+
+    /// Inspect each item for a `date` field (`"YYYY-MM-DD"`) via reflection and
+    /// return the lexicographically-greatest one. Falls back to `.last` if no
+    /// item has a date field. Works for any Decodable struct with a `date: String?`.
+    private static func mostRecentByDate<T>(_ items: [T]) -> T? {
+        guard !items.isEmpty else { return nil }
+        let withDates: [(T, String)] = items.compactMap { item in
+            let m = Mirror(reflecting: item)
+            for child in m.children {
+                if child.label == "date", let s = child.value as? String, !s.isEmpty {
+                    return (item, s)
+                }
+                if child.label == "date", let opt = child.value as? String?, let s = opt, !s.isEmpty {
+                    return (item, s)
+                }
+            }
+            return nil
+        }
+        if let best = withDates.max(by: { $0.1 < $1.1 }) {
+            return best.0
+        }
+        return items.last
     }
 
     // MARK: - Sync orchestration
