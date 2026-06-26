@@ -16,10 +16,11 @@ enum VoiceConfig {
     /// this over normal internet on any network — no Mac / local-network
     /// dependency, no ATS exception needed.
     ///
-    /// NOTE: This URL is the deterministic Cloud Run format
-    /// (https://<service>-<projectNumber>.<region>.run.app). If the first deploy
-    /// reports a different URL, paste that exact value here.
-    static let tokenServerBaseURL = "https://voice-token-server-914446242389.us-central1.run.app"
+    /// Live Cloud Run URL (verified working). If you redeploy under a new
+    /// service name/region, update this — get it via:
+    ///   gcloud run services describe voice-token-server \
+    ///     --region us-central1 --format='value(status.url)'
+    static let tokenServerBaseURL = "https://voice-token-server-zupjde2jpq-uc.a.run.app"
 
     /// The room the iOS client and the Python agent both join.
     static let roomName = "invisible-voice"
