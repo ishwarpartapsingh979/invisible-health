@@ -31,19 +31,8 @@ aiohttp-cors==0.7.0
 # 15. google-generativeai: Standard Gemini API for transcription/image analysis
 google-generativeai==0.8.0
 
-# --- Voice tab (LiveKit worker + token server) ---
-# Used by voice_agent.py (speech-to-speech via OpenAI Realtime) and
-# voice_token_server.py. Persistent worker / local token server — not the
-# run-agent Cloud Function, but kept here per project convention.
-# NOTE: livekit's openai plugin may need a newer `openai` than the ==1.59.5
-# pinned above. If pip reports a conflict, bump line 20 to the version livekit
-# requests and re-test the Whisper transcription path.
-# 16. livekit-agents (+openai plugin): LiveKit Agents framework + OpenAI Realtime
-livekit-agents[openai]~=1.0
-# 17. livekit-api: mint LiveKit join tokens for the iOS app
-#     (>=1.0.7 required by livekit-agents 1.x)
-livekit-api>=1.0.7,<2
-# 18. fastapi: token server HTTP app
-fastapi~=0.115
-# 19. uvicorn: ASGI server to run the token server
-uvicorn[standard]~=0.30
+# NOTE: The Voice-tab worker (voice_agent.py / voice_token_server.py) deps are
+# intentionally NOT here — livekit-agents needs aiohttp~=3.10 and openai 2.x,
+# which conflict with this Cloud Function's pins (aiohttp==3.9.3, openai==1.59.5).
+# Those live in requirements-voice.txt and run in a separate venv. The function
+# never imports the voice worker, so it doesn't need them.

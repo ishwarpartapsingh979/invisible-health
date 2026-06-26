@@ -17,7 +17,8 @@ voice_token_server.py  ──►  LiveKit Cloud room  ◄──  voice_agent.py 
   the `run-agent` Cloud Function).
 - **`voice_token_server.py`** — tiny FastAPI server that mints LiveKit join
   tokens for the app. Keeps the LiveKit secret server-side.
-- Deps live in `requirements.txt` (entries 16–19).
+- Deps live in `requirements-voice.txt` (kept out of `requirements.txt` so they
+  don't break the `run-agent` Cloud Function deploy — see note in that file).
 
 > The iOS side compiles **without** any of this. Until the LiveKit Swift SDK is
 > added in Xcode, the Voice tab just shows a setup hint.
@@ -48,7 +49,7 @@ Use a dedicated venv so LiveKit's native deps don't disturb the other backend to
 ```bash
 python -m venv venv-voice
 source venv-voice/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-voice.txt
 
 # terminal A — token server (app fetches tokens here)
 uvicorn voice_token_server:app --host 0.0.0.0 --port 8080

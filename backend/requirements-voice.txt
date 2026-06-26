@@ -1,0 +1,19 @@
+# Deps for the Voice-tab LiveKit worker + token server (voice_agent.py /
+# voice_token_server.py). These run as a SEPARATE long-running process, NOT the
+# run-agent Cloud Function — install into their own venv:
+#
+#   python -m venv venv-voice && source venv-voice/bin/activate
+#   pip install -r requirements-voice.txt
+#
+# Kept out of requirements.txt on purpose: livekit-agents requires aiohttp~=3.10
+# and openai 2.x, which conflict with the Cloud Function's pinned
+# aiohttp==3.9.3 / openai==1.59.5. The function never imports this worker.
+
+# LiveKit Agents + OpenAI Realtime plugin (speech-to-speech)
+livekit-agents[openai]~=1.0
+# Mint LiveKit join tokens for the iOS app (>=1.0.7 required by livekit-agents 1.x)
+livekit-api>=1.0.7,<2
+# Token server
+fastapi~=0.115
+uvicorn[standard]~=0.30
+python-dotenv~=1.0
