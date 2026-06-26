@@ -11,15 +11,15 @@ enum VoiceConfig {
 
     /// Base URL of the token server that mints LiveKit access tokens.
     ///
-    /// Run `backend/voice_token_server.py`, then point this at your Mac:
-    ///   • iOS Simulator : http://localhost:8788
-    ///   • Real iPhone   : http://<your-mac-LAN-IP>:8788   (e.g. http://192.168.1.42:8788)
+    /// Public HTTPS endpoint on Cloud Run, deployed via CI
+    /// (.github/workflows/deploy.yml → `voice-token-server`). The phone reaches
+    /// this over normal internet on any network — no Mac / local-network
+    /// dependency, no ATS exception needed.
     ///
-    /// NOTE: For a real device over plain HTTP you'll hit App Transport Security.
-    /// Easiest fixes: run the token server behind HTTPS (e.g. your existing
-    /// nip.io VM) or add an ATS exception. See backend/VOICE_AGENT.md.
-    /// (Port 8788 chosen because 8080 was already in use locally.)
-    static let tokenServerBaseURL = "http://localhost:8788"
+    /// NOTE: This URL is the deterministic Cloud Run format
+    /// (https://<service>-<projectNumber>.<region>.run.app). If the first deploy
+    /// reports a different URL, paste that exact value here.
+    static let tokenServerBaseURL = "https://voice-token-server-914446242389.us-central1.run.app"
 
     /// The room the iOS client and the Python agent both join.
     static let roomName = "invisible-voice"

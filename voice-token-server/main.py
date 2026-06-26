@@ -1,31 +1,28 @@
 """
-Minimal LiveKit token server for the iOS Voice tab.
+Voice token server — public HTTPS endpoint (Cloud Run).
 
-The app calls GET /token?room=...&identity=... and gets back the LiveKit server
-URL plus a short-lived join token. The LiveKit API secret never leaves this
-process. For local dogfood only — lock this down before shipping.
+The iOS app calls GET /token?room=...&identity=... and gets back the LiveKit
+server URL plus a short-lived join token. The LiveKit API secret stays
+server-side. Deployed to Cloud Run via CI (.github/workflows/deploy.yml), so the
+phone reaches it over normal internet on any network — no Mac / local-network
+dependency.
 
-Run (dev), from backend/:
-    source venv-voice/bin/activate    # same venv as voice_agent.py
-    uvicorn voice_token_server:app --host 0.0.0.0 --port 8080
+Only needs livekit-api + fastapi + uvicorn (NOT livekit-agents), so it shares
+none of the agent's dependency conflicts.
 """
 
 import os
 
-from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from livekit import api
-
-load_dotenv()
 
 LIVEKIT_URL = os.environ["LIVEKIT_URL"]
 LIVEKIT_API_KEY = os.environ["LIVEKIT_API_KEY"]
 LIVEKIT_API_SECRET = os.environ["LIVEKIT_API_SECRET"]
 
-app = FastAPI(title="Invisible Health Voice — token server")
+app = FastAPI(title="Invisible Health — voice token server")
 
-# Wide-open CORS is fine for a local dev token server.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

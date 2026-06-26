@@ -4,6 +4,7 @@ on:
     branches: [ main ]
     paths:
       - 'backend/**'
+      - 'voice-token-server/**'
       - '.github/workflows/deploy.yml'
 jobs:
   deploy_functions:
@@ -29,6 +30,31 @@ jobs:
             --allow-unauthenticated \
             --set-env-vars "GOOGLE_MAPS_KEY=${{ secrets.GOOGLE_MAPS_KEY }},SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }},LANGFUSE_PUBLIC_KEY=${{ secrets.LANGFUSE_PUBLIC_KEY }},LANGFUSE_SECRET_KEY=${{ secrets.LANGFUSE_SECRET_KEY }},LANGFUSE_HOST=${{ secrets.LANGFUSE_HOST }},OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" \
             --memory=1024MiB
+
+  # Voice tab: public HTTPS token server (Cloud Run). The iOS app fetches a
+  # LiveKit join token here over normal internet — no Mac / local-network
+  # dependency. Tiny service, scales to zero.
+  deploy_token_server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - id: 'auth'
+        uses: 'google-github-actions/auth@v1'
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v1'
+      - name: 'Deploy voice-token-server'
+        run: |
+          gcloud run deploy voice-token-server \
+            --source=./voice-token-server \
+            --region=us-central1 \
+            --allow-unauthenticated \
+            --set-env-vars "LIVEKIT_URL=${{ secrets.LIVEKIT_URL }},LIVEKIT_API_KEY=${{ secrets.LIVEKIT_API_KEY }},LIVEKIT_API_SECRET=${{ secrets.LIVEKIT_API_SECRET }}" \
+            --memory=512Mi \
+            --cpu=1 \
+            --max-instances=3
 
   # Disabled 2026-05-31: container fails to bind PORT=8080. Live-audio (DAD voice
   # chat) is also hidden from the dogfood-v1 tab bar, so we don't need this

@@ -1,0 +1,5 @@
+# Minimal deps for the Cloud Run token server. No livekit-agents (and therefore
+# none of its aiohttp/openai conflicts) — this service only mints tokens.
+livekit-api>=1.0.7,<2
+fastapi~=0.115
+uvicorn[standard]~=0.30

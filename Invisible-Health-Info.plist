@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Invisible Health uses the local network to establish low-latency voice calls.</string>
     <key>NSHealthShareUsageDescription</key>
     <string>Invisible Health needs access to workouts, heart rate, and biomechanics to provide Elite Coaching and holistic recovery analysis.</string>
     <key>NSHealthUpdateUsageDescription</key>
