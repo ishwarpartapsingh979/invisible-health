@@ -10,6 +10,7 @@
 		0D4812412EF4317F0002A0D2 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0D4812402EF4317F0002A0D2 /* WidgetKit.framework */; };
 		0D4812432EF4317F0002A0D2 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0D4812422EF4317F0002A0D2 /* SwiftUI.framework */; };
 		0D4812522EF431800002A0D2 /* NutritionWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 0D48123E2EF4317F0002A0D2 /* NutritionWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		AA10000000000000000000A3 /* LiveKit in Frameworks */ = {isa = PBXBuildFile; productRef = AA10000000000000000000A2 /* LiveKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -127,6 +128,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AA10000000000000000000A3 /* LiveKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -237,6 +239,7 @@
 			);
 			name = Invisible_Health;
 			packageProductDependencies = (
+				AA10000000000000000000A2 /* LiveKit */,
 			);
 			productName = Invisible_Health;
 			productReference = 0D4812062EF42D540002A0D2 /* Invisible_Health.app */;
@@ -345,6 +348,9 @@
 			);
 			mainGroup = 0D4811FD2EF42D540002A0D2;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				AA10000000000000000000A1 /* XCRemoteSwiftPackageReference "client-sdk-swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 0D4812072EF42D540002A0D2 /* Products */;
 			projectDirPath = "";
@@ -357,6 +363,25 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		AA10000000000000000000A1 /* XCRemoteSwiftPackageReference "client-sdk-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/livekit/client-sdk-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		AA10000000000000000000A2 /* LiveKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA10000000000000000000A1 /* XCRemoteSwiftPackageReference "client-sdk-swift" */;
+			productName = LiveKit;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin PBXResourcesBuildPhase section */
 		0D4812042EF42D540002A0D2 /* Resources */ = {

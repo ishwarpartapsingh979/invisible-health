@@ -17,7 +17,7 @@ struct ContentView: View {
     @State private var pulseEvaluate: Bool = false
     
     // Tab Selection
-    // 0: Home/Mic, 1: DataFeed, 2: Workout (logging), 3: Summary, 4: Chat, 5: SOS, 6: Preview (tomorrow), 7: Coach, 8: Today (workout), 9: Equipment, 10: Dad OS Rules, 11: Dad Voice Chat, 12: Devices, 13: Holistic Summary, 14: All Apple Metrics, 15: All Whoop Metrics, 16: Unified Workout Rec
+    // 0: Home/Mic, 1: DataFeed, 2: Workout (logging), 3: Summary, 4: Chat, 5: SOS, 6: Preview (tomorrow), 7: Coach, 8: Today (workout), 9: Equipment, 10: Dad OS Rules, 11: Dad Voice Chat, 12: Devices, 13: Holistic Summary, 14: All Apple Metrics, 15: All Whoop Metrics, 16: Unified Workout Rec, 17: Voice (LiveKit + OpenAI Realtime)
     // Dogfood v1 default lands on SUMMARY (13)
     @State private var selectedTab: Int = 13
     
@@ -78,6 +78,8 @@ struct ContentView: View {
                     AllWhoopMetricsView() // Tab 15 — All Whoop metrics
                 case 16:
                     GeminiWorkoutRecommendationView() // Tab 16 — Unified Apple+Whoop workout rec
+                case 17:
+                    VoiceView() // Tab 17 — Live voice conversation (LiveKit + OpenAI Realtime)
                 default:
                     // Tab 0: Home / Mic Screen
                     micView
@@ -116,6 +118,8 @@ struct ContentView: View {
                         TabButton(icon: "figure.strengthtraining.traditional", text: "WORKOUT", isSelected: selectedTab == 16) { selectedTab = 16 }
 
                         TabButton(icon: "applewatch.and.arrow.forward", text: "DEVICES", isSelected: selectedTab == 12) { selectedTab = 12 }
+
+                        TabButton(icon: "waveform", text: "VOICE", isSelected: selectedTab == 17) { selectedTab = 17 }
 
                         /*
                         TabButton(icon: "figure.run", text: "WORKOUT", isSelected: selectedTab == 2) { selectedTab = 2 }
@@ -208,6 +212,8 @@ struct ContentView: View {
                 selectedTab = 12
             } else if url.absoluteString.contains("holistic") || url.absoluteString.contains("state") {
                 selectedTab = 13
+            } else if url.absoluteString.contains("voice") {
+                selectedTab = 17
             }
         }
         // Annotation Sheet (Phase 2.1)

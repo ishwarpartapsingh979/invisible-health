@@ -44,7 +44,15 @@ class HealthManager: ObservableObject {
             // New Tab: Readiness Engine
             HKObjectType.categoryType(forIdentifier: HKCategoryTypeIdentifier.sleepAnalysis)!,
             HKObjectType.quantityType(forIdentifier: HKQuantityTypeIdentifier.bodyMass)!,
-            HKObjectType.quantityType(forIdentifier: HKQuantityTypeIdentifier.walkingAsymmetryPercentage)!
+            HKObjectType.quantityType(forIdentifier: HKQuantityTypeIdentifier.walkingAsymmetryPercentage)!,
+
+            // Nutrition reads (we already had write auth via writeTypes below;
+            // read auth is separate and was missing until 2026-06-01)
+            HKObjectType.quantityType(forIdentifier: HKQuantityTypeIdentifier.dietaryWater)!,
+            HKObjectType.quantityType(forIdentifier: HKQuantityTypeIdentifier.dietaryEnergyConsumed)!,
+            HKObjectType.quantityType(forIdentifier: HKQuantityTypeIdentifier.dietaryProtein)!,
+            HKObjectType.quantityType(forIdentifier: HKQuantityTypeIdentifier.dietaryCarbohydrates)!,
+            HKObjectType.quantityType(forIdentifier: HKQuantityTypeIdentifier.dietaryFatTotal)!
         ]
         
         // WRITE Types (Nutrition)

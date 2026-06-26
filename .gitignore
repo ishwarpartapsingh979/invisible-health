@@ -15,5 +15,9 @@ Secrets.swift
 keys/
 **/*_key.json
 backend/venv/
+backend/venv-voice/
+# Python
+__pycache__/
+*.pyc
 # Claude Code
 .claude/
