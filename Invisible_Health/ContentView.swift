@@ -185,6 +185,13 @@ struct ContentView: View {
                 .cornerRadius(20)
             }
         }
+        .onAppear {
+            #if DEBUG
+            // Headless Simulator pipeline test (SIMCTL_CHILD_AUTO_WORKOUT=1):
+            // jump straight to the Voice tab so its auto-start hook fires.
+            if ProcessInfo.processInfo.environment["AUTO_WORKOUT"] == "1" { selectedTab = 17 }
+            #endif
+        }
         // Handle Logic when App is Opened via "plus" button (URL Scheme)
         .onOpenURL { url in
             print("🔗 Deep Link: \(url.absoluteString)")

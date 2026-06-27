@@ -4,6 +4,7 @@ import SwiftUI
 /// AI coach. Tap the orb to connect; the agent greets you and you just talk.
 struct VoiceView: View {
     @StateObject private var call = VoiceCallManager()
+    @StateObject private var workout = WorkoutSessionController()
     @State private var pulse = false
 
     var body: some View {
@@ -65,6 +66,8 @@ struct VoiceView: View {
                     .padding(.horizontal, 32)
             }
 
+            workoutPanel
+
             Spacer()
 
             // MARK: - Controls (only while connected)
@@ -91,6 +94,78 @@ struct VoiceView: View {
         }
         .padding(.vertical, 20)
         .onChange(of: isLive) { live in pulse = live }
+        .onAppear { wireWorkout() }
+    }
+
+    // MARK: - Workout HR panel
+
+    private var workoutPanel: some View {
+        VStack(spacing: 12) {
+            if workout.isActive {
+                HStack(spacing: 10) {
+                    Image(systemName: "heart.fill").foregroundColor(.red)
+                    if let bpm = workout.currentBPM {
+                        Text("\(bpm)")
+                            .font(.system(size: 44, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                            .monospacedDigit()
+                        Text("BPM").font(.caption).foregroundColor(.gray)
+                    } else {
+                        Text(hrStatusText).font(.subheadline).foregroundColor(.gray)
+                    }
+                }
+            }
+
+            Button {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                Task {
+                    if workout.isActive {
+                        workout.stopWorkout()
+                    } else {
+                        if call.state != .connected { await call.start() }
+                        workout.startWorkout()
+                    }
+                }
+            } label: {
+                Text(workout.isActive ? "Stop Workout" : "Start Workout")
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 12)
+                    .background(workout.isActive ? Color.red.opacity(0.18) : Color.green.opacity(0.18))
+                    .foregroundColor(workout.isActive ? .red : .green)
+                    .cornerRadius(14)
+            }
+            .disabled(!VoiceCallManager.isAvailable)
+        }
+    }
+
+    private var hrStatusText: String {
+        switch workout.hrState {
+        case .idle:         return "Starting…"
+        case .scanning:     return "Searching for Whoop…"
+        case .connecting:   return "Connecting…"
+        case .streaming:    return "—"
+        case .disconnected: return "Reconnecting…"
+        case .unsupported:  return "Bluetooth is off"
+        case .unauthorized: return "Allow Bluetooth in Settings"
+        }
+    }
+
+    private func wireWorkout() {
+        // Forward each HR sample to the agent over the LiveKit data channel.
+        workout.heartRateSink = { sample in
+            Task { await call.sendHeartRate(sample) }
+        }
+        #if DEBUG
+        // Headless Simulator pipeline test: launch with SIMCTL_CHILD_AUTO_WORKOUT=1
+        // to auto-connect + start a (simulated) workout with no taps.
+        if ProcessInfo.processInfo.environment["AUTO_WORKOUT"] == "1", !workout.isActive {
+            Task {
+                if call.state != .connected { await call.start() }
+                workout.startWorkout()
+            }
+        }
+        #endif
     }
 
     // MARK: - Derived UI state

@@ -2,6 +2,13 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>NSBluetoothAlwaysUsageDescription</key>
+    <string>Invisible Health reads your Whoop's live heart rate over Bluetooth during workouts.</string>
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>audio</string>
+        <string>bluetooth-central</string>
+    </array>
     <key>NSLocalNetworkUsageDescription</key>
     <string>Invisible Health uses the local network to establish low-latency voice calls.</string>
     <key>NSHealthShareUsageDescription</key>

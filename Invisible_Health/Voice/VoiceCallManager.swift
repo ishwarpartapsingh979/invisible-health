@@ -73,6 +73,24 @@ final class VoiceCallManager: ObservableObject {
             // Keep the previous mic state if the toggle failed.
         }
     }
+
+    /// Publish one heart-rate sample to the agent over the room's data channel.
+    /// Lossy (latest-wins) on topic "hr" — for periodic HR the newest value
+    /// matters more than guaranteed delivery, and it's lower latency.
+    func sendHeartRate(_ sample: HeartRateSample) async {
+        guard state == .connected else { return }
+        let payload: [String: Any] = [
+            "type": "hr",
+            "bpm": sample.bpm,
+            "worn": sample.worn,
+            "ts": sample.timestamp.timeIntervalSince1970,
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: payload) else { return }
+        try? await room.localParticipant.publish(
+            data: data,
+            options: DataPublishOptions(topic: "hr", reliable: false)
+        )
+    }
 }
 
 #else
@@ -93,6 +111,7 @@ final class VoiceCallManager: ObservableObject {
     }
     func stop() async {}
     func toggleMic() async {}
+    func sendHeartRate(_ sample: HeartRateSample) async {}
 }
 
 #endif
