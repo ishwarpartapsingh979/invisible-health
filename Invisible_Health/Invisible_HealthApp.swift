@@ -22,8 +22,8 @@ struct Invisible_HealthApp: App {
                     HealthManager.shared.requestAuthorization()
                     
                     notificationManager.requestAuthorization()
-                    // Phase B: Wake Up the Agent 🔋
-                    AgentManager.shared.wakeUpAgent()
+                    // Dogfood v2: Summary retired — no launch-time agent wake-up.
+                    // AgentManager.shared.wakeUpAgent()
                 }
         }
     }

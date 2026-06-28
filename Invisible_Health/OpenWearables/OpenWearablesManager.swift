@@ -121,17 +121,17 @@ class OpenWearablesManager: NSObject, ObservableObject {
     }
 
     // MARK: - Connection status
-    func checkConnectionStatus() {
+    func checkConnectionStatus(completion: (() -> Void)? = nil) {
         guard let uid = userId, !uid.isEmpty,
               let req = makeRequest(path: OpenWearablesConfig.Endpoints.connections(userId: uid)) else {
-            DispatchQueue.main.async { self.isWhoopConnected = false }
+            DispatchQueue.main.async { self.isWhoopConnected = false; completion?() }
             return
         }
         perform(req, decode: [Connection].self) { [weak self] connections in
             let connected = connections?.contains(where: {
                 $0.provider.lowercased() == "whoop" && ($0.status?.lowercased() == "active")
             }) ?? false
-            DispatchQueue.main.async { self?.isWhoopConnected = connected }
+            DispatchQueue.main.async { self?.isWhoopConnected = connected; completion?() }
         }
     }
 

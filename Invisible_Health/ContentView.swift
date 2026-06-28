@@ -18,8 +18,8 @@ struct ContentView: View {
     
     // Tab Selection
     // 0: Home/Mic, 1: DataFeed, 2: Workout (logging), 3: Summary, 4: Chat, 5: SOS, 6: Preview (tomorrow), 7: Coach, 8: Today (workout), 9: Equipment, 10: Dad OS Rules, 11: Dad Voice Chat, 12: Devices, 13: Holistic Summary, 14: All Apple Metrics, 15: All Whoop Metrics, 16: Unified Workout Rec, 17: Voice (LiveKit + OpenAI Realtime)
-    // Dogfood v1 default lands on SUMMARY (13)
-    @State private var selectedTab: Int = 13
+    // Dogfood v2: Voice is the home tab. Visible tabs: VOICE (17), WHOOP (15), DEVICES (12).
+    @State private var selectedTab: Int = 17
     
     // Image Annotation State (Phase 2.1)
     @State private var imageToAnnotate: AnnotatableImage?
@@ -105,21 +105,14 @@ struct ContentView: View {
                         TabButton(icon: "chart.bar", text: "DATA", isSelected: selectedTab == 1) { selectedTab = 1 }
                         */
                         
-                        // Dogfood v1 tab bar: SUMMARY, APPLE, WHOOP, WORKOUT, DEVICES.
-                        // Older tabs are temporarily commented out below — the views
-                        // and switch cases above are intact, so deep links + re-enabling
-                        // later is just an uncomment.
-                        TabButton(icon: "sparkles", text: "SUMMARY", isSelected: selectedTab == 13) { selectedTab = 13 }
-
-                        TabButton(icon: "heart.fill", text: "APPLE", isSelected: selectedTab == 14) { selectedTab = 14 }
+                        // Dogfood v2 tab bar: VOICE (home), WHOOP, DEVICES — that's it.
+                        // SUMMARY/APPLE/WORKOUT-rec retired (views + switch cases stay intact
+                        // above, so re-enabling is just a one-line uncomment).
+                        TabButton(icon: "waveform", text: "VOICE", isSelected: selectedTab == 17) { selectedTab = 17 }
 
                         TabButton(icon: "waveform.path.ecg", text: "WHOOP", isSelected: selectedTab == 15) { selectedTab = 15 }
 
-                        TabButton(icon: "figure.strengthtraining.traditional", text: "WORKOUT", isSelected: selectedTab == 16) { selectedTab = 16 }
-
                         TabButton(icon: "applewatch.and.arrow.forward", text: "DEVICES", isSelected: selectedTab == 12) { selectedTab = 12 }
-
-                        TabButton(icon: "waveform", text: "VOICE", isSelected: selectedTab == 17) { selectedTab = 17 }
 
                         /*
                         TabButton(icon: "figure.run", text: "WORKOUT", isSelected: selectedTab == 2) { selectedTab = 2 }

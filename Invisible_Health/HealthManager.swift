@@ -70,8 +70,11 @@ class HealthManager: ObservableObject {
                 DispatchQueue.main.async {
                     self.isAuthorized = true
                     self.fetchTodaySteps()
-                    self.enableBackgroundDelivery()       // Steps observer (existing)
-                    self.registerMorningAuditObserver()   // HR observer (new tab only)
+                    // Dogfood v2: Summary retired — disable the background observers that
+                    // pinged the agent (steps + morning-HR). HealthKit auth stays for
+                    // water/nutrition writes; re-enable these if Summary comes back.
+                    // self.enableBackgroundDelivery()       // Steps observer → wakeUpAgent
+                    // self.registerMorningAuditObserver()   // HR observer → wakeUpAgent
                 }
             } else {
                 print("❌ HealthKit Auth Error: \(String(describing: error))")

@@ -20,6 +20,7 @@ struct AllWhoopMetricsView: View {
                 recoverySection
                 sleepSection
                 strainSection
+                workoutsSection
 
                 Spacer(minLength: 40)
             }
@@ -89,6 +90,7 @@ struct AllWhoopMetricsView: View {
         return MetricGroup(title: "Recovery") {
             MetricRow(label: "Date", value: r?.date ?? "--")
             MetricRow(label: "Recovery Score", value: r?.recoveryScore.map { String(format: "%.0f%%", $0) } ?? "--")
+            MetricRow(label: "Recovery Level", value: r?.recoveryLevel ?? "--")
             MetricRow(label: "HRV (SDNN)", value: r?.avgHrvSdnnMs.map { String(format: "%.1f ms", $0) } ?? "--")
             MetricRow(label: "Resting HR", value: r?.restingHeartRateBpm.map { "\(Int($0)) bpm" } ?? "--")
             MetricRow(label: "SpO₂", value: r?.avgSpo2Percent.map { String(format: "%.1f%%", $0) } ?? "--")
@@ -124,12 +126,38 @@ struct AllWhoopMetricsView: View {
         return MetricGroup(title: "Strain & Activity") {
             MetricRow(label: "Date", value: st?.date ?? "--")
             MetricRow(label: "Day Strain (0–21)", value: st?.dayStrain.map { String(format: "%.1f", $0) } ?? "--")
+            MetricRow(label: "Strain Level", value: st?.strainLevel ?? "--")
             MetricRow(label: "Avg HR", value: st?.averageHeartRate.map { "\(Int($0)) bpm" } ?? "--")
             MetricRow(label: "Max HR", value: st?.maxHeartRate.map { "\(Int($0)) bpm" } ?? "--")
-            MetricRow(label: "Kilojoules", value: st?.kilojoules.map { String(format: "%.0f kJ", $0) } ?? "--")
+            MetricRow(label: "Energy", value: st?.kilojoules.map { String(format: "%.0f kJ (%.0f kcal)", $0, $0 * 0.239) } ?? "--")
             MetricRow(label: "Cardiovascular Load", value: st?.cardiovascularLoad.map { String(format: "%.1f", $0) } ?? "--")
             MetricRow(label: "Muscular Load", value: st?.muscularLoad.map { String(format: "%.1f", $0) } ?? "--")
             MetricRow(label: "Workouts (in range)", value: st?.workouts.map { "\($0.count)" } ?? "--")
+        }
+    }
+
+    @ViewBuilder
+    private var workoutsSection: some View {
+        let workouts = openWearables.whoopStrain?.workouts ?? []
+        ForEach(Array(workouts.enumerated()), id: \.offset) { idx, w in
+            MetricGroup(title: "Workout \(idx + 1)" + (w.sport.map { " — \($0)" } ?? "")) {
+                MetricRow(label: "Sport", value: w.sport ?? "--")
+                MetricRow(label: "Start", value: w.startTime ?? "--")
+                MetricRow(label: "End", value: w.endTime ?? "--")
+                MetricRow(label: "Strain", value: w.strain.map { String(format: "%.1f", $0) } ?? "--")
+                MetricRow(label: "Avg HR", value: w.averageHeartRate.map { "\(Int($0)) bpm" } ?? "--")
+                MetricRow(label: "Max HR", value: w.maxHeartRate.map { "\(Int($0)) bpm" } ?? "--")
+                MetricRow(label: "Energy", value: w.kilojoules.map { String(format: "%.0f kJ (%.0f kcal)", $0, $0 * 0.239) } ?? "--")
+                MetricRow(label: "Distance", value: w.distanceMeters.map { String(format: "%.0f m", $0) } ?? "--")
+                MetricRow(label: "Altitude Gain", value: w.altitudeGainMeters.map { String(format: "%.0f m", $0) } ?? "--")
+                if let z = w.zones {
+                    MetricRow(label: "Zone 1 (recovery)", value: z.zone1Minutes.map { "\(Int($0)) min" } ?? "--")
+                    MetricRow(label: "Zone 2 (light)", value: z.zone2Minutes.map { "\(Int($0)) min" } ?? "--")
+                    MetricRow(label: "Zone 3 (moderate)", value: z.zone3Minutes.map { "\(Int($0)) min" } ?? "--")
+                    MetricRow(label: "Zone 4 (hard)", value: z.zone4Minutes.map { "\(Int($0)) min" } ?? "--")
+                    MetricRow(label: "Zone 5 (max)", value: z.zone5Minutes.map { "\(Int($0)) min" } ?? "--")
+                }
+            }
         }
     }
 }

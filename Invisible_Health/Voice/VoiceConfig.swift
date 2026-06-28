@@ -34,6 +34,48 @@ enum VoiceConfig {
     }
 }
 
+/// On-device "Hey Coach" wake word, using LiveKit's open-source wake-word engine
+/// (https://github.com/livekit/livekit-wakeword — Apache 2.0, ONNX, runs fully
+/// on-device). No account, no API key.
+///
+/// SETUP (one-time):
+///  1. Add the SPM package: File ▸ Add Package Dependencies… ▸
+///     https://github.com/livekit/livekit-wakeword ▸ add the `LiveKitWakeWord`
+///     product to the "Invisible_Health" target. (The mel + embedding ONNX
+///     models and the ONNX runtime ship inside the package.)
+///  2. Provide the classifier model `hey_coach.onnx` and drag it into the Xcode
+///     project (target membership "Invisible_Health"). Train it in one command:
+///        pip install "livekit-wakeword[train,eval,export]"
+///        livekit-wakeword run hey_coach.yaml   # synthetic TTS data → ONNX
+///     (or drop in LiveKit's pretrained `hey_livekit.onnx` to validate the flow
+///     first and just say "Hey LiveKit" — set `modelResource` accordingly.)
+/// Until the model is bundled, workouts fall back to always-on listening (no
+/// wake word) — the app still builds and runs.
+enum WakeWordConfig {
+
+    /// Resource name of the bundled classifier: `<modelResource>.onnx`.
+    /// Custom "Hey Coach" model (trained 2026-06-28). `hey_livekit.onnx` is also
+    /// bundled as a fallback — switch this back to "hey_livekit" to A/B.
+    static let modelResource = "hey_coach"
+
+    /// Detection score (0…1) at or above which the wake word fires. This
+    /// Mac-trained model has poor separation: at 0.7 it fired on NOTHING (missed
+    /// "Hey Coach" entirely), at 0.5 it fires reliably but also on partials like
+    /// "hey". 0.5 is the known-working value — prioritising "it actually wakes"
+    /// over the occasional stray trigger. The real fix is a better model
+    /// (LiveKit's pretrained "hey_livekit", or retrain "hey_coach" on a GPU with
+    /// configs/prod.yaml + full ACAV).
+    static let threshold: Float = 0.5
+
+    /// URL of the bundled classifier model, or nil if it isn't in the bundle.
+    static var modelURL: URL? {
+        Bundle.main.url(forResource: modelResource, withExtension: "onnx")
+    }
+
+    /// True once the classifier model is bundled in the app.
+    static var isConfigured: Bool { modelURL != nil }
+}
+
 /// Fetches a LiveKit server URL + join token from the token server.
 struct VoiceTokenService {
 

@@ -23,13 +23,17 @@ enum VoiceCallState: Equatable {
 import LiveKit
 
 @MainActor
-final class VoiceCallManager: ObservableObject {
+final class VoiceCallManager: ObservableObject, RoomDelegate {
 
     /// True when the LiveKit SDK is linked.
     static let isAvailable = true
 
     @Published private(set) var state: VoiceCallState = .idle
     @Published private(set) var isMicEnabled = true
+
+    /// Called when the agent publishes a logged workout "moment" (transcript +
+    /// breathing analysis + HR) back over the data channel during a workout.
+    var onMoment: ((_ transcript: String, _ analysis: String, _ bpm: Int?) -> Void)?
 
     /// The underlying LiveKit room. Exposed so SwiftUI can observe participant
     /// audio activity (it conforms to ObservableObject in the SDK).
@@ -45,6 +49,7 @@ final class VoiceCallManager: ObservableObject {
         state = .connecting
         do {
             let creds = try await VoiceTokenService.fetch()
+            room.add(delegate: self)   // receive "moment" data from the agent
             try await room.connect(url: creds.serverUrl, token: creds.token)
             // Publish the microphone. The LiveKit SDK owns AVAudioSession,
             // playback routing, and interruption handling from here on.
@@ -91,6 +96,84 @@ final class VoiceCallManager: ObservableObject {
             options: DataPublishOptions(topic: "hr", reliable: false)
         )
     }
+
+    /// Publish the latest Whoop snapshot to the agent once at workout start
+    /// (reliable delivery, topic "whoop").
+    func sendWhoopContext(_ payload: [String: Any]) async {
+        guard state == .connected else { return }
+        var p = payload
+        p["type"] = "whoop_context"
+        guard let data = try? JSONSerialization.data(withJSONObject: p) else { return }
+        try? await room.localParticipant.publish(
+            data: data,
+            options: DataPublishOptions(topic: "whoop", reliable: true)
+        )
+    }
+
+    // MARK: - "Hey Coach" wake word
+
+    private var wakeDetector: WakeWordDetector?
+
+    /// Start on-device "Hey Coach" detection by tapping LiveKit's captured mic.
+    /// Returns true if the wake word is configured and now armed; false if it
+    /// isn't set up (caller should then stay in always-on listening).
+    func enableWakeWord(onWake: @escaping () -> Void) -> Bool {
+        #if canImport(LiveKitWakeWord)
+        guard let detector = WakeWordDetector(onWake: onWake) else { return false }
+        wakeDetector = detector
+        // Tap the single mic LiveKit already owns — no separate audio input.
+        AudioManager.shared.capturePostProcessingDelegate = detector
+        return true
+        #else
+        return false
+        #endif
+    }
+
+    /// Stop wake-word detection and release the mic tap.
+    func disableWakeWord() {
+        #if canImport(LiveKitWakeWord)
+        if AudioManager.shared.capturePostProcessingDelegate === wakeDetector {
+            AudioManager.shared.capturePostProcessingDelegate = nil
+        }
+        wakeDetector?.stop()
+        wakeDetector = nil
+        #endif
+    }
+
+    /// Tell the agent to enter (or leave) hands-free wake mode — it sleeps
+    /// (ignores audio) until a `wake` message, re-sleeping after a short window.
+    func sendWakeMode(_ enabled: Bool) async {
+        await sendControl(["type": "wake_mode", "enabled": enabled], topic: "mode")
+    }
+
+    /// Tell the agent the wake word just fired — open its ears for a turn.
+    func sendWake() async {
+        await sendControl(["type": "wake"], topic: "wake")
+    }
+
+    private func sendControl(_ payload: [String: Any], topic: String) async {
+        guard state == .connected,
+              let data = try? JSONSerialization.data(withJSONObject: payload) else { return }
+        try? await room.localParticipant.publish(
+            data: data,
+            options: DataPublishOptions(topic: topic, reliable: true)
+        )
+    }
+
+    // MARK: - RoomDelegate (incoming data from the agent)
+
+    /// The agent publishes a "moment" packet each time the user speaks during a
+    /// workout. Called off the main actor by the SDK, so we hop back to forward it.
+    nonisolated func room(_ room: Room, participant: RemoteParticipant?,
+                          didReceiveData data: Data, forTopic topic: String,
+                          encryptionType: EncryptionType) {
+        guard topic == "moment",
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let transcript = obj["transcript"] as? String,
+              let analysis = obj["analysis"] as? String else { return }
+        let bpm = obj["bpm"] as? Int
+        Task { @MainActor in self.onMoment?(transcript, analysis, bpm) }
+    }
 }
 
 #else
@@ -105,6 +188,7 @@ final class VoiceCallManager: ObservableObject {
     @Published private(set) var state: VoiceCallState =
         .failed("Add the LiveKit Swift SDK package in Xcode to enable Voice.")
     @Published private(set) var isMicEnabled = false
+    var onMoment: ((_ transcript: String, _ analysis: String, _ bpm: Int?) -> Void)?
 
     func start() async {
         state = .failed("Add the LiveKit Swift SDK package in Xcode to enable Voice.")
@@ -112,6 +196,11 @@ final class VoiceCallManager: ObservableObject {
     func stop() async {}
     func toggleMic() async {}
     func sendHeartRate(_ sample: HeartRateSample) async {}
+    func sendWhoopContext(_ payload: [String: Any]) async {}
+    func enableWakeWord(onWake: @escaping () -> Void) -> Bool { false }
+    func disableWakeWord() {}
+    func sendWakeMode(_ enabled: Bool) async {}
+    func sendWake() async {}
 }
 
 #endif

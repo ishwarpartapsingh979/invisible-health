@@ -1,11 +1,27 @@
 import SwiftUI
+import AudioToolbox
 
 /// The "Voice" tab — a hands-free, interruptible voice conversation with the
 /// AI coach. Tap the orb to connect; the agent greets you and you just talk.
+///
+/// During a workout it switches to hands-free "Hey Coach" mode: the agent stays
+/// asleep (ignoring gym noise) until the on-device wake word fires, then listens
+/// for a turn. See WakeWordDetector / WakeWordConfig.
 struct VoiceView: View {
     @StateObject private var call = VoiceCallManager()
     @StateObject private var workout = WorkoutSessionController()
     @State private var pulse = false
+
+    /// True while "Hey Coach" is armed for this workout (configured + connected).
+    @State private var wakeArmed = false
+    /// True briefly after a wake word fires, while the coach is actively listening.
+    @State private var coachAwake = false
+    @State private var awakeResetTask: Task<Void, Never>?
+
+    /// The just-finished workout to review (drives the review sheet); and the
+    /// history browser toggle.
+    @State private var reviewLog: WorkoutLog?
+    @State private var showHistory = false
 
     var body: some View {
         VStack(spacing: 28) {
@@ -95,6 +111,17 @@ struct VoiceView: View {
         .padding(.vertical, 20)
         .onChange(of: isLive) { live in pulse = live }
         .onAppear { wireWorkout() }
+        .sheet(item: $reviewLog) { log in
+            NavigationStack {
+                WorkoutReviewView(log: log)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { reviewLog = nil }
+                        }
+                    }
+            }
+        }
+        .sheet(isPresented: $showHistory) { WorkoutHistoryView() }
     }
 
     // MARK: - Workout HR panel
@@ -116,14 +143,64 @@ struct VoiceView: View {
                 }
             }
 
+            // Hands-free status while a workout is running with the wake word armed.
+            if workout.isActive && wakeArmed {
+                HStack(spacing: 8) {
+                    Image(systemName: coachAwake ? "waveform" : "mic.badge.plus")
+                        .foregroundColor(coachAwake ? .blue : .gray)
+                    Text(coachAwake ? "Listening…" : "Say \u{201C}Hey Coach\u{201D}")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundColor(coachAwake ? .blue : .gray)
+                }
+                .animation(.easeInOut, value: coachAwake)
+            }
+
             Button {
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                 Task {
                     if workout.isActive {
+                        workout.wakeModeSink = nil
                         workout.stopWorkout()
+                        call.disableWakeWord()
+                        await call.sendWakeMode(false)
+                        awakeResetTask?.cancel()
+                        wakeArmed = false
+                        coachAwake = false
+                        // Persist the workout and open its review (HR graph +
+                        // spoken moments) right away.
+                        if let log = workout.makeLog() {
+                            WorkoutStore.shared.save(log)
+                            reviewLog = log
+                        }
                     } else {
                         if call.state != .connected { await call.start() }
-                        workout.startWorkout()
+                        // Refresh Whoop data for the coach. Must check the
+                        // connection FIRST — performSync() no-ops unless
+                        // isWhoopConnected is set, which doesn't happen if you
+                        // open the Voice tab before the Whoop/Summary tab. The
+                        // periodic 5s whoop re-send then delivers it to the agent
+                        // once the fetches land.
+                        let ow = OpenWearablesManager.shared
+                        ow.checkConnectionStatus { ow.performSync() }
+                        workout.startWorkout()                      // broadcasts Whoop ctx to the agent
+                        // Arm hands-free "Hey Coach" if it's set up; otherwise the
+                        // session stays in normal always-on listening.
+                        wakeArmed = call.enableWakeWord { handleWake() }
+                        if wakeArmed {
+                            // Put the agent to sleep until "Hey Coach". A single
+                            // send races the agent joining the room and gets
+                            // lost, so: (1) re-send on the controller's 5s tick
+                            // (survives join + reconnect), and (2) burst now so
+                            // it lands within ~1s of the agent appearing.
+                            // Entering wake mode is idempotent on the agent.
+                            workout.wakeModeSink = { Task { await call.sendWakeMode(true) } }
+                            for ms in [0, 600, 1500, 3000] {
+                                Task {
+                                    try? await Task.sleep(nanoseconds: UInt64(ms) * 1_000_000)
+                                    await call.sendWakeMode(true)
+                                }
+                            }
+                        }
                     }
                 }
             } label: {
@@ -136,6 +213,12 @@ struct VoiceView: View {
                     .cornerRadius(14)
             }
             .disabled(!VoiceCallManager.isAvailable)
+
+            if !workout.isActive {
+                Button("Past workouts") { showHistory = true }
+                    .font(.footnote)
+                    .foregroundColor(.gray)
+            }
         }
     }
 
@@ -151,10 +234,34 @@ struct VoiceView: View {
         }
     }
 
+    /// Called on the main thread when the on-device "Hey Coach" wake word fires.
+    /// Confirms with a chime + haptic, then tells the agent to open its ears.
+    private func handleWake() {
+        AudioServicesPlaySystemSound(1113)                        // short chime (iOS API)
+        UIImpactFeedbackGenerator(style: .heavy).impactOccurred() // buzz
+        Task { await call.sendWake() }
+        coachAwake = true
+        // Reflect the agent's ~8s awake window in the UI (plus a little grace).
+        awakeResetTask?.cancel()
+        awakeResetTask = Task {
+            try? await Task.sleep(nanoseconds: 10_000_000_000)
+            if !Task.isCancelled { coachAwake = false }
+        }
+    }
+
     private func wireWorkout() {
         // Forward each HR sample to the agent over the LiveKit data channel.
         workout.heartRateSink = { sample in
             Task { await call.sendHeartRate(sample) }
+        }
+        // Agent → app: a logged moment (transcript + breathing analysis + HR).
+        call.onMoment = { transcript, analysis, bpm in
+            workout.recordMoment(transcript: transcript, analysis: analysis, bpm: bpm)
+        }
+        // (Re)send the latest Whoop snapshot — controller calls this on start and
+        // every few seconds, so it survives the agent joining the room late.
+        workout.whoopContextSink = {
+            Task { await call.sendWhoopContext(whoopSnapshot()) }
         }
         #if DEBUG
         // Headless Simulator pipeline test: launch with SIMCTL_CHILD_AUTO_WORKOUT=1
@@ -166,6 +273,27 @@ struct VoiceView: View {
             }
         }
         #endif
+    }
+
+    /// Latest Whoop snapshot (cached from Open Wearables) to seed the agent at
+    /// workout start. Only includes fields we actually have.
+    private func whoopSnapshot() -> [String: Any] {
+        let ow = OpenWearablesManager.shared
+        var s: [String: Any] = [:]
+        if let r = ow.whoopRecovery {
+            if let v = r.recoveryScore { s["recovery_score"] = v }
+            if let v = r.avgHrvSdnnMs { s["hrv_ms"] = v }
+            if let v = r.restingHeartRateBpm { s["resting_hr"] = v }
+            s["recovery_level"] = r.recoveryLevel
+        }
+        if let sl = ow.whoopSleep {
+            s["sleep_hours"] = sl.timeAsleepHours
+            if let v = sl.efficiencyPercent { s["sleep_efficiency"] = v }
+        }
+        if let st = ow.whoopStrain, let v = st.dayStrain {
+            s["day_strain"] = v
+        }
+        return s
     }
 
     // MARK: - Derived UI state
