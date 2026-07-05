@@ -42,6 +42,10 @@ struct OpenWearablesConfig {
             "/users/\(userId)/summaries/body?start_date=\(startDate)&end_date=\(endDate)"
         }
         static func workouts(userId: String) -> String { "/users/\(userId)/events/workouts" }
+        /// Discrete workout sessions (running/walking/etc.) over a date range.
+        static func workoutEvents(userId: String, startDate: String, endDate: String) -> String {
+            "/users/\(userId)/events/workouts?start_date=\(startDate)&end_date=\(endDate)&limit=50"
+        }
         static func sleepEvents(userId: String) -> String { "/users/\(userId)/events/sleep" }
 
         static func triggerSync(provider: String, userId: String) -> String {

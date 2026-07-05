@@ -132,33 +132,38 @@ struct AllWhoopMetricsView: View {
             MetricRow(label: "Energy", value: st?.kilojoules.map { String(format: "%.0f kJ (%.0f kcal)", $0, $0 * 0.239) } ?? "--")
             MetricRow(label: "Cardiovascular Load", value: st?.cardiovascularLoad.map { String(format: "%.1f", $0) } ?? "--")
             MetricRow(label: "Muscular Load", value: st?.muscularLoad.map { String(format: "%.1f", $0) } ?? "--")
-            MetricRow(label: "Workouts (in range)", value: st?.workouts.map { "\($0.count)" } ?? "--")
+            MetricRow(label: "Workouts (last 7 days)", value: "\(openWearables.whoopWorkouts.count)")
         }
     }
 
     @ViewBuilder
     private var workoutsSection: some View {
-        let workouts = openWearables.whoopStrain?.workouts ?? []
+        // Real discrete activities from /events/workouts (last 7 days), newest first.
+        let workouts = openWearables.whoopWorkouts
         ForEach(Array(workouts.enumerated()), id: \.offset) { idx, w in
-            MetricGroup(title: "Workout \(idx + 1)" + (w.sport.map { " — \($0)" } ?? "")) {
-                MetricRow(label: "Sport", value: w.sport ?? "--")
-                MetricRow(label: "Start", value: w.startTime ?? "--")
-                MetricRow(label: "End", value: w.endTime ?? "--")
-                MetricRow(label: "Strain", value: w.strain.map { String(format: "%.1f", $0) } ?? "--")
-                MetricRow(label: "Avg HR", value: w.averageHeartRate.map { "\(Int($0)) bpm" } ?? "--")
-                MetricRow(label: "Max HR", value: w.maxHeartRate.map { "\(Int($0)) bpm" } ?? "--")
-                MetricRow(label: "Energy", value: w.kilojoules.map { String(format: "%.0f kJ (%.0f kcal)", $0, $0 * 0.239) } ?? "--")
+            MetricGroup(title: "Workout \(idx + 1)" + (w.type.map { " — \($0)" } ?? "")) {
+                MetricRow(label: "Type", value: w.type ?? "--")
+                MetricRow(label: "When", value: Self.prettyWhen(w.startTime))
+                MetricRow(label: "Duration", value: w.durationMinutes.map { String(format: "%.0f min", $0) } ?? "--")
+                MetricRow(label: "Avg HR", value: w.avgHeartRateBpm.map { "\(Int($0)) bpm" } ?? "--")
+                MetricRow(label: "Max HR", value: w.maxHeartRateBpm.map { "\(Int($0)) bpm" } ?? "--")
+                MetricRow(label: "Energy", value: w.caloriesKcal.map { String(format: "%.0f kcal", $0) } ?? "--")
                 MetricRow(label: "Distance", value: w.distanceMeters.map { String(format: "%.0f m", $0) } ?? "--")
-                MetricRow(label: "Altitude Gain", value: w.altitudeGainMeters.map { String(format: "%.0f m", $0) } ?? "--")
-                if let z = w.zones {
-                    MetricRow(label: "Zone 1 (recovery)", value: z.zone1Minutes.map { "\(Int($0)) min" } ?? "--")
-                    MetricRow(label: "Zone 2 (light)", value: z.zone2Minutes.map { "\(Int($0)) min" } ?? "--")
-                    MetricRow(label: "Zone 3 (moderate)", value: z.zone3Minutes.map { "\(Int($0)) min" } ?? "--")
-                    MetricRow(label: "Zone 4 (hard)", value: z.zone4Minutes.map { "\(Int($0)) min" } ?? "--")
-                    MetricRow(label: "Zone 5 (max)", value: z.zone5Minutes.map { "\(Int($0)) min" } ?? "--")
-                }
             }
         }
+    }
+
+    /// Format an ISO start time as a readable local date + time (device timezone).
+    private static func prettyWhen(_ iso: String?) -> String {
+        guard let iso else { return "--" }
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let date = f.date(from: iso) ?? {
+            f.formatOptions = [.withInternetDateTime]; return f.date(from: iso)
+        }()
+        guard let date else { return iso }
+        let df = DateFormatter(); df.dateFormat = "EEE MMM d, h:mm a"
+        return df.string(from: date)
     }
 }
 

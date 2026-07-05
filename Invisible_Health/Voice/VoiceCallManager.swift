@@ -35,6 +35,14 @@ final class VoiceCallManager: ObservableObject, RoomDelegate {
     /// breathing analysis + HR) back over the data channel during a workout.
     var onMoment: ((_ transcript: String, _ analysis: String, _ bpm: Int?) -> Void)?
 
+    /// Called when the agent sends an exercise deck (user asked to see exercises
+    /// for a muscle group) — drives the on-screen swipeable card overlay.
+    var onExercises: ((_ muscle: String, _ items: [ExerciseItem]) -> Void)?
+
+    /// Called when the coach starts ("awake") or stops ("asleep") listening, so
+    /// the UI can play a cue and sync state.
+    var onCoachState: ((_ state: String) -> Void)?
+
     /// The underlying LiveKit room. Exposed so SwiftUI can observe participant
     /// audio activity (it conforms to ObservableObject in the SDK).
     let room = Room()
@@ -47,6 +55,7 @@ final class VoiceCallManager: ObservableObject, RoomDelegate {
         }
 
         state = .connecting
+        configureAudioSessionForMusic()
         do {
             let creds = try await VoiceTokenService.fetch()
             room.add(delegate: self)   // receive "moment" data from the agent
@@ -140,6 +149,26 @@ final class VoiceCallManager: ObservableObject, RoomDelegate {
         #endif
     }
 
+    // MARK: - Audio ducking (play nicely with the user's music)
+
+    /// Configure the LiveKit audio session so the user's music keeps playing
+    /// (mixWithOthers) but CAN be ducked (duckOthers). We then control the
+    /// amount at runtime via `duckingLevel`: `.min` ≈ music near-full while idle,
+    /// `.max` while the coach is talking. Set before connecting.
+    private func configureAudioSessionForMusic() {
+        let base = AudioSessionConfiguration.playAndRecordSpeaker
+        AudioManager.shared.sessionConfiguration = AudioSessionConfiguration(
+            category: base.category,
+            categoryOptions: base.categoryOptions.union(.duckOthers),
+            mode: base.mode)
+        AudioManager.shared.duckingLevel = .min   // music as loud as possible when idle
+    }
+
+    /// Duck the user's music while the coach is conversing; restore when idle.
+    func setMusicDucking(_ ducking: Bool) {
+        AudioManager.shared.duckingLevel = ducking ? .max : .min
+    }
+
     /// Tell the agent to enter (or leave) hands-free wake mode — it sleeps
     /// (ignores audio) until a `wake` message, re-sleeping after a short window.
     func sendWakeMode(_ enabled: Bool) async {
@@ -149,6 +178,12 @@ final class VoiceCallManager: ObservableObject, RoomDelegate {
     /// Tell the agent the wake word just fired — open its ears for a turn.
     func sendWake() async {
         await sendControl(["type": "wake"], topic: "wake")
+    }
+
+    /// Keep the coach awake during a silent-but-engaged moment (e.g. while the
+    /// exercise deck is open) so its idle timer doesn't sleep it.
+    func sendKeepAlive() async {
+        await sendControl(["type": "keepalive"], topic: "keepalive")
     }
 
     private func sendControl(_ payload: [String: Any], topic: String) async {
@@ -167,12 +202,28 @@ final class VoiceCallManager: ObservableObject, RoomDelegate {
     nonisolated func room(_ room: Room, participant: RemoteParticipant?,
                           didReceiveData data: Data, forTopic topic: String,
                           encryptionType: EncryptionType) {
-        guard topic == "moment",
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let transcript = obj["transcript"] as? String,
-              let analysis = obj["analysis"] as? String else { return }
-        let bpm = obj["bpm"] as? Int
-        Task { @MainActor in self.onMoment?(transcript, analysis, bpm) }
+        switch topic {
+        case "moment":
+            guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let transcript = obj["transcript"] as? String,
+                  let analysis = obj["analysis"] as? String else { return }
+            let bpm = obj["bpm"] as? Int
+            Task { @MainActor in self.onMoment?(transcript, analysis, bpm) }
+        case "exercises":
+            struct Payload: Decodable { let muscle: String?; let items: [ExerciseItem] }
+            guard let p = try? JSONDecoder().decode(Payload.self, from: data) else { return }
+            let muscle = p.muscle ?? "Exercises"
+            Task { @MainActor in self.onExercises?(muscle, p.items) }
+        case "coach_state":
+            guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let state = obj["state"] as? String else { return }
+            Task { @MainActor in
+                self.setMusicDucking(state == "awake")   // duck music while talking
+                self.onCoachState?(state)
+            }
+        default:
+            return
+        }
     }
 }
 
@@ -189,6 +240,9 @@ final class VoiceCallManager: ObservableObject {
         .failed("Add the LiveKit Swift SDK package in Xcode to enable Voice.")
     @Published private(set) var isMicEnabled = false
     var onMoment: ((_ transcript: String, _ analysis: String, _ bpm: Int?) -> Void)?
+    var onExercises: ((_ muscle: String, _ items: [ExerciseItem]) -> Void)?
+    var onCoachState: ((_ state: String) -> Void)?
+    func sendKeepAlive() async {}
 
     func start() async {
         state = .failed("Add the LiveKit Swift SDK package in Xcode to enable Voice.")

@@ -23,6 +23,13 @@ struct VoiceView: View {
     @State private var reviewLog: WorkoutLog?
     @State private var showHistory = false
 
+    /// Exercise deck pushed by the coach ("show me shoulder exercises") — drives
+    /// the full-screen swipeable card overlay.
+    private struct ExerciseDeck: Identifiable { let id = UUID(); let muscle: String; let items: [ExerciseItem] }
+    @State private var exerciseDeck: ExerciseDeck?
+    /// Pings the agent to stay awake while the exercise deck is open.
+    @State private var keepAliveTimer: Timer?
+
     var body: some View {
         VStack(spacing: 28) {
             Text("VOICE")
@@ -110,6 +117,18 @@ struct VoiceView: View {
         }
         .padding(.vertical, 20)
         .onChange(of: isLive) { live in pulse = live }
+        .onChange(of: exerciseDeck != nil) { deckOpen in
+            // While the deck is open the user is browsing (silent) — ping the
+            // coach to stay awake so it doesn't time out mid-browse.
+            keepAliveTimer?.invalidate()
+            if deckOpen {
+                keepAliveTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { _ in
+                    Task { await call.sendKeepAlive() }
+                }
+            } else {
+                keepAliveTimer = nil
+            }
+        }
         .onAppear { wireWorkout() }
         .sheet(item: $reviewLog) { log in
             NavigationStack {
@@ -122,6 +141,11 @@ struct VoiceView: View {
             }
         }
         .sheet(isPresented: $showHistory) { WorkoutHistoryView() }
+        .fullScreenCover(item: $exerciseDeck) { deck in
+            ExerciseCardsView(muscle: deck.muscle, items: deck.items) {
+                exerciseDeck = nil
+            }
+        }
     }
 
     // MARK: - Workout HR panel
@@ -249,6 +273,22 @@ struct VoiceView: View {
         }
     }
 
+    /// Coach started/stopped listening (from the agent). On sleep, play a
+    /// distinct descending tone + light haptic so the user knows it stopped.
+    private func handleCoachState(_ state: String) {
+        switch state {
+        case "asleep":
+            coachAwake = false
+            awakeResetTask?.cancel()
+            AudioServicesPlaySystemSound(1114)   // lower "stop" tone (wake uses 1113)
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        case "awake":
+            coachAwake = true
+        default:
+            break
+        }
+    }
+
     private func wireWorkout() {
         // Forward each HR sample to the agent over the LiveKit data channel.
         workout.heartRateSink = { sample in
@@ -258,6 +298,13 @@ struct VoiceView: View {
         call.onMoment = { transcript, analysis, bpm in
             workout.recordMoment(transcript: transcript, analysis: analysis, bpm: bpm)
         }
+        // Agent → app: "show me <muscle> exercises" → present the card deck.
+        call.onExercises = { muscle, items in
+            exerciseDeck = ExerciseDeck(muscle: muscle, items: items)
+        }
+        // Agent → app: coach started/stopped listening. Play a cue on sleep so
+        // the user knows it stopped, and keep the UI in sync.
+        call.onCoachState = { state in handleCoachState(state) }
         // (Re)send the latest Whoop snapshot — controller calls this on start and
         // every few seconds, so it survives the agent joining the room late.
         workout.whoopContextSink = {
@@ -284,16 +331,62 @@ struct VoiceView: View {
             if let v = r.recoveryScore { s["recovery_score"] = v }
             if let v = r.avgHrvSdnnMs { s["hrv_ms"] = v }
             if let v = r.restingHeartRateBpm { s["resting_hr"] = v }
+            if let v = r.avgSpo2Percent { s["spo2"] = v }
             s["recovery_level"] = r.recoveryLevel
         }
         if let sl = ow.whoopSleep {
             s["sleep_hours"] = sl.timeAsleepHours
             if let v = sl.efficiencyPercent { s["sleep_efficiency"] = v }
+            if let v = sl.sleepPerformancePercentage { s["sleep_performance"] = v }
+            if let v = sl.avgRespiratoryRate { s["respiratory_rate"] = v }
+            if let v = sl.interruptionsCount { s["sleep_disturbances"] = v }
         }
-        if let st = ow.whoopStrain, let v = st.dayStrain {
-            s["day_strain"] = v
+        if let st = ow.whoopStrain {
+            if let v = st.dayStrain { s["day_strain"] = v }
+            if let v = st.averageHeartRate { s["day_avg_hr"] = v }
+            if let v = st.maxHeartRate { s["day_max_hr"] = v }
+            if let v = st.kilojoules { s["kilojoules"] = v }
+            if let v = st.cardiovascularLoad { s["cardio_load"] = v }
+            if let v = st.muscularLoad { s["muscular_load"] = v }
+        }
+        // Discrete activities from the events/workouts endpoint (running, walking,
+        // etc.) — the real source now that OW's workout sync is fixed. (The strain
+        // summary above does not carry per-workout sessions.)
+        if !ow.whoopWorkouts.isEmpty {
+            s["workouts"] = ow.whoopWorkouts.prefix(8).map { w -> [String: Any] in
+                var d: [String: Any] = [:]
+                if let v = w.type { d["sport"] = v }
+                if let v = w.startTime { d["start"] = v }
+                if let v = activityWhen(w.startTime) { d["when"] = v }
+                if let v = w.durationMinutes { d["duration_min"] = v }
+                if let v = w.avgHeartRateBpm { d["avg_hr"] = v }
+                if let v = w.maxHeartRateBpm { d["max_hr"] = v }
+                if let v = w.caloriesKcal { d["kcal"] = v }
+                if let v = w.distanceMeters { d["distance_m"] = v }
+                return d
+            }
         }
         return s
+    }
+
+    /// Relative day for an activity ("today"/"yesterday"/"3 days ago"/"Sat Jun 27"),
+    /// computed in the device's timezone so the coach states the correct day.
+    private func activityWhen(_ iso: String?) -> String? {
+        guard let iso else { return nil }
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let date = f.date(from: iso) ?? {
+            f.formatOptions = [.withInternetDateTime]; return f.date(from: iso)
+        }()
+        guard let date else { return nil }
+        let cal = Calendar.current
+        if cal.isDateInToday(date) { return "today" }
+        if cal.isDateInYesterday(date) { return "yesterday" }
+        let days = cal.dateComponents([.day], from: cal.startOfDay(for: date),
+                                      to: cal.startOfDay(for: Date())).day ?? 0
+        if days >= 2 && days <= 6 { return "\(days) days ago" }
+        let df = DateFormatter(); df.dateFormat = "EEE MMM d"
+        return df.string(from: date)
     }
 
     // MARK: - Derived UI state

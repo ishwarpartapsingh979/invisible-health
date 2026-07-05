@@ -29,6 +29,7 @@ class OpenWearablesManager: NSObject, ObservableObject {
     @Published var whoopRecovery: WhoopRecovery?
     @Published var whoopStrain: WhoopStrain?
     @Published var whoopSleep: WhoopSleep?
+    @Published var whoopWorkouts: [WhoopActivity] = []   // discrete activities (last few days)
 
     // MARK: - Credentials (keychain-backed)
     var apiKey: String? {
@@ -203,6 +204,40 @@ class OpenWearablesManager: NSObject, ObservableObject {
         fetchLatest(req, completion: completion)
     }
 
+    /// Discrete Whoop activities (running/walking/etc.) over the last several
+    /// days. Returns the whole list (not just the latest), newest first.
+    func fetchWhoopWorkouts(completion: @escaping ([WhoopActivity]) -> Void) {
+        guard let uid = userId else { completion([]); return }
+        let f = ISO8601DateFormatter(); f.formatOptions = [.withFullDate]
+        let now = Date()
+        let weekAgo = Calendar.current.date(byAdding: .day, value: -7, to: now) ?? now
+        let path = OpenWearablesConfig.Endpoints.workoutEvents(
+            userId: uid, startDate: f.string(from: weekAgo), endDate: f.string(from: now))
+        guard let req = makeRequest(path: path) else { completion([]); return }
+        fetchList(req) { (items: [WhoopActivity]) in
+            // Newest first by start time.
+            completion(items.sorted { ($0.startTime ?? "") > ($1.startTime ?? "") })
+        }
+    }
+
+    /// Like fetchLatest, but returns the full decoded list from a paginated or
+    /// bare-array response.
+    private func fetchList<T: Decodable>(_ req: URLRequest, completion: @escaping ([T]) -> Void) {
+        session.dataTask(with: req) { [weak self] data, response, error in
+            guard let self = self, let data = data, error == nil else { completion([]); return }
+            if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+                completion([]); return
+            }
+            if let page = try? self.jsonDecoder.decode(PageResponse<T>.self, from: data) {
+                completion(page.data)
+            } else if let array = try? self.jsonDecoder.decode([T].self, from: data) {
+                completion(array)
+            } else {
+                completion([])
+            }
+        }.resume()
+    }
+
     func fetchWhoopSleep(completion: @escaping (WhoopSleep?) -> Void) {
         guard let uid = userId else { completion(nil); return }
         let r = defaultDateRange()
@@ -307,6 +342,11 @@ class OpenWearablesManager: NSObject, ObservableObject {
             DispatchQueue.main.async { self?.whoopSleep = s }
             group.leave()
         }
+        group.enter()
+        fetchWhoopWorkouts { [weak self] w in
+            DispatchQueue.main.async { self?.whoopWorkouts = w }
+            group.leave()
+        }
 
         group.notify(queue: .main) { [weak self] in
             self?.isSyncing = false
@@ -344,6 +384,7 @@ class OpenWearablesManager: NSObject, ObservableObject {
             self.whoopRecovery = nil
             self.whoopStrain = nil
             self.whoopSleep = nil
+            self.whoopWorkouts = []
             self.lastSyncDate = nil
         }
     }

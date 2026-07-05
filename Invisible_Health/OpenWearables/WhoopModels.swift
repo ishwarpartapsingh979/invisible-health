@@ -259,3 +259,24 @@ extension UnifiedHealthMetrics {
         // Additional merging logic will go here
     }
 }
+/// A discrete Whoop workout/activity session from Open Wearables'
+/// `/users/{id}/events/workouts` endpoint (NOT `/summaries/activity`, which is
+/// continuous 247 samples). Decoded via the manager's snake_case strategy.
+struct WhoopActivity: Codable, Identifiable {
+    var id = UUID()
+    let type: String?                 // "running", "walking", "other", ...
+    let startTime: String?
+    let endTime: String?
+    let durationSeconds: Double?
+    let caloriesKcal: Double?
+    let distanceMeters: Double?
+    let avgHeartRateBpm: Double?
+    let maxHeartRateBpm: Double?
+
+    private enum CodingKeys: String, CodingKey {
+        case type, startTime, endTime, durationSeconds, caloriesKcal,
+             distanceMeters, avgHeartRateBpm, maxHeartRateBpm
+    }
+
+    var durationMinutes: Double? { durationSeconds.map { $0 / 60.0 } }
+}
