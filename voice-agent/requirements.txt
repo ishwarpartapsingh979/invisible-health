@@ -1,0 +1,18 @@
+# Deps for the hosted LiveKit voice coach worker (voice_agent.py). This dir is
+# deployed to LiveKit Cloud Agents as its own container — deliberately separate
+# from backend/requirements.txt (the run-agent Cloud Function), whose
+# aiohttp==3.9.3 / openai==1.59.5 pins are unsatisfiable alongside the worker's
+# aiohttp~=3.10 / openai 2.x.
+
+# LiveKit Agents + OpenAI Realtime plugin (speech-to-speech).
+# >=1.2 required by the LiveKit Cloud deploy tooling (locally on 1.6.x).
+livekit-agents[openai]>=1.2,<2
+# Background voice/noise cancellation (Krisp BVC) for noisy environments.
+livekit-plugins-noise-cancellation~=0.2
+# Loaded by voice_agent.py via load_dotenv() (no-ops in the container, where
+# secrets come from the LiveKit Cloud env instead).
+python-dotenv~=1.0
+# Observability + evals: trace every turn/decision to Langfuse. Pinned to v2 to
+# match backend/requirements.txt (langfuse==2.60.3) so the eval tooling shares an
+# API. The low-level client is used (event-driven agent, not request/response).
+langfuse>=2.60,<3

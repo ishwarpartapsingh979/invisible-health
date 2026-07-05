@@ -1,0 +1,4 @@
+# Weekly voice-coach eval runner (weekly_eval.py). Matches the agent's Langfuse
+# major version (v2) so traces + scores share one API.
+langfuse>=2.60,<3
+openai>=1.40

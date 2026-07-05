@@ -5,6 +5,7 @@ on:
     paths:
       - 'backend/**'
       - 'voice-token-server/**'
+      - 'voice-agent/**'
       - '.github/workflows/deploy.yml'
 jobs:
   deploy_functions:
@@ -55,6 +56,33 @@ jobs:
             --memory=512Mi \
             --cpu=1 \
             --max-instances=3
+
+  # Voice tab: the hosted agent worker (voice_agent.py → OpenAI Realtime). This
+  # is the brain that joins the LiveKit room and talks; the token server above
+  # only mints join tokens. Hosting it on LiveKit Cloud Agents (instead of
+  # `python voice_agent.py dev` on the Mac) means it auto-restarts and survives
+  # network blips. The agent (CA_pRCNkT6F4h6a, region ap-south) was created on
+  # 2026-06-28 via `lk agent create`; voice-agent/livekit.toml holds its ID.
+  # This job redeploys a new version on every push that touches voice-agent/**.
+  deploy_agent:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 'Deploy voice agent to LiveKit Cloud'
+        uses: livekit/deploy-action@v2.12.1
+        env:
+          LIVEKIT_URL: ${{ secrets.LIVEKIT_URL }}
+          LIVEKIT_API_KEY: ${{ secrets.LIVEKIT_API_KEY }}
+          LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
+          # Runtime secrets injected into the agent container (comma-separated
+          # KEY=VALUE). LiveKit Cloud supplies the LIVEKIT_* connection itself.
+          # OPENAI_API_KEY = the coach's brain + the moment-analysis calls.
+          # LANGFUSE_* = tracing every turn/decision for the weekly evals (the
+          # tracer no-ops if these are absent, so it's safe either way).
+          SECRET_LIST: OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},LANGFUSE_PUBLIC_KEY=${{ secrets.LANGFUSE_PUBLIC_KEY }},LANGFUSE_SECRET_KEY=${{ secrets.LANGFUSE_SECRET_KEY }},LANGFUSE_HOST=${{ secrets.LANGFUSE_HOST }}
+        with:
+          OPERATION: deploy
+          WORKING_DIRECTORY: voice-agent
 
   # Disabled 2026-05-31: container fails to bind PORT=8080. Live-audio (DAD voice
   # chat) is also hidden from the dogfood-v1 tab bar, so we don't need this

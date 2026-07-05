@@ -1,0 +1,33 @@
+name: Weekly Voice-Coach Eval
+
+# Runs every Monday 06:00 UTC (11:30 IST) and on-demand. Scores the past week's
+# coach turns (traced to Langfuse by the voice agent) against the coaching-brain
+# rubric, writes scores back to Langfuse, and prints a summary in the run log.
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      days:
+        description: 'How many days back to evaluate'
+        required: false
+        default: '7'
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install eval deps
+        run: pip install -r evals/requirements.txt
+      - name: Run weekly eval
+        working-directory: evals
+        env:
+          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+          LANGFUSE_HOST: ${{ secrets.LANGFUSE_HOST }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: python weekly_eval.py --days ${{ github.event.inputs.days || '7' }}
