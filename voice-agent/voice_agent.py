@@ -21,12 +21,20 @@ import asyncio
 import json
 import logging
 import os
+import random
 import time
+from datetime import datetime, timezone
+
+
+def _iso(ts: float) -> str:
+    """Unix timestamp -> ISO 8601 UTC (for Supabase timestamptz columns)."""
+    return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
 
 from dotenv import load_dotenv
 
 from livekit import agents, rtc
 from livekit.agents import Agent, AgentSession, RoomInputOptions, RunContext, function_tool
+from livekit.agents.voice.background_audio import BackgroundAudioPlayer
 from livekit.plugins import noise_cancellation, openai
 from livekit.plugins.openai.realtime.realtime_model import AudioTranscription
 from openai import AsyncOpenAI
@@ -145,6 +153,97 @@ MUSCLE_ALIASES = {
     "calf": "calves", "calves": "calves",
     "forearm": "forearms", "forearms": "forearms", "trap": "traps", "traps": "traps", "neck": "neck",
 }
+
+
+# Pre-rendered hype/motivation clips (Adam voice) — categorized: pre_workout,
+# grind, finish, steady. Played by the agent at workout start + effort moments.
+_HYPE_DIR = os.path.join(os.path.dirname(__file__), "hype")
+try:
+    with open(os.path.join(_HYPE_DIR, "manifest.json")) as _hf:
+        HYPE = json.load(_hf)
+except Exception as _he:  # pragma: no cover
+    HYPE = {}
+    logger.warning("could not load hype manifest: %s", _he)
+
+
+def hype_clip(category: str):
+    """Path to a random hype clip in `category`, or None if none available."""
+    items = HYPE.get(category) or []
+    if not items:
+        return None
+    return os.path.join(_HYPE_DIR, random.choice(items)["file"])
+
+
+class SessionStore:
+    """Persists + reads completed workout sessions in Supabase (Tier 3 #8), so
+    the coach REMEMBERS what the user did across days. Uses the Supabase REST API
+    (SUPABASE_URL + SUPABASE_SERVICE_KEY). No-ops safely if those env vars are
+    absent, so the agent runs unchanged until they're wired."""
+
+    def __init__(self) -> None:
+        self.url = (os.environ.get("SUPABASE_URL") or "").rstrip("/")
+        self.key = os.environ.get("SUPABASE_SERVICE_KEY") or ""
+        self.enabled = bool(self.url and self.key)
+        if self.enabled:
+            logger.info("SessionStore enabled")
+
+    def _headers(self, extra=None):
+        h = {"apikey": self.key, "Authorization": f"Bearer {self.key}",
+             "Content-Type": "application/json"}
+        if extra:
+            h.update(extra)
+        return h
+
+    async def save(self, record: dict) -> None:
+        if not self.enabled:
+            return
+        try:
+            import aiohttp
+            async with aiohttp.ClientSession() as s:
+                async with s.post(f"{self.url}/rest/v1/coaching_sessions",
+                                  json=record, headers=self._headers({"Prefer": "return=minimal"}),
+                                  timeout=aiohttp.ClientTimeout(total=15)) as r:
+                    if r.status >= 300:
+                        logger.warning("session save %s: %s", r.status, (await r.text())[:200])
+                    else:
+                        logger.info("💾 session saved (%s)", record.get("activity_type"))
+        except Exception as e:
+            logger.warning("session save error: %s", e)
+
+    async def recent(self, user_id: str = "ishwar", limit: int = 5) -> list:
+        if not self.enabled:
+            return []
+        try:
+            import aiohttp
+            params = {"user_id": f"eq.{user_id}", "order": "started_at.desc", "limit": str(limit)}
+            async with aiohttp.ClientSession() as s:
+                async with s.get(f"{self.url}/rest/v1/coaching_sessions",
+                                 params=params, headers=self._headers(),
+                                 timeout=aiohttp.ClientTimeout(total=15)) as r:
+                    if r.status < 300:
+                        return await r.json()
+                    logger.warning("session fetch %s", r.status)
+        except Exception as e:
+            logger.warning("session fetch error: %s", e)
+        return []
+
+    @staticmethod
+    def summarize_for_coach(sessions: list) -> str:
+        """A compact human string of recent sessions for the coach's context."""
+        if not sessions:
+            return "No past sessions on record yet."
+        lines = []
+        for s in sessions:
+            when = (s.get("started_at") or "")[:10]
+            bits = [s.get("activity_type") or "workout"]
+            if s.get("focus"):
+                bits.append(s["focus"])
+            if s.get("duration_min"):
+                bits.append(f"{s['duration_min']}min")
+            if s.get("rpe") is not None:
+                bits.append(f"RPE {s['rpe']}")
+            lines.append(f"{when}: {', '.join(bits)}" + (f" — {s['summary']}" if s.get("summary") else ""))
+        return "; ".join(lines)
 
 
 def exercises_for_muscle(term: str, limit: int = 12):
@@ -299,6 +398,11 @@ Motivation / variety:
 - get_workout_duration: how long they've been working out this session. Use when
   they ask how long they've been going, or when time-in-workout is relevant (e.g.
   pacing a run, deciding to wrap up).
+- get_training_history: their recent past sessions (type, focus, RPE, when). This
+  is your MEMORY — call it early when deciding today's workout so you honour the
+  ARC (alternate strength/endurance, don't let strength lapse, go lighter after a
+  high-RPE day) and can answer "what did I do last?". Don't ask them what they did
+  before if you can look it up.
 - show_exercises(muscle): puts a swipeable demo deck on their screen. Call it
   whenever they ask to see/show/list exercises for a body part, then say one short
   sentence pointing them to the screen — don't read a long list aloud. If asked
@@ -451,6 +555,12 @@ class WakeController:
         # Set by entrypoint: called with "awake" / "asleep" so the app can play a
         # cue and sync its UI when the coach starts/stops listening.
         self.on_state_change = None
+        # Set by entrypoint: called once when a workout starts (for a kickoff
+        # hype clip).
+        self.on_workout_start = None
+        # Set by entrypoint: called once when a workout ends, with (started_at,
+        # duration_min), for the post-workout summary + session save.
+        self.on_workout_end = None
 
     def workout_minutes(self):
         """Whole minutes since the workout started, or None if not in a workout."""
@@ -477,15 +587,27 @@ class WakeController:
         self.session.interrupt()  # cut any greeting in progress
         self.session.input.set_audio_enabled(False)
         logger.info("😴 wake mode ON — asleep until 'Hey Coach'")
+        if self.on_workout_start is not None:
+            try:
+                self.on_workout_start()
+            except Exception as e:
+                logger.warning("on_workout_start failed: %s", e)
 
     def exit_wake_mode(self) -> None:
         if self.session is None or not self.wake_mode:
             return
         self.wake_mode = False
         self.awake = True
+        started_at = self.workout_started_at
+        mins = self.workout_minutes()
         self.workout_started_at = None
         self.session.input.set_audio_enabled(True)
         logger.info("🎙️  wake mode OFF — input always on")
+        if self.on_workout_end is not None and started_at is not None:
+            try:
+                self.on_workout_end(started_at, mins)
+            except Exception as e:
+                logger.warning("on_workout_end failed: %s", e)
 
     def wake(self) -> None:
         if self.session is None or not self.wake_mode or self.awake:
@@ -571,12 +693,34 @@ class ProactiveCoach:
     Output-only: it speaks without needing 'Hey Coach'; it does not enable the
     mic (no change to wake gating)."""
 
-    def __init__(self, session, hr, wake) -> None:
+    def __init__(self, session, hr, wake, bg=None) -> None:
         self.session = session
         self.hr = hr
         self.wake = wake
+        self.bg = bg               # BackgroundAudioPlayer for hype clips
         self._last_cue_at = 0.0
         self._last_zone = None
+        self._hype_turn = False    # alternate spoken cue / hype clip
+
+    async def _play_hype(self, zone: str) -> bool:
+        """Play a zone-appropriate hype clip (Adam). Returns True if one played."""
+        if self.bg is None:
+            return False
+        cat = {"hard": "grind", "tempo": "grind",
+               "base": "steady", "easy": "steady"}.get(zone)
+        clip = hype_clip(cat) if cat else None
+        if not clip:
+            return False
+        if getattr(self.session, "user_state", None) == "speaking" or \
+           getattr(self.session, "agent_state", None) == "speaking":
+            return False
+        try:
+            self.bg.play(clip)
+            logger.info("🔥 hype clip (%s) @ %s", cat, os.path.basename(clip))
+            return True
+        except Exception as e:
+            logger.warning("hype play failed: %s", e)
+            return False
 
     async def _speak_cue(self, bpm: int, zone: str) -> None:
         # Don't talk over the user or over the coach mid-reply.
@@ -618,19 +762,38 @@ class ProactiveCoach:
                 self._last_cue_at = now
                 continue
             # Other zone changes respect the 90s cadence so it isn't naggy.
+            # Alternate: one trigger a spoken coaching cue, the next an Adam hype
+            # clip — so the workout feels both smart and motivating.
             if now - self._last_cue_at >= PROACTIVE_CADENCE_S:
-                await self._speak_cue(bpm, zone)
+                played = False
+                if self._hype_turn:
+                    played = await self._play_hype(zone)
+                if not played:
+                    await self._speak_cue(bpm, zone)
+                self._hype_turn = not self._hype_turn
                 self._last_cue_at = now
             self._last_zone = zone
 
 
 class CoachAgent(Agent):
-    def __init__(self, hr: HRContext, whoop: WhoopContext, publish_exercises, wake) -> None:
+    def __init__(self, hr: HRContext, whoop: WhoopContext, publish_exercises, wake,
+                 store: "SessionStore") -> None:
         super().__init__(instructions=INSTRUCTIONS)
         self._hr = hr
         self._whoop = whoop
         self._publish_exercises = publish_exercises
         self._wake = wake
+        self._store = store
+
+    @function_tool
+    async def get_training_history(self, context: RunContext) -> str:
+        """The user's recent workout sessions (what they did, focus, RPE, when).
+        Call this at the START of coaching, or whenever the training ARC matters
+        — deciding today's workout (dad's rule: alternate strength/endurance, keep
+        strength from lapsing), load management (a high RPE recently means go
+        lighter), or when they ask what they did last."""
+        sessions = await self._store.recent()
+        return SessionStore.summarize_for_coach(sessions)
 
     @function_tool
     async def get_workout_duration(self, context: RunContext) -> str:
@@ -696,6 +859,14 @@ async def entrypoint(ctx: agents.JobContext):
     hr = HRContext()
     whoop = WhoopContext()
     wake = WakeController()
+    store = SessionStore()
+
+    # Accumulates the CURRENT workout for the end-of-workout summary + save.
+    wlog = {"turns": [], "hr": []}
+
+    def _reset_wlog() -> None:
+        wlog["turns"] = []
+        wlog["hr"] = []
 
     tracer = SessionTracer(
         session_id=getattr(ctx.job, "id", None) or ctx.room.name,
@@ -723,6 +894,8 @@ async def entrypoint(ctx: agents.JobContext):
         kind = msg.get("type")
         if kind == "hr":
             hr.update(msg.get("bpm"), msg.get("worn"))
+            if wake.wake_mode and isinstance(msg.get("bpm"), int):
+                wlog["hr"].append(msg["bpm"])
             logger.info("❤️  HR %s bpm  worn=%s", msg.get("bpm"), msg.get("worn"))
         elif kind == "whoop_context":
             whoop.update(msg)
@@ -825,7 +998,7 @@ async def entrypoint(ctx: agents.JobContext):
     )
 
     await session.start(
-        agent=CoachAgent(hr, whoop, publish_exercises, wake),
+        agent=CoachAgent(hr, whoop, publish_exercises, wake, store),
         room=ctx.room,
         room_input_options=RoomInputOptions(
             # Background VOICE cancellation (Krisp): strips other people's voices
@@ -838,6 +1011,93 @@ async def entrypoint(ctx: agents.JobContext):
     # turn is in progress so the watchdog only sleeps after real silence.
     wake.session = session
     oai = AsyncOpenAI()  # for the speaking/breathing analysis (reads OPENAI_API_KEY)
+
+    # Background audio player for the Adam hype clips (plays MP3s into the room on
+    # its own track — separate from the coach's voice).
+    hype_player = BackgroundAudioPlayer()
+    try:
+        await hype_player.start(room=ctx.room, agent_session=session)
+    except Exception as e:
+        logger.warning("hype player start failed: %s", e)
+        hype_player = None
+
+    # Kickoff hype: a pre-workout "let's go" clip the moment a workout starts.
+    # Also reset the workout accumulator so the end-of-workout summary is clean.
+    def _workout_kickoff():
+        _reset_wlog()
+        clip = hype_clip("pre_workout")
+        if hype_player is not None and clip:
+            try:
+                hype_player.play(clip)
+                logger.info("🔥 kickoff hype: %s", os.path.basename(clip))
+            except Exception as e:
+                logger.warning("kickoff hype failed: %s", e)
+    wake.on_workout_start = _workout_kickoff
+
+    # End of workout (Tier 3 #8 + #10): summarize what happened, SAVE it as a
+    # session (so the coach remembers it next time), and SPEAK a short recap +
+    # cool-down + tomorrow. Fire-and-forget so it doesn't block the wake toggle.
+    async def _end_workout(started_at: float, duration_min) -> None:
+        turns = list(wlog["turns"])
+        hrs = list(wlog["hr"])
+        _reset_wlog()
+        if not turns and not hrs:
+            return  # nothing happened this workout
+        avg_hr = int(sum(hrs) / len(hrs)) if hrs else None
+        max_hr = max(hrs) if hrs else None
+        convo = "\n".join(turns[-50:])
+        try:
+            resp = await oai.chat.completions.create(
+                model="gpt-4o",
+                response_format={"type": "json_object"},
+                messages=[
+                    {"role": "system", "content":
+                        "You are a strength & conditioning coach closing out a workout. "
+                        "From the coaching conversation + heart-rate stats, extract a "
+                        "structured record. Respond ONLY as JSON with keys: activity_type "
+                        "(strength|endurance|mixed|mobility|other), focus (short, e.g. 'legs', "
+                        "'run', 'upper body'), exercises (short free-text of what was done), "
+                        "rpe (integer 1-10 or null if unknown), summary (ONE sentence recap), "
+                        "cool_down (ONE sentence cool-down suggestion — dad favours stretching "
+                        "+ abs), tomorrow (ONE sentence on tomorrow, following the arc: if today "
+                        "was strength, tomorrow leans endurance, and vice-versa)."},
+                    {"role": "user", "content":
+                        f"Duration: {duration_min} min. Avg HR: {avg_hr}. Max HR: {max_hr}.\n"
+                        f"Conversation:\n{convo or '(the user mostly just trained quietly)'}"},
+                ],
+                max_tokens=300,
+            )
+            data = json.loads(resp.choices[0].message.content)
+        except Exception as e:
+            logger.warning("end-of-workout summary failed: %s", e)
+            data = {}
+        # Save the session (Tier 3 #8 memory)
+        await store.save({
+            "user_id": "ishwar",
+            "started_at": _iso(started_at),
+            "ended_at": _iso(time.time()),
+            "duration_min": duration_min,
+            "activity_type": data.get("activity_type"),
+            "focus": data.get("focus"),
+            "exercises": data.get("exercises"),
+            "rpe": data.get("rpe") if isinstance(data.get("rpe"), int) else None,
+            "avg_hr": avg_hr, "max_hr": max_hr,
+            "summary": data.get("summary"),
+        })
+        # Speak the recap + cool-down + tomorrow (Tier 3 #10)
+        recap = data.get("summary") or "Nice work today."
+        cool = data.get("cool_down") or "Finish with some light stretching."
+        tmrw = data.get("tomorrow") or ""
+        try:
+            await session.generate_reply(instructions=(
+                "The workout just ended. Give a SHORT spoken wrap-up in your own warm "
+                f"voice, in 2-3 sentences: recap — {recap}; cool-down — {cool}; "
+                f"tomorrow — {tmrw}. Be specific and encouraging; no fluff."))
+            logger.info("📋 post-workout summary spoken + saved")
+        except Exception as e:
+            logger.warning("post-workout summary speak failed: %s", e)
+
+    wake.on_workout_end = lambda started_at, mins: asyncio.create_task(_end_workout(started_at, mins))
 
     async def analyze_speaking(transcript: str, bpm) -> str:
         """Expert read of exertion/breathing inferred from WHAT the user said
@@ -912,6 +1172,9 @@ async def entrypoint(ctx: agents.JobContext):
             tracer.user_said(text, context_snapshot())
         elif role == "assistant":
             tracer.coach_said(text)
+        # Accumulate the workout conversation for the end-of-workout summary.
+        if wake.wake_mode and role in ("user", "assistant"):
+            wlog["turns"].append(f"{'You' if role == 'user' else 'Coach'}: {text}")
 
     @session.on("function_tools_executed")
     def _on_tools(ev):
@@ -921,7 +1184,7 @@ async def entrypoint(ctx: agents.JobContext):
                             context_snapshot())
 
     watchdog_task = asyncio.create_task(wake.run_watchdog())
-    proactive = ProactiveCoach(session, hr, wake)
+    proactive = ProactiveCoach(session, hr, wake, bg=hype_player)
     proactive_task = asyncio.create_task(proactive.run())
 
     async def _cancel_watchdog():

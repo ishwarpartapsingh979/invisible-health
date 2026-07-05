@@ -1,0 +1,78 @@
+{
+  "pre_workout": [
+    {
+      "file": "pre_workout_1.mp3",
+      "text": "I know you don't feel like it. That's exactly why you're going. Get up, and let's move."
+    },
+    {
+      "file": "pre_workout_2.mp3",
+      "text": "You won't regret showing up. You'll only regret staying home. Let's go."
+    },
+    {
+      "file": "pre_workout_3.mp3",
+      "text": "Just the first ten minutes. That's all I'm asking. Start, and the rest takes care of itself."
+    },
+    {
+      "file": "pre_workout_4.mp3",
+      "text": "Champions aren't made on the days they feel great. They're made on days like today. Move."
+    },
+    {
+      "file": "pre_workout_5.mp3",
+      "text": "Future you is begging you to get up right now. Don't let them down."
+    }
+  ],
+  "grind": [
+    {
+      "file": "grind_1.mp3",
+      "text": "This is the moment. Right here. Push through it."
+    },
+    {
+      "file": "grind_2.mp3",
+      "text": "Your body wants to quit. Your mind decides. Keep going."
+    },
+    {
+      "file": "grind_3.mp3",
+      "text": "This is where the work happens. Stay in it."
+    },
+    {
+      "file": "grind_4.mp3",
+      "text": "Breathe, focus, and drive. You're stronger than this."
+    },
+    {
+      "file": "grind_5.mp3",
+      "text": "Don't count the reps. Make the reps count. Keep pushing."
+    }
+  ],
+  "finish": [
+    {
+      "file": "finish_1.mp3",
+      "text": "One more. Just one more. You've got it in you."
+    },
+    {
+      "file": "finish_2.mp3",
+      "text": "Finish strong. Leave nothing behind. Go."
+    },
+    {
+      "file": "finish_3.mp3",
+      "text": "This last one is the one that matters most. Send it."
+    },
+    {
+      "file": "finish_4.mp3",
+      "text": "Empty the tank. Right now. Finish."
+    }
+  ],
+  "steady": [
+    {
+      "file": "steady_1.mp3",
+      "text": "Smooth and steady. You're right where you need to be. Hold it."
+    },
+    {
+      "file": "steady_2.mp3",
+      "text": "This is your pace. Own it. Keep rolling."
+    },
+    {
+      "file": "steady_3.mp3",
+      "text": "Every step is progress. Keep that rhythm."
+    }
+  ]
+}
