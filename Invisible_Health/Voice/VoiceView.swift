@@ -15,6 +15,9 @@ struct VoiceView: View {
     // "app went to first page but voice kept talking" bug).
     @ObservedObject var call: VoiceCallManager
     @ObservedObject var workout: WorkoutSessionController
+    /// Set by the Plan/Profile tabs: "discuss" / "start" / "onboard". Performed on
+    /// appear, then cleared.
+    @Binding var pendingVoiceAction: String?
     @State private var pulse = false
 
     /// True while "Hey Coach" is armed for this workout (configured + connected).
@@ -32,6 +35,13 @@ struct VoiceView: View {
     /// the full-screen swipeable card overlay.
     private struct ExerciseDeck: Identifiable { let id = UUID(); let muscle: String; let items: [ExerciseItem] }
     @State private var exerciseDeck: ExerciseDeck?
+
+    /// Today's 3 plan options pushed by the coach (#11), and the onboarding sheet.
+    @State private var planDeck: [CoachPlan]?
+    @State private var showOnboarding = false
+    /// The chosen workout, shown on screen during the session (set by the coach).
+    @State private var currentWorkoutLabel: String?
+
     /// Pings the agent to stay awake while the exercise deck is open.
     @State private var keepAliveTimer: Timer?
 
@@ -77,7 +87,9 @@ struct VoiceView: View {
                 }
             }
             .buttonStyle(.plain)
-            .disabled(call.state == .connecting)
+            // During a workout the orb is just a visual — Start/Stop Workout is
+            // the single control, so tapping the orb can't disconnect mid-workout.
+            .disabled(call.state == .connecting || workout.isActive)
 
             // MARK: - Status
             Text(statusText)
@@ -98,8 +110,9 @@ struct VoiceView: View {
 
             Spacer()
 
-            // MARK: - Controls (only while connected)
-            if call.state == .connected {
+            // MARK: - Controls (only for casual chat — hidden during a workout,
+            // where Start/Stop Workout is the single control to avoid confusion).
+            if call.state == .connected && !workout.isActive {
                 HStack(spacing: 24) {
                     controlButton(
                         icon: call.isMicEnabled ? "mic.fill" : "mic.slash.fill",
@@ -134,7 +147,19 @@ struct VoiceView: View {
                 keepAliveTimer = nil
             }
         }
-        .onAppear { wireWorkout() }
+        .onAppear {
+            wireWorkout()
+            // First run → onboarding. Otherwise, schedule the daily pre-workout
+            // nudge (#12) so it can reach you before you open the app.
+            if UserProfile.saved == nil {
+                showOnboarding = true
+            } else {
+                NotificationManager.shared.requestAuthorization()
+                NotificationManager.shared.schedulePreWorkoutNudge()
+            }
+            performPendingAction()
+        }
+        .onChange(of: pendingVoiceAction) { _ in performPendingAction() }
         .sheet(item: $reviewLog) { log in
             NavigationStack {
                 WorkoutReviewView(log: log)
@@ -151,6 +176,103 @@ struct VoiceView: View {
                 exerciseDeck = nil
             }
         }
+        .fullScreenCover(item: Binding(
+            get: { planDeck.map { PlanDeck(plans: $0) } },
+            set: { planDeck = $0?.plans })) { deck in
+            PlanCardsView(plans: deck.plans, onSelect: { plan in
+                planDeck = nil
+                selectPlan(plan)
+            }, onClose: { planDeck = nil })
+        }
+        .sheet(isPresented: $showOnboarding) {
+            OnboardingChoiceView(
+                onVoice: {
+                    showOnboarding = false
+                    Task {
+                        if call.state != .connected { await call.start() }
+                        await call.sendLocalTime()
+                        await call.sendStartOnboarding()   // coach interviews by voice
+                    }
+                    NotificationManager.shared.requestAuthorization()
+                    NotificationManager.shared.schedulePreWorkoutNudge()
+                },
+                onTextSaved: { p in
+                    showOnboarding = false
+                    Task { await call.sendProfile(p.dictionary) }
+                    NotificationManager.shared.requestAuthorization()
+                    NotificationManager.shared.schedulePreWorkoutNudge()
+                })
+        }
+    }
+
+    /// Wrapper so an array can drive `.fullScreenCover(item:)`.
+    private struct PlanDeck: Identifiable { let id = UUID(); let plans: [CoachPlan] }
+
+    /// User tapped a plan card: start the workout running that plan.
+    private func selectPlan(_ plan: CoachPlan) {
+        Task {
+            if !workout.isActive { await beginWorkout() }
+            currentWorkoutLabel = plan.title
+        }
+    }
+
+    /// Persist the profile the coach gathered via the voice interview.
+    private func saveProfileFromCoach(_ d: [String: Any]) {
+        var p = UserProfile.saved ?? UserProfile()
+        if let v = d["goal"] as? String { p.goal = v }
+        if let v = d["preferred"] as? String { p.preferred = v }
+        if let v = d["level"] as? String { p.level = v }
+        if let v = d["days_per_week"] as? Int { p.daysPerWeek = v }
+        if let v = d["equipment"] as? String { p.equipment = v }
+        if let v = d["injuries"] as? String { p.injuries = v }
+        p.save()
+    }
+
+    /// Connect (if needed), refresh Whoop, start the workout. Voice-first: the
+    /// coach then PROPOSES today's plans out loud (staying awake for the chat).
+    /// Hands-free "Hey Coach" is armed later, when the coach calls go_handsfree.
+    private func beginWorkout() async {
+        if call.state != .connected { await call.start() }
+        currentWorkoutLabel = nil
+        let ow = OpenWearablesManager.shared
+        ow.checkConnectionStatus { ow.performSync() }
+        workout.startWorkout()                      // broadcasts Whoop ctx to the agent
+        await call.sendLocalTime()                  // coach greets by time of day
+        // Pass the already-decided plan (if any) so the coach coaches THAT rather
+        // than re-proposing; if none, the coach proposes inline.
+        await call.sendWorkoutStarted(plan: PlannedWorkout.today?.decided)
+    }
+
+    /// Perform an action queued by the Plan/Profile tabs (discuss / start / onboard).
+    private func performPendingAction() {
+        guard let action = pendingVoiceAction else { return }
+        pendingVoiceAction = nil
+        Task {
+            if call.state != .connected { await call.start() }
+            await call.sendLocalTime()
+            switch action {
+            case "discuss": await call.sendDiscussWorkout()
+            case "start":   if !workout.isActive { await beginWorkout() }
+            case "onboard": await call.sendStartOnboarding()
+            default: break
+            }
+        }
+    }
+
+    /// Switch to hands-free "Hey Coach" for the rest of the workout — triggered by
+    /// the coach (go_handsfree) once the opening plan conversation is done.
+    private func armHandsfree() {
+        guard workout.isActive, !wakeArmed else { return }
+        wakeArmed = call.enableWakeWord { handleWake() }
+        if wakeArmed {
+            workout.wakeModeSink = { Task { await call.sendWakeMode(true) } }
+            for ms in [0, 600, 1500, 3000] {
+                Task {
+                    try? await Task.sleep(nanoseconds: UInt64(ms) * 1_000_000)
+                    await call.sendWakeMode(true)
+                }
+            }
+        }
     }
 
     // MARK: - Workout HR panel
@@ -158,6 +280,15 @@ struct VoiceView: View {
     private var workoutPanel: some View {
         VStack(spacing: 12) {
             if workout.isActive {
+                // The chosen workout for today (set by the coach once decided).
+                if let label = currentWorkoutLabel {
+                    Label(label, systemImage: "figure.run")
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.horizontal, 14).padding(.vertical, 7)
+                        .background(Color.blue.opacity(0.18))
+                        .foregroundColor(.blue).clipShape(Capsule())
+                }
+
                 // Live workout clock (ticks every second while active).
                 if let start = workout.startedAt {
                     TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -182,6 +313,19 @@ struct VoiceView: View {
                     } else {
                         Text(hrStatusText).font(.subheadline).foregroundColor(.gray)
                     }
+                }
+
+                // Live outdoor distance + pace (GPS) — only shows once moving.
+                if workout.distanceMeters > 20 {
+                    HStack(spacing: 14) {
+                        Label(String(format: "%.2f km", workout.distanceMeters / 1000),
+                              systemImage: "location.fill")
+                        if let pace = workout.pace {
+                            Label(pace, systemImage: "speedometer")
+                        }
+                    }
+                    .font(.subheadline.weight(.medium).monospacedDigit())
+                    .foregroundColor(.white.opacity(0.85))
                 }
             }
 
@@ -215,34 +359,7 @@ struct VoiceView: View {
                             reviewLog = log
                         }
                     } else {
-                        if call.state != .connected { await call.start() }
-                        // Refresh Whoop data for the coach. Must check the
-                        // connection FIRST — performSync() no-ops unless
-                        // isWhoopConnected is set, which doesn't happen if you
-                        // open the Voice tab before the Whoop/Summary tab. The
-                        // periodic 5s whoop re-send then delivers it to the agent
-                        // once the fetches land.
-                        let ow = OpenWearablesManager.shared
-                        ow.checkConnectionStatus { ow.performSync() }
-                        workout.startWorkout()                      // broadcasts Whoop ctx to the agent
-                        // Arm hands-free "Hey Coach" if it's set up; otherwise the
-                        // session stays in normal always-on listening.
-                        wakeArmed = call.enableWakeWord { handleWake() }
-                        if wakeArmed {
-                            // Put the agent to sleep until "Hey Coach". A single
-                            // send races the agent joining the room and gets
-                            // lost, so: (1) re-send on the controller's 5s tick
-                            // (survives join + reconnect), and (2) burst now so
-                            // it lands within ~1s of the agent appearing.
-                            // Entering wake mode is idempotent on the agent.
-                            workout.wakeModeSink = { Task { await call.sendWakeMode(true) } }
-                            for ms in [0, 600, 1500, 3000] {
-                                Task {
-                                    try? await Task.sleep(nanoseconds: UInt64(ms) * 1_000_000)
-                                    await call.sendWakeMode(true)
-                                }
-                            }
-                        }
+                        await beginWorkout()
                     }
                 }
             } label: {
@@ -257,9 +374,12 @@ struct VoiceView: View {
             .disabled(!VoiceCallManager.isAvailable)
 
             if !workout.isActive {
-                Button("Past workouts") { showHistory = true }
-                    .font(.footnote)
-                    .foregroundColor(.gray)
+                HStack(spacing: 20) {
+                    Button("Past workouts") { showHistory = true }
+                    Button("Edit profile") { showOnboarding = true }
+                }
+                .font(.footnote)
+                .foregroundColor(.gray)
             }
         }
     }
@@ -323,10 +443,34 @@ struct VoiceView: View {
         // Agent → app: coach started/stopped listening. Play a cue on sleep so
         // the user knows it stopped, and keep the UI in sync.
         call.onCoachState = { state in handleCoachState(state) }
+        // Agent → app: today's 3 plan options → present the plan cards (#11).
+        call.onPlans = { plans in planDeck = plans }
+        // Agent → app: outdoor run → start GPS (triggers the permission prompt).
+        call.onStartGPS = { workout.startLocation() }
+        // Agent → app: opening chat done → switch to hands-free "Hey Coach".
+        call.onHandsfree = { armHandsfree() }
+        // Agent → app: profile saved via the voice interview → store + dismiss.
+        call.onProfileSaved = { dict in
+            saveProfileFromCoach(dict)
+            showOnboarding = false
+        }
+        // Agent → app: the chosen workout label → show it + save it as today's plan.
+        call.onWorkoutLabel = { label in
+            currentWorkoutLabel = label
+            PlannedWorkout.save(label)
+        }
         // (Re)send the latest Whoop snapshot — controller calls this on start and
         // every few seconds, so it survives the agent joining the room late.
         workout.whoopContextSink = {
             Task { await call.sendWhoopContext(whoopSnapshot()) }
+        }
+        // Forward live GPS distance/pace to the coach during outdoor workouts (#9).
+        workout.geoSink = { dist, pace in
+            Task { await call.sendGeo(distanceMeters: dist, pace: pace) }
+        }
+        // Send the onboarding profile to the coach when connected (#11).
+        if let profile = UserProfile.saved {
+            Task { await call.sendProfile(profile.dictionary) }
         }
         #if DEBUG
         // Headless Simulator pipeline test: launch with SIMCTL_CHILD_AUTO_WORKOUT=1

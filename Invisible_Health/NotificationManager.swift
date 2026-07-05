@@ -34,6 +34,29 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
         }
     }
     
+    // Tier 3 #12: a daily pre-workout nudge that reaches the user BEFORE they
+    // open the app, using the "lower the bar" technique (shrink the ask so a
+    // demotivated person still shows up). Tapping it opens the app to the coach.
+    func schedulePreWorkoutNudge(hour: Int = 18, minute: Int = 0) {
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: ["pre_workout_nudge"])
+        let messages = [
+            "You don't have to crush it — just show up. 20 minutes, I'll pick three things. Let's go.",
+            "Bad day? Perfect. That's when it counts most. Just get moving, I've got the rest.",
+            "No pressure today — one easy session. Future you will thank you. Come on.",
+            "Even 15 minutes beats zero. Lace up, open the app, and let's just start.",
+            "You're one workout away from a better mood. Let's get it — I'll keep it simple.",
+        ]
+        let content = UNMutableNotificationContent()
+        content.title = "Your coach"
+        content.body = messages.randomElement() ?? messages[0]
+        content.sound = .default
+        var when = DateComponents(); when.hour = hour; when.minute = minute
+        let trigger = UNCalendarNotificationTrigger(dateMatching: when, repeats: true)
+        center.add(UNNotificationRequest(identifier: "pre_workout_nudge",
+                                         content: content, trigger: trigger))
+    }
+
     func configureCategories() {
         // Define Actions for Smart Log
         // ✅ WhatsApp Style: Inline Text Input

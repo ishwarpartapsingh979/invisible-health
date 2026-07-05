@@ -27,6 +27,9 @@ struct ContentView: View {
     // one — the "voice kept playing but the UI reset" bug). Injected into VoiceView.
     @StateObject private var voiceCall = VoiceCallManager()
     @StateObject private var workoutSession = WorkoutSessionController()
+    /// Cross-tab hand-off: the Plan/Profile tabs set this + switch to the Voice
+    /// tab, which performs the action ("discuss"/"start"/"onboard") on appear.
+    @State private var pendingVoiceAction: String?
 
     // Image Annotation State (Phase 2.1)
     @State private var imageToAnnotate: AnnotatableImage?
@@ -86,7 +89,14 @@ struct ContentView: View {
                 case 16:
                     GeminiWorkoutRecommendationView() // Tab 16 — Unified Apple+Whoop workout rec
                 case 17:
-                    VoiceView(call: voiceCall, workout: workoutSession) // Tab 17 — Live voice (persistent call)
+                    VoiceView(call: voiceCall, workout: workoutSession,
+                              pendingVoiceAction: $pendingVoiceAction) // Tab 17 — Live voice
+                case 18:
+                    ProfileTabView(call: voiceCall, selectedTab: $selectedTab,
+                                   pendingVoiceAction: $pendingVoiceAction) // Tab 18 — Profile
+                case 19:
+                    PlanTabView(workout: workoutSession, selectedTab: $selectedTab,
+                                pendingVoiceAction: $pendingVoiceAction) // Tab 19 — Today's plan
                 default:
                     // Tab 0: Home / Mic Screen
                     micView
@@ -112,10 +122,10 @@ struct ContentView: View {
                         TabButton(icon: "chart.bar", text: "DATA", isSelected: selectedTab == 1) { selectedTab = 1 }
                         */
                         
-                        // Dogfood v2 tab bar: VOICE (home), WHOOP, DEVICES — that's it.
-                        // SUMMARY/APPLE/WORKOUT-rec retired (views + switch cases stay intact
-                        // above, so re-enabling is just a one-line uncomment).
+                        // Dogfood v2 tab bar: VOICE (home), PLAN, PROFILE, WHOOP, DEVICES.
                         TabButton(icon: "waveform", text: "VOICE", isSelected: selectedTab == 17) { selectedTab = 17 }
+                        TabButton(icon: "figure.run", text: "PLAN", isSelected: selectedTab == 19) { selectedTab = 19 }
+                        TabButton(icon: "person.fill", text: "PROFILE", isSelected: selectedTab == 18) { selectedTab = 18 }
 
                         TabButton(icon: "waveform.path.ecg", text: "WHOOP", isSelected: selectedTab == 15) { selectedTab = 15 }
 

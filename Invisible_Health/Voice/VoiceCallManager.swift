@@ -43,6 +43,18 @@ final class VoiceCallManager: ObservableObject, RoomDelegate {
     /// the UI can play a cue and sync state.
     var onCoachState: ((_ state: String) -> Void)?
 
+    /// Called when the coach sends today's 3 plan options — drives the plan cards.
+    var onPlans: ((_ plans: [CoachPlan]) -> Void)?
+
+    /// Coach detected an outdoor run → start GPS (with the permission prompt).
+    var onStartGPS: (() -> Void)?
+    /// Coach finished the opening plan chat → switch to hands-free "Hey Coach".
+    var onHandsfree: (() -> Void)?
+    /// Coach saved the profile via the voice interview → store it + dismiss onboarding.
+    var onProfileSaved: ((_ profile: [String: Any]) -> Void)?
+    /// Coach set the chosen-workout label → show it on the workout screen.
+    var onWorkoutLabel: ((_ label: String) -> Void)?
+
     /// The underlying LiveKit room. Exposed so SwiftUI can observe participant
     /// audio activity (it conforms to ObservableObject in the SDK).
     let room = Room()
@@ -186,6 +198,52 @@ final class VoiceCallManager: ObservableObject, RoomDelegate {
         await sendControl(["type": "keepalive"], topic: "keepalive")
     }
 
+    /// Stream live GPS distance + pace to the coach during an outdoor workout (#9).
+    func sendGeo(distanceMeters: Double, pace: String?) async {
+        var p: [String: Any] = ["type": "geo", "distance_m": distanceMeters]
+        if let pace { p["pace"] = pace }
+        await sendControl(p, topic: "geo")
+    }
+
+    /// Send the user's onboarding profile to the coach (#11) so it can tailor
+    /// advice + generate today's plans.
+    func sendProfile(_ profile: [String: Any]) async {
+        var p = profile
+        p["type"] = "profile"
+        await sendControl(p, topic: "profile")
+    }
+
+    /// EXECUTION: tell the coach to start the workout. Pass the decided plan (from
+    /// the Plan tab) so it coaches that instead of re-proposing.
+    func sendWorkoutStarted(plan: String? = nil) async {
+        var p: [String: Any] = ["type": "workout_started"]
+        if let plan { p["plan"] = plan }
+        await sendControl(p, topic: "workout_started")
+    }
+
+    /// PLANNING: ask the coach to discuss + decide the workout (Discuss Workout).
+    func sendDiscussWorkout() async {
+        await sendControl(["type": "discuss_workout"], topic: "discuss_workout")
+    }
+
+    /// Ask the coach to run the voice onboarding interview.
+    func sendStartOnboarding() async {
+        await sendControl(["type": "start_onboarding"], topic: "start_onboarding")
+    }
+
+    /// Tell the coach the user's LOCAL time of day (it runs in cloud UTC).
+    func sendLocalTime() async {
+        let now = Date()
+        let f = DateFormatter(); f.dateFormat = "HH:mm"
+        let hour = Calendar.current.component(.hour, from: now)
+        let period = (5..<12).contains(hour) ? "morning"
+            : (12..<17).contains(hour) ? "afternoon"
+            : (17..<21).contains(hour) ? "evening" : "night"
+        await sendControl(["type": "local_time", "time": f.string(from: now),
+                           "period": period, "tz": TimeZone.current.identifier],
+                          topic: "local_time")
+    }
+
     private func sendControl(_ payload: [String: Any], topic: String) async {
         guard state == .connected,
               let data = try? JSONSerialization.data(withJSONObject: payload) else { return }
@@ -214,6 +272,21 @@ final class VoiceCallManager: ObservableObject, RoomDelegate {
             guard let p = try? JSONDecoder().decode(Payload.self, from: data) else { return }
             let muscle = p.muscle ?? "Exercises"
             Task { @MainActor in self.onExercises?(muscle, p.items) }
+        case "plans":
+            struct Payload: Decodable { let plans: [CoachPlan] }
+            guard let p = try? JSONDecoder().decode(Payload.self, from: data) else { return }
+            Task { @MainActor in self.onPlans?(p.plans) }
+        case "start_gps":
+            Task { @MainActor in self.onStartGPS?() }
+        case "handsfree":
+            Task { @MainActor in self.onHandsfree?() }
+        case "profile_saved":
+            let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+            Task { @MainActor in self.onProfileSaved?(obj) }
+        case "workout_label":
+            guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let label = obj["label"] as? String else { return }
+            Task { @MainActor in self.onWorkoutLabel?(label) }
         case "coach_state":
             guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let state = obj["state"] as? String else { return }
@@ -242,7 +315,18 @@ final class VoiceCallManager: ObservableObject {
     var onMoment: ((_ transcript: String, _ analysis: String, _ bpm: Int?) -> Void)?
     var onExercises: ((_ muscle: String, _ items: [ExerciseItem]) -> Void)?
     var onCoachState: ((_ state: String) -> Void)?
+    var onPlans: ((_ plans: [CoachPlan]) -> Void)?
+    var onStartGPS: (() -> Void)?
+    var onHandsfree: (() -> Void)?
+    var onProfileSaved: ((_ profile: [String: Any]) -> Void)?
+    var onWorkoutLabel: ((_ label: String) -> Void)?
     func sendKeepAlive() async {}
+    func sendGeo(distanceMeters: Double, pace: String?) async {}
+    func sendProfile(_ profile: [String: Any]) async {}
+    func sendWorkoutStarted(plan: String? = nil) async {}
+    func sendDiscussWorkout() async {}
+    func sendStartOnboarding() async {}
+    func sendLocalTime() async {}
 
     func start() async {
         state = .failed("Add the LiveKit Swift SDK package in Xcode to enable Voice.")

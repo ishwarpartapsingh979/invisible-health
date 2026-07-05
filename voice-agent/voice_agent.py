@@ -227,6 +227,60 @@ class SessionStore:
             logger.warning("session fetch error: %s", e)
         return []
 
+    async def save_profile(self, profile: dict, user_id: str = "ishwar") -> None:
+        """Upsert the user's profile (Tier 3 #11) into Supabase user_profiles."""
+        if not self.enabled:
+            return
+        record = {**profile, "user_id": user_id}
+        try:
+            import aiohttp
+            headers = self._headers({"Prefer": "resolution=merge-duplicates,return=minimal"})
+            async with aiohttp.ClientSession() as s:
+                async with s.post(f"{self.url}/rest/v1/user_profiles?on_conflict=user_id",
+                                  json=record, headers=headers,
+                                  timeout=aiohttp.ClientTimeout(total=15)) as r:
+                    if r.status >= 300:
+                        logger.warning("profile save %s: %s", r.status, (await r.text())[:200])
+                    else:
+                        logger.info("🧑 profile saved")
+        except Exception as e:
+            logger.warning("profile save error: %s", e)
+
+    async def save_planned(self, record: dict) -> None:
+        """Save a PLANNED workout (Tier 3 redesign): what the coach suggested, the
+        discussion, and what the user decided — before they actually do it."""
+        if not self.enabled:
+            return
+        try:
+            import aiohttp
+            async with aiohttp.ClientSession() as s:
+                async with s.post(f"{self.url}/rest/v1/planned_workouts",
+                                  json=record, headers=self._headers({"Prefer": "return=minimal"}),
+                                  timeout=aiohttp.ClientTimeout(total=15)) as r:
+                    if r.status >= 300:
+                        logger.warning("planned save %s: %s", r.status, (await r.text())[:200])
+                    else:
+                        logger.info("🗓️  planned workout saved: %s", record.get("decided"))
+        except Exception as e:
+            logger.warning("planned save error: %s", e)
+
+    async def get_profile(self, user_id: str = "ishwar") -> dict:
+        if not self.enabled:
+            return {}
+        try:
+            import aiohttp
+            params = {"user_id": f"eq.{user_id}", "limit": "1"}
+            async with aiohttp.ClientSession() as s:
+                async with s.get(f"{self.url}/rest/v1/user_profiles",
+                                 params=params, headers=self._headers(),
+                                 timeout=aiohttp.ClientTimeout(total=15)) as r:
+                    if r.status < 300:
+                        rows = await r.json()
+                        return rows[0] if rows else {}
+        except Exception as e:
+            logger.warning("profile fetch error: %s", e)
+        return {}
+
     @staticmethod
     def summarize_for_coach(sessions: list) -> str:
         """A compact human string of recent sessions for the coach's context."""
@@ -399,14 +453,56 @@ Motivation / variety:
   they ask how long they've been going, or when time-in-workout is relevant (e.g.
   pacing a run, deciding to wrap up).
 - get_training_history: their recent past sessions (type, focus, RPE, when). This
-  is your MEMORY — call it early when deciding today's workout so you honour the
-  ARC (alternate strength/endurance, don't let strength lapse, go lighter after a
-  high-RPE day) and can answer "what did I do last?". Don't ask them what they did
-  before if you can look it up.
+  is your MEMORY. NEVER ask the user "what did you do yesterday / last time" —
+  ALWAYS call this and look it up first. If it returns real sessions, use them to
+  honour the ARC (alternate strength/endurance, don't let strength lapse, go
+  lighter after a high-RPE day). If it returns "No past sessions on record yet" or
+  nothing, say exactly this: "I don't see anything in your record — did you do
+  anything, or should I assume you rested?" and use their answer. Only ask AFTER
+  you've checked and found nothing — never instead of checking.
+- get_distance_pace: live outdoor distance + pace (phone GPS) for outdoor runs —
+  use for "how far/fast am I", pacing a run. Nothing useful indoors/treadmill.
+- get_profile: their onboarding profile (goal, preferred workout, level, days/wk,
+  equipment, injuries). Use to tailor advice and plans.
+- show_todays_plans: put THREE plan options on their screen for today. When they
+  ask what to do today / for a plan, FIRST gather get_profile + get_training_history
+  + get_whoop_status, then compose three (their preferred; dad's arc pick; a
+  readiness-smart option) and call it. See the tool doc for the three kinds.
 - show_exercises(muscle): puts a swipeable demo deck on their screen. Call it
   whenever they ask to see/show/list exercises for a body part, then say one short
   sentence pointing them to the screen — don't read a long list aloud. If asked
   again or for different ones, VARY your picks; never repeat the same list.
+- begin_location_tracking: turns on the phone's GPS to track distance + pace.
+  Call it ONLY when the user says they're doing an OUTDOOR run/walk outside —
+  never for gym, treadmill, or indoor work (no GPS there). It triggers a location
+  permission prompt, so only fire it when they actually go outside to run.
+
+# STARTING A WORKOUT (voice-first — you LEAD this)
+When a workout starts, you PROPOSE, they DECIDE — all by voice:
+1. FIRST gather get_profile + get_training_history + get_whoop_status, then call
+   show_todays_plans to put 3 options on screen AND say them out loud briefly:
+   "Based on your dad's rules and where you're at, you should do one of these three
+   today — [one-line each]. Are you doing any of them?"
+2. LISTEN for their answer. They may pick one, OR tell you their OWN plan ("I'm
+   doing an outdoor run", "just abs and stretching"). Accept whatever they say —
+   never force a plan on them.
+3. If what they choose is an OUTDOOR run/walk, call begin_location_tracking so
+   their distance + pace get tracked. If it's indoor/gym/treadmill, do NOT.
+4. Briefly confirm their choice, then call set_workout_label with a short title so
+   it shows on their screen, and coach them into it. THEN call go_handsfree so you
+   go quiet for the rest of the workout (they say "Hey Coach" to reach you). From
+   here on, coach the session they actually chose.
+
+# ONBOARDING (voice-first — you interview them)
+When you're asked to set up their profile (a "let's set up" / onboarding cue),
+run a short, warm VOICE interview — one question at a time — to learn: their main
+goal; how they like to train (gym strength / running / dance / mixed); experience
+level; days per week; equipment / where they train; any injuries or limits. THEN,
+before finishing, ask ONE more thing YOU think matters that they haven't told you
+(e.g., their schedule/time of day, a target event, what's held them back before,
+what motivates them) — your judgement. When you have it all, call save_profile
+with the fields, then confirm warmly in one sentence. Keep it conversational, not
+a rigid form.
 
 # STYLE
 - Speak in English (US), even amid other languages or gym noise, unless clearly
@@ -440,6 +536,78 @@ class HRContext:
         if time.monotonic() - self._updated_at > 10:
             return None
         return self.bpm, self.worn
+
+
+class GeoContext:
+    """Live outdoor distance + pace from the iPhone's GPS (Tier 3 #9). The app
+    streams {distance_m, pace} during outdoor workouts; indoors/treadmill it
+    sends nothing (no GPS) so this stays empty and the coach just uses time+HR."""
+
+    def __init__(self) -> None:
+        self.distance_m = None
+        self.pace = None  # human string like "6:10 /km"
+        self._updated_at = None
+
+    def update(self, msg: dict) -> None:
+        self.distance_m = msg.get("distance_m")
+        self.pace = msg.get("pace")
+        self._updated_at = time.monotonic()
+
+    def snapshot(self):
+        if self._updated_at is None or time.monotonic() - self._updated_at > 15:
+            return None
+        return self.distance_m, self.pace
+
+
+class TimeContext:
+    """The user's LOCAL time of day, streamed from the app (the agent runs in
+    cloud UTC, so it can't know this itself)."""
+
+    def __init__(self) -> None:
+        self.time_str = None   # "18:42"
+        self.period = None     # morning/afternoon/evening/night
+        self.tz = None
+
+    def update(self, msg: dict) -> None:
+        self.time_str = msg.get("time")
+        self.period = msg.get("period")
+        self.tz = msg.get("tz")
+
+    def describe(self):
+        if not self.time_str:
+            return None
+        return f"{self.time_str} ({self.period}) their local time" + (f", {self.tz}" if self.tz else "")
+
+
+class ProfileContext:
+    """The user's onboarding profile (Tier 3 #11), streamed from the app: goal,
+    preferred workout(s), experience, days/week, equipment, injuries. Used to
+    generate today's plans and personalize coaching."""
+
+    def __init__(self) -> None:
+        self.data = {}
+
+    def update(self, msg: dict) -> None:
+        self.data = {k: v for k, v in msg.items() if k != "type"}
+
+    def summary(self):
+        d = self.data
+        if not d:
+            return None
+        parts = []
+        if d.get("goal"):
+            parts.append(f"goal: {d['goal']}")
+        if d.get("preferred"):
+            parts.append(f"prefers: {d['preferred']}")
+        if d.get("level"):
+            parts.append(f"level: {d['level']}")
+        if d.get("days_per_week"):
+            parts.append(f"{d['days_per_week']} days/week")
+        if d.get("equipment"):
+            parts.append(f"equipment: {d['equipment']}")
+        if d.get("injuries"):
+            parts.append(f"injuries/limits: {d['injuries']}")
+        return "; ".join(parts) if parts else None
 
 
 class WhoopContext:
@@ -777,13 +945,139 @@ class ProactiveCoach:
 
 class CoachAgent(Agent):
     def __init__(self, hr: HRContext, whoop: WhoopContext, publish_exercises, wake,
-                 store: "SessionStore") -> None:
+                 store: "SessionStore", geo: "GeoContext", profile: "ProfileContext",
+                 publish_plans, publish_signal, tod: "TimeContext") -> None:
         super().__init__(instructions=INSTRUCTIONS)
         self._hr = hr
         self._whoop = whoop
         self._publish_exercises = publish_exercises
         self._wake = wake
         self._store = store
+        self._geo = geo
+        self._profile = profile
+        self._publish_plans = publish_plans
+        self._publish_signal = publish_signal
+        self._tod = tod
+        self._planstate = None   # set by entrypoint: {"suggested", "decided"}
+        self._get_turns = None   # set by entrypoint: () -> list[str] (the discussion)
+
+    @function_tool
+    async def get_local_time(self, context: RunContext) -> str:
+        """The user's LOCAL time of day (you run in cloud UTC, so use this — never
+        guess the time). Use it to greet appropriately and to factor time of day
+        into coaching (e.g. a heavy session late at night before sleep)."""
+        d = self._tod.describe()
+        return d or "I don't have their local time yet."
+
+    @function_tool
+    async def set_workout_label(self, context: RunContext, label: str) -> str:
+        """Show the CHOSEN workout on the user's screen once it's decided (whether
+        they picked a plan card or told you by voice). `label` is a short title,
+        e.g. 'Outdoor run — 30 min' or 'Full-body strength'. Call it right after
+        you confirm what they're doing."""
+        await self._publish_signal("workout_label", {"label": label})
+        # Remember the full plan lifecycle: what was suggested, the discussion, and
+        # what they decided — saved so we can later compare it to what they DID.
+        if self._planstate is not None:
+            self._planstate["decided"] = label
+            suggested = self._planstate.get("suggested") or []
+            discussion = "\n".join(self._get_turns()) if self._get_turns else ""
+            await self._store.save_planned({
+                "user_id": "ishwar",
+                "decided": label,
+                "suggested": json.dumps(suggested),
+                "discussion": discussion,
+            })
+        return "Shown on their screen."
+
+    @function_tool
+    async def begin_location_tracking(self, context: RunContext) -> str:
+        """Turn on the phone GPS to track distance + pace. Call ONLY when the user
+        is doing an OUTDOOR run/walk outside — never for gym/treadmill/indoor.
+        Triggers a location-permission prompt on their phone."""
+        await self._publish_signal("start_gps", {})
+        logger.info("📍 location tracking requested (outdoor)")
+        return "GPS is on — I'll track your distance and pace. Head out when ready."
+
+    @function_tool
+    async def go_handsfree(self, context: RunContext) -> str:
+        """Switch to hands-free 'Hey Coach' mode for the rest of the workout. Call
+        this ONCE the opening plan conversation is done and the user is training —
+        after this you stay quiet (except proactive cues) until they say 'Hey
+        Coach'. Tell them you'll go quiet and they can just say 'Hey Coach'."""
+        await self._publish_signal("handsfree", {})
+        logger.info("🤫 going hands-free for the rest of the workout")
+        return "Hands-free on. I'll stay quiet — just say 'Hey Coach' when you need me."
+
+    @function_tool
+    async def save_profile(
+        self, context: RunContext,
+        goal: str, preferred: str, level: str, days_per_week: int,
+        equipment: str, injuries: str = "", notes: str = "",
+    ) -> str:
+        """Save the user's profile after the onboarding interview. `notes` holds
+        the extra thing you asked at the end (schedule, target event, motivation,
+        etc.). Call this once you've gathered everything by voice."""
+        prof = {"goal": goal, "preferred": preferred, "level": level,
+                "days_per_week": days_per_week, "equipment": equipment,
+                "injuries": injuries, "notes": notes}
+        self._profile.update(prof)
+        await self._store.save_profile(prof)
+        await self._publish_signal("profile_saved", prof)
+        logger.info("🧑 profile saved via voice onboarding")
+        return "Saved your profile. You're all set."
+
+    @function_tool
+    async def get_distance_pace(self, context: RunContext) -> str:
+        """Live outdoor distance + pace from the phone's GPS, for outdoor runs.
+        Call it when they ask how far/fast they've gone, or when pacing a run.
+        Returns nothing useful indoors/on a treadmill (no GPS) — then coach off
+        time + heart rate instead."""
+        snap = self._geo.snapshot()
+        if snap is None:
+            return ("No GPS distance right now — they're likely indoors or on a "
+                    "treadmill. Use workout time and heart rate instead.")
+        dist_m, pace = snap
+        km = f"{dist_m / 1000:.2f} km" if isinstance(dist_m, (int, float)) else "unknown distance"
+        return f"{km}" + (f" at {pace}" if pace else "")
+
+    @function_tool
+    async def get_profile(self, context: RunContext) -> str:
+        """The user's profile from onboarding (goal, preferred workout, level,
+        days/week, equipment, injuries). Use it to tailor advice and plans."""
+        s = self._profile.summary()
+        return s or "No profile on record yet — ask them briefly what they're after."
+
+    @function_tool
+    async def show_todays_plans(
+        self, context: RunContext,
+        plan1_title: str, plan1_detail: str,
+        plan2_title: str, plan2_detail: str,
+        plan3_title: str, plan3_detail: str,
+    ) -> str:
+        """Put THREE workout plan options on the user's screen as cards, for
+        today. Call this when they ask for today's plan / what to do today / a
+        workout plan. Compose the three yourself FIRST using get_profile (their
+        preference), get_training_history (the arc — what they did recently),
+        get_whoop_status (today's readiness), and dad's rules:
+          - Plan 1 = their PREFERRED style (from the profile).
+          - Plan 2 = DAD'S PICK for today (the arc: alternate strength/endurance,
+            don't let strength lapse, full-body balance).
+          - Plan 3 = READINESS-SMART (lighter/mobility if recovery is poor or a
+            recent RPE was high; a push option if they're fresh).
+        Each detail is a short spoken-style description of the session. After
+        calling, say ONE sentence telling them to pick one on screen."""
+        plans = [
+            {"title": plan1_title, "detail": plan1_detail, "kind": "preferred"},
+            {"title": plan2_title, "detail": plan2_detail, "kind": "dad"},
+            {"title": plan3_title, "detail": plan3_detail, "kind": "readiness"},
+        ]
+        if self._planstate is not None:
+            self._planstate["suggested"] = plans   # remember what we suggested
+        await self._publish_plans(plans)
+        logger.info("🗒️  showing today's 3 plans")
+        return ("Done — three plans are on their screen (their preferred, dad's "
+                "pick, and a readiness-smart option). Tell them to tap one to start.")
 
     @function_tool
     async def get_training_history(self, context: RunContext) -> str:
@@ -858,11 +1152,26 @@ async def entrypoint(ctx: agents.JobContext):
     # dad's-rules engine will read it each tick for proactive HR cues.
     hr = HRContext()
     whoop = WhoopContext()
+    geo = GeoContext()
+    profile = ProfileContext()
+    tod = TimeContext()
     wake = WakeController()
     store = SessionStore()
 
+    # Load the saved profile so the coach knows it from the first word (no need
+    # for the app to re-send it every session).
+    try:
+        saved = await store.get_profile()
+        if saved:
+            profile.update(saved)
+            logger.info("🧑 loaded profile: %s", profile.summary())
+    except Exception as e:
+        logger.warning("profile load failed: %s", e)
+
     # Accumulates the CURRENT workout for the end-of-workout summary + save.
     wlog = {"turns": [], "hr": []}
+    # The plan lifecycle: what the coach suggested + what the user decided.
+    planstate = {"suggested": None, "decided": None}
 
     def _reset_wlog() -> None:
         wlog["turns"] = []
@@ -900,6 +1209,13 @@ async def entrypoint(ctx: agents.JobContext):
         elif kind == "whoop_context":
             whoop.update(msg)
             logger.info("🟢 Whoop context: %s", whoop.summary())
+        elif kind == "geo":
+            geo.update(msg)
+        elif kind == "profile":
+            profile.update(msg)
+            logger.info("🧑 profile: %s", profile.summary())
+        elif kind == "local_time":
+            tod.update(msg)
         elif kind == "wake_mode":
             # iOS enables this when a workout starts (hands-free "Hey Coach").
             if msg.get("enabled"):
@@ -913,6 +1229,49 @@ async def entrypoint(ctx: agents.JobContext):
             # App keeps the coach awake during silent-but-engaged moments (e.g.
             # browsing the on-screen exercise deck) so it doesn't time out.
             wake.bump()
+        elif kind == "discuss_workout":
+            # PLANNING (Discuss Workout button): coach proposes 3 plans, discusses,
+            # and DECIDES — but does NOT start a live workout.
+            _reset_wlog()
+            planstate["suggested"] = None
+            planstate["decided"] = None
+            if wake.session is not None:
+                tnow = tod.describe()
+                asyncio.create_task(wake.session.generate_reply(instructions=(
+                    "The user wants to DISCUSS and DECIDE their workout" +
+                    (f" — it's {tnow}. " if tnow else ". ") +
+                    "Gather get_profile + get_training_history + get_whoop_status, call "
+                    "show_todays_plans, say the three options out loud briefly, and ask "
+                    "which they're doing. When they settle on one (a card or their own "
+                    "idea), call set_workout_label. This is PLANNING — do NOT go "
+                    "hands-free or start a live workout.")))
+        elif kind == "workout_started":
+            # EXECUTION (Start Workout button): DO the workout. If a plan was already
+            # decided (via Discuss, or sent here), coach that; else propose inline.
+            if wake.session is not None:
+                tnow = tod.describe()
+                decided = msg.get("plan") or planstate.get("decided")
+                if decided:
+                    planstate["decided"] = decided
+                    instr = ("The user is starting their workout" +
+                             (f" — it's {tnow}. " if tnow else ". ") +
+                             f"They decided to do: {decided}. Greet them by time of day, "
+                             "confirm you'll coach them through it in one sentence, then "
+                             "call go_handsfree. If it's an outdoor run, call "
+                             "begin_location_tracking first.")
+                else:
+                    instr = ("A workout just started" +
+                             (f" — it's {tnow}. " if tnow else ". ") +
+                             "Do the STARTING A WORKOUT flow: gather profile + history + "
+                             "readiness, call show_todays_plans, say the 3 options, ask "
+                             "which. When they decide call set_workout_label then go_handsfree.")
+                asyncio.create_task(wake.session.generate_reply(instructions=instr))
+        elif kind == "start_onboarding":
+            # Voice-first onboarding: the coach interviews them.
+            if wake.session is not None:
+                asyncio.create_task(wake.session.generate_reply(instructions=(
+                    "Start the ONBOARDING voice interview now — greet them warmly "
+                    "and ask your first question. One question at a time.")))
 
     def _emit_coach_state(state: str) -> None:
         asyncio.create_task(publish_coach_state(state))
@@ -959,6 +1318,24 @@ async def entrypoint(ctx: agents.JobContext):
         except Exception as e:
             logger.warning("failed to publish exercises: %s", e)
 
+    async def publish_plans(plans: list) -> None:
+        """Send today's 3 plan options to the app (topic 'plans') as cards."""
+        body = {"type": "plans", "plans": plans}
+        try:
+            await ctx.room.local_participant.publish_data(
+                json.dumps(body).encode("utf-8"), reliable=True, topic="plans")
+        except Exception as e:
+            logger.warning("failed to publish plans: %s", e)
+
+    async def publish_signal(topic: str, payload: dict) -> None:
+        """Generic app signal (start_gps, profile_saved, handsfree, ...)."""
+        body = {**payload, "type": topic}
+        try:
+            await ctx.room.local_participant.publish_data(
+                json.dumps(body).encode("utf-8"), reliable=True, topic=topic)
+        except Exception as e:
+            logger.warning("failed to publish %s: %s", topic, e)
+
     session = AgentSession(
         llm=openai.realtime.RealtimeModel(
             voice="alloy",
@@ -997,8 +1374,12 @@ async def entrypoint(ctx: agents.JobContext):
         false_interruption_timeout=1.0,
     )
 
+    coach = CoachAgent(hr, whoop, publish_exercises, wake, store,
+                       geo, profile, publish_plans, publish_signal, tod)
+    coach._planstate = planstate
+    coach._get_turns = lambda: wlog["turns"][-40:]
     await session.start(
-        agent=CoachAgent(hr, whoop, publish_exercises, wake, store),
+        agent=coach,
         room=ctx.room,
         room_input_options=RoomInputOptions(
             # Background VOICE cancellation (Krisp): strips other people's voices
@@ -1021,17 +1402,12 @@ async def entrypoint(ctx: agents.JobContext):
         logger.warning("hype player start failed: %s", e)
         hype_player = None
 
-    # Kickoff hype: a pre-workout "let's go" clip the moment a workout starts.
-    # Also reset the workout accumulator so the end-of-workout summary is clean.
+    # On workout start, just reset the accumulator. NO kickoff hype clip here —
+    # it overlapped the coach's spoken greeting/plan proposal. Hype clips still
+    # play during effort moments (ProactiveCoach), which guard against the coach
+    # speaking, so they don't collide.
     def _workout_kickoff():
         _reset_wlog()
-        clip = hype_clip("pre_workout")
-        if hype_player is not None and clip:
-            try:
-                hype_player.play(clip)
-                logger.info("🔥 kickoff hype: %s", os.path.basename(clip))
-            except Exception as e:
-                logger.warning("kickoff hype failed: %s", e)
     wake.on_workout_start = _workout_kickoff
 
     # End of workout (Tier 3 #8 + #10): summarize what happened, SAVE it as a
@@ -1083,6 +1459,7 @@ async def entrypoint(ctx: agents.JobContext):
             "rpe": data.get("rpe") if isinstance(data.get("rpe"), int) else None,
             "avg_hr": avg_hr, "max_hr": max_hr,
             "summary": data.get("summary"),
+            "decided": planstate.get("decided"),   # what they PLANNED vs actually did
         })
         # Speak the recap + cool-down + tomorrow (Tier 3 #10)
         recap = data.get("summary") or "Nice work today."
@@ -1172,8 +1549,9 @@ async def entrypoint(ctx: agents.JobContext):
             tracer.user_said(text, context_snapshot())
         elif role == "assistant":
             tracer.coach_said(text)
-        # Accumulate the workout conversation for the end-of-workout summary.
-        if wake.wake_mode and role in ("user", "assistant"):
+        # Accumulate ALL turns (planning discussion AND workout) so we store the
+        # full to-and-fro, not just what happened while in wake mode.
+        if role in ("user", "assistant"):
             wlog["turns"].append(f"{'You' if role == 'user' else 'Coach'}: {text}")
 
     @session.on("function_tools_executed")

@@ -13,6 +13,14 @@ final class WorkoutSessionController: ObservableObject {
     @Published private(set) var worn = true
     @Published private(set) var hrState: HRConnectionState = .idle
 
+    /// Live outdoor distance (meters) + pace, from GPS (nil indoors/treadmill).
+    @Published private(set) var distanceMeters: Double = 0
+    @Published private(set) var pace: String?
+
+    /// Set by the view to forward GPS distance/pace to the agent (#9).
+    var geoSink: ((_ distanceMeters: Double, _ pace: String?) -> Void)?
+    private let location = LocationProvider()
+
     /// Set by the view to forward each sample onward (e.g. to the agent).
     var heartRateSink: ((HeartRateSample) -> Void)?
 
@@ -79,12 +87,34 @@ final class WorkoutSessionController: ObservableObject {
         p.start()
         startStaleWatchdog()
         startWhoopBroadcast()
+
+        // Live outdoor distance/pace (GPS). NOT started here — only when the coach
+        // signals an outdoor run (see startLocation), so indoor/gym workouts don't
+        // trigger a location prompt or waste battery.
+        distanceMeters = 0
+        pace = nil
+        location.onUpdate = { [weak self] dist, pace in
+            Task { @MainActor in
+                guard let self, self.isActive else { return }
+                self.distanceMeters = dist
+                self.pace = pace
+                self.geoSink?(dist, pace)
+            }
+        }
+    }
+
+    /// Begin GPS tracking — called only when the coach detects an outdoor run
+    /// (triggers the location-permission prompt at that point).
+    func startLocation() {
+        guard isActive else { return }
+        location.start()
     }
 
     func stopWorkout() {
         isActive = false
         provider?.stop()
         provider = nil
+        location.stop()
         staleTimer?.invalidate()
         staleTimer = nil
         whoopTimer?.invalidate()
