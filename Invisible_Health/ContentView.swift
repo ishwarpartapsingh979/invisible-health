@@ -20,7 +20,14 @@ struct ContentView: View {
     // 0: Home/Mic, 1: DataFeed, 2: Workout (logging), 3: Summary, 4: Chat, 5: SOS, 6: Preview (tomorrow), 7: Coach, 8: Today (workout), 9: Equipment, 10: Dad OS Rules, 11: Dad Voice Chat, 12: Devices, 13: Holistic Summary, 14: All Apple Metrics, 15: All Whoop Metrics, 16: Unified Workout Rec, 17: Voice (LiveKit + OpenAI Realtime)
     // Dogfood v2: Voice is the home tab. Visible tabs: VOICE (17), WHOOP (15), DEVICES (12).
     @State private var selectedTab: Int = 17
-    
+
+    // Owned at the app root so the voice call + workout session PERSIST across
+    // tab switches (VoiceView is recreated when you switch tabs; if it owned
+    // these, switching away and back would spawn a new call and orphan the live
+    // one — the "voice kept playing but the UI reset" bug). Injected into VoiceView.
+    @StateObject private var voiceCall = VoiceCallManager()
+    @StateObject private var workoutSession = WorkoutSessionController()
+
     // Image Annotation State (Phase 2.1)
     @State private var imageToAnnotate: AnnotatableImage?
     
@@ -79,7 +86,7 @@ struct ContentView: View {
                 case 16:
                     GeminiWorkoutRecommendationView() // Tab 16 — Unified Apple+Whoop workout rec
                 case 17:
-                    VoiceView() // Tab 17 — Live voice conversation (LiveKit + OpenAI Realtime)
+                    VoiceView(call: voiceCall, workout: workoutSession) // Tab 17 — Live voice (persistent call)
                 default:
                     // Tab 0: Home / Mic Screen
                     micView

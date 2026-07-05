@@ -8,8 +8,13 @@ import AudioToolbox
 /// asleep (ignoring gym noise) until the on-device wake word fires, then listens
 /// for a turn. See WakeWordDetector / WakeWordConfig.
 struct VoiceView: View {
-    @StateObject private var call = VoiceCallManager()
-    @StateObject private var workout = WorkoutSessionController()
+    // Injected from ContentView (app root) so the call + workout PERSIST across
+    // tab switches. Previously these were @StateObject owned here, so switching
+    // tabs recreated VoiceView → a NEW call, orphaning the live LiveKit session
+    // (voice kept playing while the UI reset to the disconnected orb — the
+    // "app went to first page but voice kept talking" bug).
+    @ObservedObject var call: VoiceCallManager
+    @ObservedObject var workout: WorkoutSessionController
     @State private var pulse = false
 
     /// True while "Hey Coach" is armed for this workout (configured + connected).
@@ -153,6 +158,19 @@ struct VoiceView: View {
     private var workoutPanel: some View {
         VStack(spacing: 12) {
             if workout.isActive {
+                // Live workout clock (ticks every second while active).
+                if let start = workout.startedAt {
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        let elapsed = max(0, Int(context.date.timeIntervalSince(start)))
+                        Label(
+                            String(format: "%d:%02d", elapsed / 60, elapsed % 60),
+                            systemImage: "stopwatch"
+                        )
+                        .font(.title3.weight(.semibold).monospacedDigit())
+                        .foregroundColor(.white)
+                    }
+                }
+
                 HStack(spacing: 10) {
                     Image(systemName: "heart.fill").foregroundColor(.red)
                     if let bpm = workout.currentBPM {

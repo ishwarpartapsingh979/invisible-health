@@ -1,0 +1,41 @@
+diff --git a/backend/app/database.py b/backend/app/database.py
+index 8a65cf6..ce91c53 100644
+--- a/backend/app/database.py
++++ b/backend/app/database.py
+@@ -39,7 +39,7 @@ async_engine = create_async_engine(settings.db_uri)
+
+
+ def _prepare_sessionmaker(engine: Engine) -> sessionmaker:
+-    return sessionmaker(autocommit=False, autoflush=False, bind=engine)
++    return sessionmaker(autocommit=False, autoflush=False, expire_on_commit=False, bind=engine)
+
+
+ def _prepare_async_sessionmaker(engine: AsyncEngine) -> async_sessionmaker:
+diff --git a/backend/app/services/event_record_service.py b/backend/app/services/event_record_service.py
+index eab5204..577f6fe 100644
+--- a/backend/app/services/event_record_service.py
++++ b/backend/app/services/event_record_service.py
+@@ -124,7 +124,10 @@ class EventRecordService(
+
+                 @sa_event.listens_for(db_session, "after_commit", once=True)
+                 def _dispatch_webhook(session: DbSession) -> None:  # noqa: ARG001
+-                    self._emit_event_record_webhook(_record, _data_source, _detail)
++                    try:
++                        self._emit_event_record_webhook(_record, _data_source, _detail)
++                    except Exception:
++                        pass  # outgoing webhook is non-fatal; data is already committed
+
+         return result  # ty:ignore[invalid-return-type]
+
+@@ -593,7 +596,10 @@ class EventRecordService(
+         @sa_event.listens_for(db_session, "after_commit", once=True)
+         def _dispatch_bulk_webhooks(session: DbSession) -> None:  # noqa: ARG001
+             for record, data_source, detail in dispatches:
+-                self._emit_event_record_webhook(record, data_source, detail)
++                try:
++                    self._emit_event_record_webhook(record, data_source, detail)
++                except Exception:
++                    pass  # outgoing webhook is non-fatal; data is already committed
+
+     @handle_exceptions
+     def _get_records_with_filters(

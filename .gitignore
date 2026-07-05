@@ -19,5 +19,15 @@ backend/venv-voice/
 # Python
 __pycache__/
 *.pyc
+# Wake-word training scratch dir (venv + GBs of synthetic audio/data/models).
+# The trained model the app needs (hey_coach.onnx) already lives in
+# Invisible_Health/Voice/ — this whole dir is local scratch, never commit it.
+wakeword-training/
+# Any stray venvs / large model + audio artifacts
+**/venv/
+**/venv-voice/
+*.wav
+*.pt
 # Claude Code
 .claude/
+*.bak
