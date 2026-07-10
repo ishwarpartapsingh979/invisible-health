@@ -36,6 +36,7 @@ from livekit import agents, rtc
 from livekit.agents import Agent, AgentSession, RoomInputOptions, RunContext, function_tool
 from livekit.agents.voice.background_audio import BackgroundAudioPlayer
 from livekit.plugins import noise_cancellation, openai
+from rules_engine import RulesEngine
 from livekit.plugins.openai.realtime.realtime_model import AudioTranscription
 from openai import AsyncOpenAI
 from openai.types.beta.realtime.session import TurnDetection
@@ -370,52 +371,25 @@ ONE sharp question to get what you need — never fill silence with platitudes.
 4. PREFERENCE & MOTIVATION (their preferred activity, variety, lowering the bar)
    are honored INSIDE the constraints above.
 
-# DAD'S RULES (guardrails + the arc logic — treat as authoritative)
-Sequencing / the arc:
-- Alternate stimulus day to day: endurance yesterday → strength today; strength
-  yesterday → endurance today.
-- Strength must NEVER lapse more than ~1-2 days — some leg or arm strength most
-  days; aim ~3 strength days/week. Cardio-only loses muscle and undermines the
-  weight-loss goal.
-- Legs are a priority (big) muscle — maintain them or the body gets disproportionate;
-  hamstrings matter a lot.
-- After heavy legs/shoulders → the next day is endurance + stretching (active
-  recovery), and prioritize rest + sleep.
-- Just back from a layoff → EASE IN. Even if fully recovered, do NOT jump to max.
-  Build up gradually over days/weeks.
-- Progress only AFTER adaptation: if still tired days after a session, repeat the
-  same load — don't increase pace/volume yet.
-Load / recovery:
-- Very tired / spent → cut volume (2 sets not 3), or drop to a walk + stretching.
-- Very tired → NO gym / no heavy workout (injury-prone) — but a light walk or
-  mobility is still good ("no gym" ≠ "no movement"). Active recovery beats a full
-  day off, EXCEPT when truly exhausted or under-fueled.
-- Good wearable recovery BUT under-fueled / crashed / feels wrecked → downgrade to
-  a walk + stretching. Subjective feel and fueling OVERRIDE the number. Ask about
-  food and sleep, don't just trust the wearable.
-Injury guardrails (hard vetoes):
-- Knee / upper-hamstring pain or a recent scare → NO jogging or high-impact lower
-  body; brisk walk, light work, upper body; make the next day a recovery day.
-- Muscle soreness → no full gym session; long walk 30-45 min + abs + squats +
-  push-ups (active recovery).
-- Upper abs → never weighted over ~5 kg; use a 2-5 kg medicine ball, keep the lower
-  back on the ground.
-Session structure / selection:
-- Abs go BETWEEN upper-body sets, not just at the end — keeps the core toned AND
-  gives the arms active rest so they don't burn out. Abs are "very important".
-- Pair chest with triceps; pair biceps + shoulder + back.
-- Warm up first (e.g. a few minutes easy cycling) before strength.
-- Endurance session = run + stretching + abs.
-- Long / mentally-tired day → simple, equipment-free: bodyweight functional, abs,
-  stretching, push-ups. Consistency over intensity.
-- Adverse weather (hot/cold/rain) → train indoors.
-Motivation / variety:
-- Bored after many solo days → suggest a sport or variety, but keep ~3 strength
-  days/week.
-- Honor their preferred activity (e.g. dance fitness) but keep the intensity so
-  the rest of the plan still works.
+# RULES ENGINE — YOUR DECISIONS COME FROM HERE, NOT YOUR OPINION
+Before any training guidance or proposing a workout, first GATHER how they feel
+(tired? pain? sore? mood?) + what they did yesterday, THEN call
+get_active_coaching_rules with that. It returns DETERMINISTIC vetoes ("MUST NOT")
+and forces ("DO") from the user's dad + sports-science rules — FOLLOW THEM EXACTLY;
+vetoes are absolute and override your own knowledge. The dad's-rules text below is
+your background understanding; the engine is the authority for the actual decision.
+Remember the driver is BOTH the wearable AND what they SAY — and what they say (a
+red flag, being under-fuelled, real pain) OVERRIDES the numbers.
 
-# SPORTS-SCIENCE METHOD (your measurement + delivery — fuses with dad's rules)
+# DAD'S RULES + SPORTS-SCIENCE DECISIONS LIVE IN THE RULES ENGINE (not here)
+The specific dad + sports-science decisions (sequencing/arc, load, injury
+guardrails, session structure, motivation) are DATA in the rules engine — you get
+them by calling get_active_coaching_rules and you MUST follow what it returns. Do
+not rely on remembered rules; ask how they feel + what they did, then consult the
+engine. The general SHAPE below is just so you know what to gather and how to
+deliver — the engine is the authority for the actual do/don't.
+
+# SPORTS-SCIENCE METHOD (how you READ + DELIVER — the DECISIONS come from the engine)
 - EFFORT = talk-test + heart rate. Full sentences = easy; clipped phrases with
   audible breathing = hard; gasping single words = maximal. Combine with HR. Always
   ground effort comments in what you observe ("168 and talking in short bursts —
@@ -960,6 +934,47 @@ class CoachAgent(Agent):
         self._tod = tod
         self._planstate = None   # set by entrypoint: {"suggested", "decided"}
         self._get_turns = None   # set by entrypoint: () -> list[str] (the discussion)
+        self._rules = RulesEngine()
+
+    @function_tool
+    async def get_active_coaching_rules(
+        self, context: RunContext,
+        physical_state: str = "", pain_location: str = "",
+        previous_day_activity: str = "", symptom: str = "",
+        psychological_state: str = "", current_day_focus: str = "",
+        fueling: str = "", sleep_quality: str = "", previous_rpe: str = "",
+        injury_scare: str = "", exercise_type: str = "", weather: str = "",
+        available_time_minutes: str = "",
+    ) -> str:
+        """AUTHORITATIVE. Before giving ANY training guidance or proposing a
+        workout, call this to get the DETERMINISTIC rules that apply right now, and
+        FOLLOW THEM EXACTLY (vetoes are absolute; they override your own knowledge).
+        Pass what you've LEARNED from the user (leave blank what you don't know):
+        - physical_state: 'very tired'|'spent'|'exhausted'|'good'|'breathless'|
+          'returning from layoff'
+        - pain_location: e.g. 'knee/upper hamstring'  · symptom: e.g. 'muscle soreness'
+        - previous_day_activity: 'strength'|'endurance'|'strides'  · current_day_focus:
+          'strength'|'endurance'|'upper_body'
+        - fueling: 'under-fuelled' if they skipped meals/crashed  · sleep_quality:
+          'poor'|'good'  · previous_rpe: 'high' if last session was an 8-10
+        - psychological_state: 'unmotivated'|'bored'  · injury_scare: 'recent'  ·
+          exercise_type: e.g. 'upper abs'  · weather: 'hot'/'cold'/'raining'
+        If you don't know the key ones (how they feel, fuel, yesterday), ASK first,
+        then call this. What they SAY (crash/pain/under-fuelled) overrides the numbers."""
+        ctx = {k: v for k, v in {
+            "physical_state": physical_state, "pain_location": pain_location,
+            "previous_day_activity": previous_day_activity, "symptom": symptom,
+            "psychological_state": psychological_state,
+            "current_day_focus": current_day_focus, "fueling": fueling,
+            "sleep_quality": sleep_quality, "previous_rpe": previous_rpe,
+            "injury_scare": injury_scare, "exercise_type": exercise_type,
+            "weather": weather, "available_time_minutes": available_time_minutes,
+        }.items() if v}
+        decision = await self._rules.resolve(ctx, domains=["coach", "sports_science"])
+        if decision.get("fired"):
+            logger.info("📏 rules fired: %s", [f["source"] for f in decision["fired"]])
+            await self._rules.log_firing(ctx, decision)
+        return RulesEngine.to_prompt(decision)
 
     @function_tool
     async def get_local_time(self, context: RunContext) -> str:
@@ -1338,6 +1353,10 @@ async def entrypoint(ctx: agents.JobContext):
 
     session = AgentSession(
         llm=openai.realtime.RealtimeModel(
+            # gpt-realtime-2.1 (Jul 2026): lower latency (~300ms) + far better
+            # turn-taking/interruptions than gpt-realtime. Confirmed available on
+            # the account. Fall back to "gpt-realtime" if it ever misbehaves.
+            model="gpt-realtime-2.1",
             voice="alloy",
             # OpenAI's built-in noise reduction, tuned for close mics (AirPods).
             input_audio_noise_reduction="near_field",

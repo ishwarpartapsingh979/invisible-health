@@ -21,7 +21,7 @@ RUN python -m livekit.agents download-files
 
 # Agent source. guidance.py is imported by voice_agent.py (the dad's-rules seam);
 # exercises.json is the bundled exercise library for the on-screen demo deck.
-COPY voice_agent.py guidance.py exercises.json ./
+COPY voice_agent.py guidance.py exercises.json rules_engine.py ./
 # Pre-rendered hype/motivation clips (Adam voice, ElevenLabs) + manifest, played
 # by the agent at workout start and effort moments. No runtime ElevenLabs key.
 COPY hype ./hype/
