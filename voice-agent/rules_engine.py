@@ -17,6 +17,7 @@ Reads Supabase via REST (SUPABASE_URL + SUPABASE_SERVICE_KEY). No-ops if absent.
 
 import logging
 import os
+import re
 
 logger = logging.getLogger("voice-agent")
 
@@ -68,8 +69,22 @@ class RulesEngine:
                 elif cv not in expected:
                     return False
             elif isinstance(expected, str):
-                if not cv:
+                if cv is None or cv == "":
                     return False
+                # Numeric comparison triggers (">=2", "<=5", ">10") vs a numeric
+                # context value.
+                cmp = re.match(r"^\s*(>=|<=|==|>|<)\s*(-?\d+(?:\.\d+)?)\s*$", expected)
+                if cmp:
+                    try:
+                        n = float(str(cv).strip())
+                    except (TypeError, ValueError):
+                        return False
+                    op, val = cmp.group(1), float(cmp.group(2))
+                    ok = {">=": n >= val, "<=": n <= val, "==": n == val,
+                          ">": n > val, "<": n < val}[op]
+                    if not ok:
+                        return False
+                    continue
                 cvl = str(cv).lower()
                 # "/" and "," in a trigger value mean OR (e.g. "knee/upper
                 # hamstring"). Match if ANY alternative is a substring of the

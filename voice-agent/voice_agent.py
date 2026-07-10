@@ -247,6 +247,42 @@ class SessionStore:
         except Exception as e:
             logger.warning("profile save error: %s", e)
 
+    async def log_meal(self, record: dict) -> None:
+        """Log a voice-reported meal (nutrition_log) for the weekly summary."""
+        if not self.enabled:
+            return
+        try:
+            import aiohttp
+            async with aiohttp.ClientSession() as s:
+                async with s.post(f"{self.url}/rest/v1/nutrition_log", json=record,
+                                  headers=self._headers({"Prefer": "return=minimal"}),
+                                  timeout=aiohttp.ClientTimeout(total=15)) as r:
+                    if r.status >= 300:
+                        logger.warning("meal log %s: %s", r.status, (await r.text())[:200])
+                    else:
+                        logger.info("🍽️  meal logged: %s", (record.get("description") or "")[:50])
+        except Exception as e:
+            logger.warning("meal log error: %s", e)
+
+    async def recent_meals(self, days: int = 7, user_id: str = "ishwar") -> list:
+        """Meals logged in the last `days` (for the weekly nutritionist summary)."""
+        if not self.enabled:
+            return []
+        try:
+            import aiohttp
+            since = _iso(time.time() - days * 86400)
+            params = {"user_id": f"eq.{user_id}", "logged_at": f"gte.{since}",
+                      "order": "logged_at.asc"}
+            async with aiohttp.ClientSession() as s:
+                async with s.get(f"{self.url}/rest/v1/nutrition_log", params=params,
+                                 headers=self._headers(),
+                                 timeout=aiohttp.ClientTimeout(total=15)) as r:
+                    if r.status < 300:
+                        return await r.json()
+        except Exception as e:
+            logger.warning("recent_meals error: %s", e)
+        return []
+
     async def save_planned(self, record: dict) -> None:
         """Save a PLANNED workout (Tier 3 redesign): what the coach suggested, the
         discussion, and what the user decided — before they actually do it."""
@@ -477,6 +513,15 @@ before finishing, ask ONE more thing YOU think matters that they haven't told yo
 what motivates them) — your judgement. When you have it all, call save_profile
 with the fields, then confirm warmly in one sentence. Keep it conversational, not
 a rigid form.
+
+# NUTRITION (only when the user brings up food — they log by voice, as they choose)
+The user occasionally tells you what they ate or are about to eat/order — NOT every
+meal, just when they want. When they do, ASSESS + LOG it: judge the food's flags
+(refined base? fried? sugar incl. jaggery/honey/juice? protein?) and call check_meal
+with them. Give a SHORT keep / limit / avoid + ONE better swap — no lecture. Their
+goal is body recomposition (fat loss + build muscle): protein every meal is the top
+lever; "no added sugar" only counts if the item is NOT a refined base and NOT fried.
+Do not nag about food they didn't ask about.
 
 # STYLE
 - Speak in English (US), even amid other languages or gym noise, unless clearly
@@ -961,7 +1006,11 @@ class CoachAgent(Agent):
           exercise_type: e.g. 'upper abs'  · weather: 'hot'/'cold'/'raining'
         If you don't know the key ones (how they feel, fuel, yesterday), ASK first,
         then call this. What they SAY (crash/pain/under-fuelled) overrides the numbers."""
-        ctx = {k: v for k, v in {
+        # Phase 3 (fusion): auto-derive the training ARC from saved history so the
+        # coach doesn't have to ask — the alternate/load rules fire from memory.
+        # What the coach GATHERED (subjective) OVERRIDES these derived facts.
+        derived = await self._history_facts()
+        ctx = {**derived, **{k: v for k, v in {
             "physical_state": physical_state, "pain_location": pain_location,
             "previous_day_activity": previous_day_activity, "symptom": symptom,
             "psychological_state": psychological_state,
@@ -969,12 +1018,121 @@ class CoachAgent(Agent):
             "sleep_quality": sleep_quality, "previous_rpe": previous_rpe,
             "injury_scare": injury_scare, "exercise_type": exercise_type,
             "weather": weather, "available_time_minutes": available_time_minutes,
-        }.items() if v}
+        }.items() if v}}
         decision = await self._rules.resolve(ctx, domains=["coach", "sports_science"])
         if decision.get("fired"):
-            logger.info("📏 rules fired: %s", [f["source"] for f in decision["fired"]])
+            logger.info("📏 rules fired: %s (ctx=%s)",
+                        [f["source"] for f in decision["fired"]], ctx)
             await self._rules.log_firing(ctx, decision)
         return RulesEngine.to_prompt(decision)
+
+    @function_tool
+    async def check_meal(
+        self, context: RunContext, description: str,
+        meal: str = "", is_refined: str = "", is_fried: str = "",
+        contains_sugar: str = "", has_protein: str = "", craving: str = "",
+        need: str = "", product: str = "", training_day: str = "", verdict: str = "",
+    ) -> str:
+        """When the user tells you BY VOICE (as they choose — NOT every meal) what
+        they just ate, or something they're about to eat/order, ASSESS it against
+        their nutrition rules and LOG it. Fill the flags from the food (leave blank
+        if not applicable): is_refined='yes' if the base is maida/white bread/white
+        rice/cornflour; is_fried='yes'; contains_sugar='yes' incl. jaggery/honey/
+        juice; has_protein='yes'/'no'; meal; and craving/need/product/training_day
+        if relevant. Set verdict to your one-word call: 'keep'/'limit'/'avoid'.
+        Returns the nutrition rules — give a SHORT keep/limit/avoid + ONE better
+        swap, no lecture. This gets saved for the weekly nutritionist summary."""
+        flags = {k: v for k, v in {
+            "is_refined": is_refined, "is_fried": is_fried,
+            "contains_sugar": contains_sugar, "has_protein": has_protein,
+            "meal": meal, "craving": craving, "need": need, "product": product,
+            "training_day": training_day, "goal": "recomp",
+        }.items() if v}
+        decision = await self._rules.resolve(flags, domains=["nutrition"])
+        await self._store.log_meal({
+            "user_id": "ishwar", "description": description, "meal": meal or None,
+            "flags": flags, "verdict": verdict or None,
+            "advice": RulesEngine.to_prompt(decision)[:400],
+        })
+        if decision.get("fired"):
+            logger.info("🥗 nutrition rules: %s", [f["source"] for f in decision["fired"]])
+        return RulesEngine.to_prompt(decision)
+
+    @function_tool
+    async def weekly_nutrition_summary(self, context: RunContext) -> str:
+        """Compile the user's last 7 days of voice-logged meals into a summary to
+        show their NUTRITIONIST. Call this when they ask for their weekly food
+        summary / 'what should I tell my nutritionist' / a nutrition recap. Read
+        them the highlights out loud (protein consistency + anything flagged), then
+        tell them the full summary + open questions are ready. Don't invent meals —
+        only use what was logged."""
+        meals = await self._store.recent_meals(days=7)
+        if not meals:
+            return ("No meals were logged by voice this week, so there's nothing to "
+                    "summarise yet. Tell them to just mention food as they go — "
+                    "'had eggs and toast', 'about to order a pizza' — and it builds "
+                    "up here for the nutritionist.")
+        by_day = {}
+        protein_hits = flagged = 0
+        flag_lines = []
+        for m in meals:
+            try:
+                d = datetime.fromisoformat(m["logged_at"].replace("Z", "+00:00"))
+                day = d.strftime("%a %d %b")
+            except Exception:
+                day = "recent"
+            fl = m.get("flags") or {}
+            desc = m.get("description") or "(meal)"
+            by_day.setdefault(day, []).append(desc)
+            if str(fl.get("has_protein", "")).lower() == "yes":
+                protein_hits += 1
+            bad = [t for t, k in (("refined", "is_refined"), ("fried", "is_fried"),
+                                  ("sugar", "contains_sugar")) if str(fl.get(k, "")).lower() == "yes"]
+            if str(fl.get("has_protein", "")).lower() == "no":
+                bad.append("no protein")
+            if bad:
+                flagged += 1
+                flag_lines.append(f"  - {desc}: {', '.join(bad)}")
+        total = len(meals)
+        lines = [f"WEEKLY NUTRITION SUMMARY — {total} meals logged over 7 days",
+                 f"Protein in meal: {protein_hits}/{total}   |   Flagged (refined/fried/sugar/low-protein): {flagged}/{total}",
+                 ""]
+        for day, items in by_day.items():
+            lines.append(f"{day}: " + "; ".join(items))
+        if flag_lines:
+            lines += ["", "To watch:"] + flag_lines
+        lines += ["", "OPEN QUESTIONS FOR THE NUTRITIONIST:",
+                  "  1. Am I eating enough protein + total food to build lean mass while training? (lean mass is my biggest WHOOP-age driver; the plan reads light.)",
+                  "  2. Short sleep (~5:41) — should meal timing (late dinners, caffeine, before-bed) change to help it?",
+                  "  3. Avoid-list alternates: is all no-added-sugar fine? Are no-added-sugar millet pancakes OK vs maida? (swap refined→millet, sugar→no-added-sugar, fried→air-fried.)"]
+        return "\n".join(lines)
+
+    async def _history_facts(self) -> dict:
+        """Derive the training ARC from saved sessions (Phase 3 fusion): what they
+        did last, whether the last RPE was high, and how long since strength."""
+        facts = {}
+        try:
+            sessions = await self._store.recent(limit=7)
+        except Exception:
+            return facts
+        if not sessions:
+            return facts
+        last = sessions[0]
+        if last.get("activity_type"):
+            facts["previous_day_activity"] = last["activity_type"]
+        if isinstance(last.get("rpe"), int) and last["rpe"] >= 8:
+            facts["previous_rpe"] = "high"
+        # Days since the most recent strength session.
+        for s in sessions:
+            at = (s.get("activity_type") or "").lower()
+            if "strength" in at or "upper" in at or "lower" in at or "legs" in at:
+                try:
+                    d = datetime.fromisoformat(s["started_at"].replace("Z", "+00:00"))
+                    facts["days_since_strength"] = (datetime.now(timezone.utc) - d).days
+                except Exception:
+                    pass
+                break
+        return facts
 
     @function_tool
     async def get_local_time(self, context: RunContext) -> str:
