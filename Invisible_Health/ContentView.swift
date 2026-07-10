@@ -97,6 +97,9 @@ struct ContentView: View {
                 case 19:
                     PlanTabView(workout: workoutSession, selectedTab: $selectedTab,
                                 pendingVoiceAction: $pendingVoiceAction) // Tab 19 — Today's plan
+                case 20:
+                    NutritionTabView(call: voiceCall, selectedTab: $selectedTab,
+                                     pendingVoiceAction: $pendingVoiceAction) // Tab 20 — Nutrition
                 default:
                     // Tab 0: Home / Mic Screen
                     micView
@@ -125,6 +128,7 @@ struct ContentView: View {
                         // Dogfood v2 tab bar: VOICE (home), PLAN, PROFILE, WHOOP, DEVICES.
                         TabButton(icon: "waveform", text: "VOICE", isSelected: selectedTab == 17) { selectedTab = 17 }
                         TabButton(icon: "figure.run", text: "PLAN", isSelected: selectedTab == 19) { selectedTab = 19 }
+                        TabButton(icon: "fork.knife", text: "NUTRITION", isSelected: selectedTab == 20) { selectedTab = 20 }
                         TabButton(icon: "person.fill", text: "PROFILE", isSelected: selectedTab == 18) { selectedTab = 18 }
 
                         TabButton(icon: "waveform.path.ecg", text: "WHOOP", isSelected: selectedTab == 15) { selectedTab = 15 }

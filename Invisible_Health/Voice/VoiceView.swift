@@ -254,6 +254,7 @@ struct VoiceView: View {
             case "discuss": await call.sendDiscussWorkout()
             case "start":   if !workout.isActive { await beginWorkout() }
             case "onboard": await call.sendStartOnboarding()
+            case "nutrition_refresh": await call.sendGetNutritionSummary()
             default: break
             }
         }

@@ -54,6 +54,8 @@ final class VoiceCallManager: ObservableObject, RoomDelegate {
     var onProfileSaved: ((_ profile: [String: Any]) -> Void)?
     /// Coach set the chosen-workout label → show it on the workout screen.
     var onWorkoutLabel: ((_ label: String) -> Void)?
+    /// Coach pushed the weekly nutrition summary (topic "nutrition_summary").
+    var onNutritionSummary: ((_ summary: NutritionSummary) -> Void)?
 
     /// The underlying LiveKit room. Exposed so SwiftUI can observe participant
     /// audio activity (it conforms to ObservableObject in the SDK).
@@ -231,6 +233,11 @@ final class VoiceCallManager: ObservableObject, RoomDelegate {
         await sendControl(["type": "start_onboarding"], topic: "start_onboarding")
     }
 
+    /// Ask the coach to compile + push this week's nutrition summary to the tab.
+    func sendGetNutritionSummary() async {
+        await sendControl(["type": "get_nutrition_summary"], topic: "get_nutrition_summary")
+    }
+
     /// Tell the coach the user's LOCAL time of day (it runs in cloud UTC).
     func sendLocalTime() async {
         let now = Date()
@@ -287,6 +294,9 @@ final class VoiceCallManager: ObservableObject, RoomDelegate {
             guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let label = obj["label"] as? String else { return }
             Task { @MainActor in self.onWorkoutLabel?(label) }
+        case "nutrition_summary":
+            guard let s = try? JSONDecoder().decode(NutritionSummary.self, from: data) else { return }
+            Task { @MainActor in self.onNutritionSummary?(s) }
         case "coach_state":
             guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let state = obj["state"] as? String else { return }
@@ -320,12 +330,14 @@ final class VoiceCallManager: ObservableObject {
     var onHandsfree: (() -> Void)?
     var onProfileSaved: ((_ profile: [String: Any]) -> Void)?
     var onWorkoutLabel: ((_ label: String) -> Void)?
+    var onNutritionSummary: ((_ summary: NutritionSummary) -> Void)?
     func sendKeepAlive() async {}
     func sendGeo(distanceMeters: Double, pace: String?) async {}
     func sendProfile(_ profile: [String: Any]) async {}
     func sendWorkoutStarted(plan: String? = nil) async {}
     func sendDiscussWorkout() async {}
     func sendStartOnboarding() async {}
+    func sendGetNutritionSummary() async {}
     func sendLocalTime() async {}
 
     func start() async {
