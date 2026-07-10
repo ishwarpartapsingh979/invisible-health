@@ -111,6 +111,30 @@ def nutrition(user_id: str = "ishwar"):
     }
 
 
+@app.get("/workout")
+def workout(user_id: str = "ishwar"):
+    """What the Workout Plan tab shows — the most recent DECIDED workout + the
+    planning discussion, read straight from planned_workouts (no voice needed)."""
+    if not (SUPABASE_URL and SUPABASE_KEY):
+        return {"decided": None, "discussion": None, "suggested": None}
+    qs = urllib.parse.urlencode({
+        "user_id": f"eq.{user_id}", "order": "created_at.desc", "limit": "1"})
+    try:
+        req = urllib.request.Request(
+            f"{SUPABASE_URL}/rest/v1/planned_workouts?{qs}",
+            headers={"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            rows = json.loads(r.read().decode())
+    except Exception:
+        rows = []
+    if not rows:
+        return {"decided": None, "discussion": None, "suggested": None}
+    row = rows[0]
+    return {"decided": row.get("decided"), "discussion": row.get("discussion"),
+            "suggested": row.get("suggested"), "created_at": row.get("created_at"),
+            "status": row.get("status")}
+
+
 @app.get("/token")
 def token(room: str = "invisible-voice", identity: str = "ios-user"):
     grant = api.VideoGrants(room_join=True, room=room, can_publish=True, can_subscribe=True)

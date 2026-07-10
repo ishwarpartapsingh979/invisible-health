@@ -127,7 +127,7 @@ struct ContentView: View {
                         
                         // Dogfood v2 tab bar: VOICE (home), PLAN, PROFILE, WHOOP, DEVICES.
                         TabButton(icon: "waveform", text: "VOICE", isSelected: selectedTab == 17) { selectedTab = 17 }
-                        TabButton(icon: "figure.run", text: "PLAN", isSelected: selectedTab == 19) { selectedTab = 19 }
+                        TabButton(icon: "figure.run", text: "WORKOUT", isSelected: selectedTab == 19) { selectedTab = 19 }
                         TabButton(icon: "fork.knife", text: "NUTRITION", isSelected: selectedTab == 20) { selectedTab = 20 }
                         TabButton(icon: "person.fill", text: "PROFILE", isSelected: selectedTab == 18) { selectedTab = 18 }
 

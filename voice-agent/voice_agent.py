@@ -304,6 +304,41 @@ class SessionStore:
         except Exception as e:
             logger.warning("save_fact failed: %s", e)
 
+    async def save_conversation(self, record: dict) -> None:
+        """Persist a full conversation transcript (all-day chats, not just workouts)
+        so nothing is lost and the coach can recall it later."""
+        if not self.enabled:
+            return
+        try:
+            import aiohttp
+            headers = {**self._headers(), "Content-Type": "application/json",
+                       "Prefer": "return=minimal"}
+            async with aiohttp.ClientSession() as s:
+                await s.post(f"{self.url}/rest/v1/conversations", json=[record],
+                             headers=headers, timeout=aiohttp.ClientTimeout(total=10))
+            logger.info("💬 conversation saved (%d turns)",
+                        (record.get("turns") or "").count("\n") + 1)
+        except Exception as e:
+            logger.warning("save_conversation failed: %s", e)
+
+    async def recent_conversations(self, limit: int = 5, user_id: str = "ishwar") -> list:
+        """The most recent past conversations (for the coach to recall)."""
+        if not self.enabled:
+            return []
+        try:
+            import aiohttp
+            params = {"user_id": f"eq.{user_id}", "order": "started_at.desc",
+                      "limit": str(limit)}
+            async with aiohttp.ClientSession() as s:
+                async with s.get(f"{self.url}/rest/v1/conversations", params=params,
+                                 headers=self._headers(),
+                                 timeout=aiohttp.ClientTimeout(total=15)) as r:
+                    if r.status < 300:
+                        return await r.json()
+        except Exception as e:
+            logger.warning("recent_conversations error: %s", e)
+        return []
+
     async def recent_facts(self, limit: int = 60, user_id: str = "ishwar") -> list:
         """Everything the coach has learned about the user (active facts), newest
         first — loaded into the coach's context at the start of each session."""
@@ -1209,6 +1244,22 @@ class CoachAgent(Agent):
                                      "confidence": confidence})
         return "noted"
 
+    @function_tool
+    async def recall_past_conversations(self, context: RunContext) -> str:
+        """Recall your recent PAST conversations with the user (beyond workouts) —
+        call this when they refer back to something you discussed before, or you want
+        continuity ('last time we talked about...'). Returns short transcripts of the
+        last few chats. Use naturally; don't read them out verbatim."""
+        convos = await self._store.recent_conversations(limit=4)
+        if not convos:
+            return "No past conversations on record yet."
+        out = []
+        for c in convos:
+            when = (c.get("started_at") or "")[:10]
+            turns = (c.get("turns") or "")[-600:]
+            out.append(f"[{when}]\n{turns}")
+        return "\n\n".join(out)
+
     OPEN_QUESTIONS = [
         "Am I eating enough protein + total food to build lean mass while training? (lean mass is my biggest WHOOP-age driver; the plan reads light.)",
         "Short sleep (~5:41) — should meal timing (late dinners, caffeine, before-bed) change to help it?",
@@ -1631,6 +1682,10 @@ async def entrypoint(ctx: agents.JobContext):
 
     # Accumulates the CURRENT workout for the end-of-workout summary + save.
     wlog = {"turns": [], "hr": []}
+    # A home-screen quick-action ("ask") can arrive before the agent's session is
+    # ready (fresh connect) — buffer it and flush once we've started, else it's
+    # silently dropped (the "recap opens but never recaps" bug).
+    pending = {"ask": None, "greeted": False}
     # The plan lifecycle: what the coach suggested + what the user decided.
     planstate = {"suggested": None, "decided": None}
 
@@ -1740,17 +1795,16 @@ async def entrypoint(ctx: agents.JobContext):
             asyncio.create_task(_push_nutrition())
         elif kind == "ask":
             # A home-screen quick-action chip: the user tapped a shortcut meaning
-            # they're asking this. Answer it by voice as the all-day guide.
+            # they're asking this. Deliver it if the session is ready + greeted;
+            # otherwise BUFFER it so a fresh-connect ask (e.g. "Recap my day") isn't
+            # dropped before the agent has started.
             text = (msg.get("text") or "").strip()
-            if text and wake.session is not None:
-                tnow = tod.describe()
-                asyncio.create_task(wake.session.generate_reply(instructions=(
-                    f"The user just tapped a shortcut meaning they're asking: \"{text}\"."
-                    + (f" It's {tnow}." if tnow else "") +
-                    " Answer directly as their all-day guide — use your tools "
-                    "(get_active_coaching_rules, get_local_time, day_recap, "
-                    "show_exercises, check_meal, get_whoop_status) as needed. Keep it "
-                    "short and specific; don't assume anything they didn't say.")))
+            if not text:
+                pass
+            elif wake.session is not None and pending["greeted"]:
+                asyncio.create_task(_deliver_ask(text))
+            else:
+                pending["ask"] = text
         elif kind == "start_onboarding":
             # Voice-first onboarding: the coach interviews them.
             if wake.session is not None:
@@ -1881,6 +1935,16 @@ async def entrypoint(ctx: agents.JobContext):
     # Wire up "Hey Coach" gating. Keep the inactivity window fresh whenever a
     # turn is in progress so the watchdog only sleeps after real silence.
     wake.session = session
+
+    async def _deliver_ask(text: str) -> None:
+        """Answer a home-screen quick-action ('ask') as the all-day guide."""
+        tnow = tod.describe()
+        await session.generate_reply(instructions=(
+            f"The user just tapped a shortcut meaning they're asking: \"{text}\"."
+            + (f" It's {tnow}." if tnow else "") +
+            " Answer directly as their all-day guide — use your tools (day_recap for "
+            "a recap, get_active_coaching_rules, get_local_time, show_exercises, "
+            "check_meal, get_whoop_status) as needed. Keep it short and specific."))
     oai = AsyncOpenAI()  # for the speaking/breathing analysis (reads OPENAI_API_KEY)
 
     # Background audio player for the Adam hype clips (plays MP3s into the room on
@@ -2059,6 +2123,18 @@ async def entrypoint(ctx: agents.JobContext):
         watchdog_task.cancel()
         proactive_task.cancel()
         tracer.flush()
+        # Persist the full conversation so nothing is lost (all-day chats, not just
+        # workouts — those also get a structured coaching_sessions row). Fire-and-
+        # forget with a short timeout so shutdown isn't blocked.
+        turns = wlog.get("turns") or []
+        if turns:
+            try:
+                await asyncio.wait_for(store.save_conversation({
+                    "user_id": "ishwar",
+                    "turns": "\n".join(turns[-120:]),
+                }), timeout=8)
+            except Exception as e:
+                logger.warning("conversation save on shutdown failed: %s", e)
 
     ctx.add_shutdown_callback(_cancel_watchdog)
 
@@ -2067,12 +2143,20 @@ async def entrypoint(ctx: agents.JobContext):
     # which interrupts the greeting and drops the agent to sleep until "Hey
     # Coach". In the normal Voice tab no wake_mode arrives and behavior is
     # unchanged (always listening).
-    await session.generate_reply(
-        instructions="In English, greet the user warmly in ONE short sentence and "
-        "ask what they need right now — a workout, food advice, or just a check-in. "
-        "Keep it open; do NOT assume they're about to train. If you know the time of "
-        "day, greet to it (e.g. 'evening')."
-    )
+    # Give a chip-triggered "ask" (sent right after connect) a moment to arrive, so
+    # we can answer THAT instead of a generic greeting.
+    await asyncio.sleep(0.4)
+    pending["greeted"] = True
+    if pending["ask"]:
+        ask, pending["ask"] = pending["ask"], None
+        await _deliver_ask(ask)
+    else:
+        await session.generate_reply(
+            instructions="In English, greet the user warmly in ONE short sentence and "
+            "ask what they need right now — a workout, food advice, or just a check-in. "
+            "Keep it open; do NOT assume they're about to train. If you know the time of "
+            "day, greet to it (e.g. 'evening')."
+        )
 
 
 if __name__ == "__main__":
