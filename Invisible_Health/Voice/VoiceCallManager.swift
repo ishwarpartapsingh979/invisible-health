@@ -238,6 +238,12 @@ final class VoiceCallManager: ObservableObject, RoomDelegate {
         await sendControl(["type": "get_nutrition_summary"], topic: "get_nutrition_summary")
     }
 
+    /// A home-screen quick-action chip — kick off the conversation as if the user
+    /// asked this out loud (the coach answers by voice).
+    func sendAsk(_ text: String) async {
+        await sendControl(["type": "ask", "text": text], topic: "ask")
+    }
+
     /// Tell the coach the user's LOCAL time of day (it runs in cloud UTC).
     func sendLocalTime() async {
         let now = Date()
@@ -338,6 +344,7 @@ final class VoiceCallManager: ObservableObject {
     func sendDiscussWorkout() async {}
     func sendStartOnboarding() async {}
     func sendGetNutritionSummary() async {}
+    func sendAsk(_ text: String) async {}
     func sendLocalTime() async {}
 
     func start() async {

@@ -47,11 +47,15 @@ struct VoiceView: View {
 
     var body: some View {
         VStack(spacing: 28) {
-            Text("VOICE")
-                .font(.caption)
-                .fontWeight(.semibold)
-                .tracking(3)
-                .foregroundColor(.gray)
+            VStack(spacing: 3) {
+                Text(greeting)
+                    .font(.title2.weight(.bold))
+                    .foregroundColor(.white)
+                Text("Your all-day coach — food, training, or how you feel")
+                    .font(.caption)
+                    .foregroundColor(.gray)
+                    .multilineTextAlignment(.center)
+            }
 
             Spacer()
 
@@ -104,6 +108,10 @@ struct VoiceView: View {
                     .foregroundColor(.orange)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)
+            }
+
+            if !workout.isActive {
+                quickActionsView
             }
 
             workoutPanel
@@ -342,10 +350,14 @@ struct VoiceView: View {
                 .animation(.easeInOut, value: coachAwake)
             }
 
-            Button {
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                Task {
-                    if workout.isActive {
+            // During a workout, Stop is the single control. Starting a workout now
+            // lives in the home quick-actions (this is an all-day guide, not a
+            // gym-only tool), so the big green button no longer dominates the idle
+            // home.
+            if workout.isActive {
+                Button {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    Task {
                         workout.wakeModeSink = nil
                         workout.stopWorkout()
                         call.disableWakeWord()
@@ -359,22 +371,18 @@ struct VoiceView: View {
                             WorkoutStore.shared.save(log)
                             reviewLog = log
                         }
-                    } else {
-                        await beginWorkout()
                     }
+                } label: {
+                    Text("Stop Workout")
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 12)
+                        .background(Color.red.opacity(0.18))
+                        .foregroundColor(.red)
+                        .cornerRadius(14)
                 }
-            } label: {
-                Text(workout.isActive ? "Stop Workout" : "Start Workout")
-                    .font(.subheadline.weight(.semibold))
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 12)
-                    .background(workout.isActive ? Color.red.opacity(0.18) : Color.green.opacity(0.18))
-                    .foregroundColor(workout.isActive ? .red : .green)
-                    .cornerRadius(14)
-            }
-            .disabled(!VoiceCallManager.isAvailable)
-
-            if !workout.isActive {
+                .disabled(!VoiceCallManager.isAvailable)
+            } else {
                 HStack(spacing: 20) {
                     Button("Past workouts") { showHistory = true }
                     Button("Edit profile") { showOnboarding = true }
@@ -382,6 +390,99 @@ struct VoiceView: View {
                 .font(.footnote)
                 .foregroundColor(.gray)
             }
+        }
+    }
+
+    // MARK: - Home quick actions (all-day)
+
+    /// Time-of-day greeting for the home header.
+    private var greeting: String {
+        switch Calendar.current.component(.hour, from: Date()) {
+        case 5..<12:  return "Good morning"
+        case 12..<17: return "Good afternoon"
+        case 17..<22: return "Good evening"
+        default:      return "Hey"
+        }
+    }
+
+    /// One quick action: a label, an SF Symbol, and the spoken prompt it kicks off
+    /// (nil prompt = the special "start a workout" action).
+    private struct QuickAction: Identifiable {
+        let id = UUID(); let label: String; let icon: String; let prompt: String?
+    }
+
+    /// Home shortcuts, adapted to the time of day. Each one connects (if needed) and
+    /// asks the coach out loud — this is still voice-first; the chips just teach the
+    /// breadth (food / readiness / movement / recap) and start the conversation.
+    private var quickActions: [QuickAction] {
+        let h = Calendar.current.component(.hour, from: Date())
+        var items: [QuickAction]
+        switch h {
+        case 5..<11:
+            items = [
+                .init(label: "Plan my day", icon: "sun.max", prompt: "Plan my day."),
+                .init(label: "Breakfast idea", icon: "fork.knife", prompt: "What should I have for breakfast?"),
+                .init(label: "Should I train?", icon: "figure.run", prompt: "Should I train today?"),
+            ]
+        case 11..<17:
+            items = [
+                .init(label: "What should I eat?", icon: "fork.knife", prompt: "What should I eat right now?"),
+                .init(label: "Should I train?", icon: "figure.run", prompt: "Should I train today?"),
+                .init(label: "Quick stretch", icon: "figure.cooldown", prompt: "I've been sitting a while — give me a quick stretch."),
+            ]
+        case 17..<22:
+            items = [
+                .init(label: "How did my day go?", icon: "moon.stars", prompt: "How did my day go?"),
+                .init(label: "Dinner idea", icon: "fork.knife", prompt: "What's a good dinner tonight?"),
+                .init(label: "Quick stretch", icon: "figure.cooldown", prompt: "Give me a quick stretch."),
+            ]
+        default:
+            items = [
+                .init(label: "Recap my day", icon: "moon.stars", prompt: "How did my day go?"),
+                .init(label: "Wind-down stretch", icon: "figure.cooldown", prompt: "A short wind-down stretch before bed."),
+            ]
+        }
+        items.append(.init(label: "Start workout", icon: "play.circle", prompt: nil))
+        return items
+    }
+
+    private var quickActionsView: some View {
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 10),
+                            GridItem(.flexible(), spacing: 10)], spacing: 10) {
+            ForEach(quickActions) { action in
+                Button { tapQuickAction(action) } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: action.icon)
+                            .foregroundColor(action.prompt == nil ? .green : .blue)
+                        Text(action.label)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundColor(.white)
+                            .lineLimit(1).minimumScaleFactor(0.8)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 14).padding(.vertical, 12)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.white.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                }
+                .buttonStyle(.plain)
+                .disabled(!VoiceCallManager.isAvailable)
+            }
+        }
+        .padding(.horizontal, 24)
+    }
+
+    /// Tap a home shortcut: connect + kick off that ask by voice (or start a workout).
+    private func tapQuickAction(_ action: QuickAction) {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        Task {
+            guard let prompt = action.prompt else {
+                if !workout.isActive { await beginWorkout() }
+                return
+            }
+            if call.state != .connected { await call.start() }
+            await call.sendLocalTime()
+            await call.sendAsk(prompt)
         }
     }
 
@@ -560,7 +661,7 @@ struct VoiceView: View {
 
     private var statusText: String {
         switch call.state {
-        case .idle:        return "Tap to talk"
+        case .idle:        return "Tap to talk — or pick a shortcut"
         case .connecting:  return "Connecting…"
         case .connected:   return "Listening — just speak"
         case .failed:      return "Tap to try again"

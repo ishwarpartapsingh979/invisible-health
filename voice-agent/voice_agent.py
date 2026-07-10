@@ -283,6 +283,46 @@ class SessionStore:
             logger.warning("recent_meals error: %s", e)
         return []
 
+    async def save_fact(self, record: dict) -> None:
+        """Persist a durable fact the coach learned about the user — the
+        personalization flywheel. Loaded back into the coach's context next session."""
+        if not self.enabled:
+            return
+        try:
+            import aiohttp
+            headers = {**self._headers(), "Content-Type": "application/json",
+                       "Prefer": "return=minimal"}
+            row = {"user_id": record.get("user_id", "ishwar"),
+                   "category": record.get("category"),
+                   "fact": record.get("fact"),
+                   "confidence": record.get("confidence", "medium"),
+                   "source": record.get("source", "conversation")}
+            async with aiohttp.ClientSession() as s:
+                await s.post(f"{self.url}/rest/v1/user_facts", json=[row],
+                             headers=headers, timeout=aiohttp.ClientTimeout(total=10))
+            logger.info("🧠 learned (%s): %s", row["category"], row["fact"])
+        except Exception as e:
+            logger.warning("save_fact failed: %s", e)
+
+    async def recent_facts(self, limit: int = 60, user_id: str = "ishwar") -> list:
+        """Everything the coach has learned about the user (active facts), newest
+        first — loaded into the coach's context at the start of each session."""
+        if not self.enabled:
+            return []
+        try:
+            import aiohttp
+            params = {"user_id": f"eq.{user_id}", "status": "eq.active",
+                      "order": "updated_at.desc", "limit": str(limit)}
+            async with aiohttp.ClientSession() as s:
+                async with s.get(f"{self.url}/rest/v1/user_facts", params=params,
+                                 headers=self._headers(),
+                                 timeout=aiohttp.ClientTimeout(total=15)) as r:
+                    if r.status < 300:
+                        return await r.json()
+        except Exception as e:
+            logger.warning("recent_facts error: %s", e)
+        return []
+
     async def save_planned(self, record: dict) -> None:
         """Save a PLANNED workout (Tier 3 redesign): what the coach suggested, the
         discussion, and what the user decided — before they actually do it."""
@@ -349,6 +389,41 @@ def exercises_for_muscle(term: str, limit: int = 12):
     if target is None:
         target = t
     return [e for e in EXERCISES if target in e.get("muscles", [])][:limit]
+
+DURABLE_FACT_CATS = {"preference", "constraint", "motivation", "body_response",
+                     "context", "food"}
+
+
+def format_learned(facts: list) -> str:
+    """Render the facts the coach has learned into a context block appended to the
+    instructions at session start — so the coach knows the user from the first word.
+    Durable traits are loaded as standing knowledge; adherence/mood as recent,
+    confirm-before-relying signals."""
+    if not facts:
+        return ""
+    seen, durable, recent = set(), [], []
+    for f in facts:
+        txt = (f.get("fact") or "").strip()
+        if not txt:
+            continue
+        key = txt.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        cat = f.get("category") or "note"
+        line = f"- [{cat}] {txt}"
+        (durable if cat in DURABLE_FACT_CATS else recent).append(line)
+    if not (durable or recent):
+        return ""
+    parts = ["\n\n# WHAT YOU KNOW ABOUT THIS PERSON (learned from past conversations "
+             "— weave it in naturally to personalise; NEVER recite this list back, "
+             "and it's private like everything else)"]
+    parts += durable[:22]
+    if recent:
+        parts.append("Recent signals (may be transient — confirm before relying on them):")
+        parts += recent[:4]
+    return "\n".join(parts)
+
 
 INSTRUCTIONS = """
 You are the user's personal health guide — their nutrition, training and recovery
@@ -545,6 +620,26 @@ muscle): protein every meal is the top lever; "no added sugar" only counts if th
 item is NOT a refined base and NOT fried; rotate proteins and greens. check_meal
 returns the exact nutrition rules — follow them. Don't nag about food they didn't
 bring up. For a weekly picture to show their nutritionist, weekly_nutrition_summary.
+
+# GETTING TO KNOW THEM (you improve the more they talk — do this REACTIVELY)
+You get more useful every conversation by LEARNING this person. Two habits:
+1. CAPTURE: whenever they reveal something DURABLE — a preference ("hate burpees"),
+   a constraint or injury ("left knee flares on deep squats"), what motivates them
+   ("push me, don't coddle"), how their body responds ("wired if I have coffee
+   late"), life context ("I travel most weeks"), a standing food fact ("veg on
+   weekdays") — call remember_about_user right then, woven into your reply. Do NOT
+   announce that you're saving it, and don't save small talk or one-off states.
+2. ASK — but only REACTIVELY, never as a standalone check-in. While you're already
+   answering something, you may fold in ONE short, natural question to understand
+   them better: how they're feeling right now, or whether they followed the plan /
+   advice from last time (you can see it via get_training_history / the plan). At
+   MOST one such question per reply, only when it fits the flow, and skip it
+   entirely if they're mid-set, rushing, or clearly just want the answer. Never
+   interrogate, never "just checking in". When they answer, remember it
+   (remember_about_user with category adherence or mood).
+USE what you already know: the "WHAT YOU KNOW ABOUT THIS PERSON" block (if present
+below) is your memory of them — lean on it to personalise ("last time squats bugged
+your knee — want the box-squat swap?"), but never read the list out.
 
 # STYLE
 - Speak in English (US), even amid other languages or gym noise, unless clearly
@@ -988,8 +1083,9 @@ class ProactiveCoach:
 class CoachAgent(Agent):
     def __init__(self, hr: HRContext, whoop: WhoopContext, publish_exercises, wake,
                  store: "SessionStore", geo: "GeoContext", profile: "ProfileContext",
-                 publish_plans, publish_signal, tod: "TimeContext") -> None:
-        super().__init__(instructions=INSTRUCTIONS)
+                 publish_plans, publish_signal, tod: "TimeContext",
+                 learned: str = "") -> None:
+        super().__init__(instructions=INSTRUCTIONS + (learned or ""))
         self._hr = hr
         self._whoop = whoop
         self._publish_exercises = publish_exercises
@@ -1087,6 +1183,26 @@ class CoachAgent(Agent):
         if decision.get("fired"):
             logger.info("🥗 nutrition rules: %s", [f["source"] for f in decision["fired"]])
         return RulesEngine.to_prompt(decision)
+
+    @function_tool
+    async def remember_about_user(self, context: RunContext, category: str,
+                                  fact: str, confidence: str = "medium") -> str:
+        """Save something DURABLE you just learned about the user so future
+        conversations feel more personalised. Call it the MOMENT they reveal it,
+        woven into your normal reply — don't announce you're saving it. Use for
+        things worth knowing next time, NOT small talk. Category is one of:
+        - preference: likes/dislikes — 'hates burpees', 'loves outdoor running'
+        - constraint: injury / dietary / schedule — 'left knee flares on deep squats'
+        - motivation: what drives them — 'responds to tough love, not cheerleading'
+        - body_response: how their body reacts — 'sleeps badly after evening coffee'
+        - context: life context — 'travels most weeks for work'
+        - food: standing food fact — 'vegetarian on weekdays'
+        - adherence: did they follow a plan/advice — 'skipped the easy run I suggested'
+        - mood: how they felt this time — 'felt wiped and unmotivated today'
+        Keep `fact` SHORT, specific, third-person. confidence: low | medium | high."""
+        await self._store.save_fact({"category": category, "fact": fact,
+                                     "confidence": confidence})
+        return "noted"
 
     OPEN_QUESTIONS = [
         "Am I eating enough protein + total food to build lean mass while training? (lean mass is my biggest WHOOP-age driver; the plan reads light.)",
@@ -1496,6 +1612,18 @@ async def entrypoint(ctx: agents.JobContext):
     except Exception as e:
         logger.warning("profile load failed: %s", e)
 
+    # Personalization flywheel: load everything the coach has learned about the user
+    # so it knows them from the first word (it writes new facts via
+    # remember_about_user as they talk).
+    learned = ""
+    try:
+        facts = await store.recent_facts()
+        learned = format_learned(facts)
+        if facts:
+            logger.info("🧠 loaded %d learned facts", len(facts))
+    except Exception as e:
+        logger.warning("facts load failed: %s", e)
+
     # Accumulates the CURRENT workout for the end-of-workout summary + save.
     wlog = {"turns": [], "hr": []}
     # The plan lifecycle: what the coach suggested + what the user decided.
@@ -1605,6 +1733,19 @@ async def entrypoint(ctx: agents.JobContext):
                 except Exception as e:
                     logger.warning("nutrition summary push failed: %s", e)
             asyncio.create_task(_push_nutrition())
+        elif kind == "ask":
+            # A home-screen quick-action chip: the user tapped a shortcut meaning
+            # they're asking this. Answer it by voice as the all-day guide.
+            text = (msg.get("text") or "").strip()
+            if text and wake.session is not None:
+                tnow = tod.describe()
+                asyncio.create_task(wake.session.generate_reply(instructions=(
+                    f"The user just tapped a shortcut meaning they're asking: \"{text}\"."
+                    + (f" It's {tnow}." if tnow else "") +
+                    " Answer directly as their all-day guide — use your tools "
+                    "(get_active_coaching_rules, get_local_time, day_recap, "
+                    "show_exercises, check_meal, get_whoop_status) as needed. Keep it "
+                    "short and specific; don't assume anything they didn't say.")))
         elif kind == "start_onboarding":
             # Voice-first onboarding: the coach interviews them.
             if wake.session is not None:
@@ -1718,7 +1859,8 @@ async def entrypoint(ctx: agents.JobContext):
     )
 
     coach = CoachAgent(hr, whoop, publish_exercises, wake, store,
-                       geo, profile, publish_plans, publish_signal, tod)
+                       geo, profile, publish_plans, publish_signal, tod,
+                       learned=learned)
     coach._planstate = planstate
     coach._get_turns = lambda: wlog["turns"][-40:]
     await session.start(
