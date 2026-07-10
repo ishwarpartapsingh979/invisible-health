@@ -10,6 +10,7 @@ struct NutritionSummary: Codable {
     var watch: [Watch]
     var questions: [String]
     var empty: Bool
+    var today: [Meal]
 
     struct Day: Codable, Identifiable {
         var day: String
@@ -21,9 +22,15 @@ struct NutritionSummary: Codable {
         var issues: String
         var id: String { desc + issues }
     }
+    struct Meal: Codable, Identifiable {
+        var description: String?
+        var verdict: String?
+        var meal: String?
+        var id: String { (description ?? "") + (verdict ?? "") }
+    }
 
     enum CodingKeys: String, CodingKey {
-        case total, flagged, days, watch, questions, empty
+        case total, flagged, days, watch, questions, empty, today
         case proteinHits = "protein_hits"
     }
 
@@ -35,6 +42,7 @@ struct NutritionSummary: Codable {
         days        = try c.decodeIfPresent([Day].self, forKey: .days) ?? []
         watch       = try c.decodeIfPresent([Watch].self, forKey: .watch) ?? []
         questions   = try c.decodeIfPresent([String].self, forKey: .questions) ?? []
+        today       = try c.decodeIfPresent([Meal].self, forKey: .today) ?? []
         empty       = try c.decodeIfPresent(Bool.self, forKey: .empty) ?? (total == 0)
     }
 
@@ -68,6 +76,7 @@ extension NutritionSummary {
         try c.encode(watch, forKey: .watch)
         try c.encode(questions, forKey: .questions)
         try c.encode(empty, forKey: .empty)
+        try c.encode(today, forKey: .today)
     }
 }
 
@@ -88,7 +97,8 @@ struct NutritionTabView: View {
                 Text("NUTRITION")
                     .font(.caption).tracking(2).foregroundColor(.gray).padding(.top, 12)
 
-                if let s = summary, !s.empty, s.total > 0 {
+                if let s = summary, (s.total > 0 || !s.today.isEmpty) {
+                    if !s.today.isEmpty { todayCard(s) }
                     statsCard(s)
                     if !s.days.isEmpty { daysCard(s) }
                     if !s.watch.isEmpty { watchCard(s) }
@@ -107,12 +117,34 @@ struct NutritionTabView: View {
             .padding(.horizontal, 24)
         }
         .onAppear {
+            // The coach can still push an updated summary while you're talking...
             call.onNutritionSummary = { s in
                 s.cache()
                 self.summary = s
                 self.updated = NutritionSummary.lastUpdated
                 self.refreshing = false
             }
+            // ...but the tab reads its own data straight from the DB — no voice
+            // session needed.
+            Task { await refresh() }
+        }
+    }
+
+    /// Fetch today's meals + the weekly summary from the token server (which reads
+    /// Supabase server-side). No coach, no voice — just data.
+    private func refresh() async {
+        guard let url = URL(string: VoiceConfig.tokenServerBaseURL + "/nutrition?user_id=ishwar")
+        else { return }
+        refreshing = true
+        defer { refreshing = false }
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            let s = try JSONDecoder().decode(NutritionSummary.self, from: data)
+            s.cache()
+            summary = s
+            updated = NutritionSummary.lastUpdated
+        } catch {
+            // Keep whatever we had cached.
         }
     }
 
@@ -214,20 +246,55 @@ struct NutritionTabView: View {
 
     private var refreshButton: some View {
         Button {
-            refreshing = true
-            if call.state == .connected {
-                Task { await call.sendGetNutritionSummary() }
-            } else {
-                // Connect via the Voice tab, then auto-refresh.
-                pendingVoiceAction = "nutrition_refresh"
-                selectedTab = 17
-            }
+            Task { await refresh() }
         } label: {
-            Label(refreshing ? "Refreshing…" : "Refresh via coach", systemImage: "arrow.clockwise")
+            Label(refreshing ? "Refreshing…" : "Refresh", systemImage: "arrow.clockwise")
                 .font(.headline).frame(maxWidth: .infinity).padding()
                 .background(Color.blue.opacity(0.18))
                 .foregroundColor(.blue).clipShape(Capsule())
         }
         .disabled(refreshing)
+    }
+
+    // MARK: today's meals
+
+    private func todayCard(_ s: NutritionSummary) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("TODAY")
+            ForEach(s.today) { m in
+                HStack(alignment: .top, spacing: 8) {
+                    Text(mealIcon(m.meal)).font(.subheadline)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(m.description ?? "(meal)")
+                            .font(.subheadline).foregroundColor(.white)
+                        if let v = m.verdict, !v.isEmpty {
+                            Text(v.capitalized).font(.caption).foregroundColor(verdictColor(v))
+                        }
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+        .padding(16).frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white.opacity(0.05))
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+    }
+
+    private func mealIcon(_ meal: String?) -> String {
+        switch (meal ?? "").lowercased() {
+        case "breakfast": return "🌅"
+        case "lunch":     return "🍽️"
+        case "dinner":    return "🌙"
+        case "snack":     return "🥨"
+        default:          return "🍴"
+        }
+    }
+
+    private func verdictColor(_ v: String) -> Color {
+        switch v.lowercased() {
+        case "keep":  return .green
+        case "avoid": return .red
+        default:      return .orange
+        }
     }
 }
