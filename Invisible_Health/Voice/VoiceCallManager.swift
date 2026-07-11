@@ -252,11 +252,15 @@ final class VoiceCallManager: ObservableObject, RoomDelegate {
     func sendLocalTime() async {
         let now = Date()
         let f = DateFormatter(); f.dateFormat = "HH:mm"
+        let isoDate = DateFormatter(); isoDate.dateFormat = "yyyy-MM-dd"
+        let human = DateFormatter(); human.dateFormat = "EEEE, d MMMM yyyy"
         let hour = Calendar.current.component(.hour, from: now)
         let period = (5..<12).contains(hour) ? "morning"
             : (12..<17).contains(hour) ? "afternoon"
             : (17..<21).contains(hour) ? "evening" : "night"
         await sendControl(["type": "local_time", "time": f.string(from: now),
+                           "date": isoDate.string(from: now),      // 2026-07-12 (absolute)
+                           "date_str": human.string(from: now),    // Saturday, 12 July 2026
                            "period": period, "tz": TimeZone.current.identifier],
                           topic: "local_time")
     }

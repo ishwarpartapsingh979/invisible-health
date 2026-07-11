@@ -80,7 +80,11 @@ def nutrition(user_id: str = "ishwar"):
         meals = []
     by_day, watch, today = {}, [], []
     protein_hits = flagged = 0
-    today_key = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    try:
+        from zoneinfo import ZoneInfo
+        today_key = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d")
+    except Exception:
+        today_key = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     for m in meals:
         fl = m.get("flags") or {}
         # Skip hypotheticals ("about to order" / "what if") — they're assessed but
@@ -88,12 +92,16 @@ def nutrition(user_id: str = "ishwar"):
         if str(fl.get("eaten", "yes")).lower() == "no":
             continue
         desc = m.get("description") or "(meal)"
+        # Prefer the stored local_date (absolute, timezone-correct) for grouping +
+        # "today"; fall back to the raw timestamp for older rows.
+        ld = m.get("local_date")
         try:
             d = datetime.fromisoformat((m.get("logged_at") or "").replace("Z", "+00:00"))
             day = d.strftime("%a %d %b")
-            is_today = d.strftime("%Y-%m-%d") == today_key
         except Exception:
-            day, is_today = "recent", False
+            day = ld or "recent"
+        is_today = (ld == today_key) if ld else (day != "recent" and
+                   d.strftime("%Y-%m-%d") == today_key)
         by_day.setdefault(day, []).append(desc)
         if str(fl.get("has_protein", "")).lower() == "yes":
             protein_hits += 1

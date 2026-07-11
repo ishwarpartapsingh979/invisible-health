@@ -415,7 +415,7 @@ class SessionStore:
             return "No past sessions on record yet."
         lines = []
         for s in sessions:
-            when = (s.get("started_at") or "")[:10]
+            when = s.get("local_date") or (s.get("started_at") or "")[:10]
             bits = [s.get("activity_type") or "workout"]
             if s.get("focus"):
                 bits.append(s["focus"])
@@ -439,6 +439,19 @@ def exercises_for_muscle(term: str, limit: int = 12):
     if target is None:
         target = t
     return [e for e in EXERCISES if target in e.get("muscles", [])][:limit]
+
+def local_date_for(tz) -> str:
+    """Today's absolute calendar date (YYYY-MM-DD) in the user's timezone (UTC
+    fallback) — stamped on records so the coach can reason about real dates."""
+    tzinfo = timezone.utc
+    if tz:
+        try:
+            from zoneinfo import ZoneInfo
+            tzinfo = ZoneInfo(tz)
+        except Exception:
+            tzinfo = timezone.utc
+    return datetime.now(tzinfo).date().isoformat()
+
 
 DURABLE_FACT_CATS = {"preference", "constraint", "motivation", "body_response",
                      "context", "food"}
@@ -777,18 +790,24 @@ class TimeContext:
 
     def __init__(self) -> None:
         self.time_str = None   # "18:42"
+        self.date = None       # "2026-07-12" (absolute local calendar date)
+        self.date_str = None   # "Saturday, 12 July 2026"
         self.period = None     # morning/afternoon/evening/night
         self.tz = None
 
     def update(self, msg: dict) -> None:
         self.time_str = msg.get("time")
+        self.date = msg.get("date")
+        self.date_str = msg.get("date_str")
         self.period = msg.get("period")
         self.tz = msg.get("tz")
 
     def describe(self):
-        if not self.time_str:
+        if not self.time_str and not self.date:
             return None
-        return f"{self.time_str} ({self.period}) their local time" + (f", {self.tz}" if self.tz else "")
+        day = self.date_str or self.date or ""
+        return (f"{day}, {self.time_str} ({self.period}) local time"
+                + (f" ({self.tz})" if self.tz else "")).strip(", ")
 
 
 class ProfileContext:
@@ -1258,6 +1277,7 @@ class CoachAgent(Agent):
             await self._store.log_meal({
                 "user_id": "ishwar", "description": description, "meal": meal or None,
                 "flags": flags, "verdict": verdict or None,
+                "local_date": local_date_for(self._tod.tz),
                 "advice": RulesEngine.to_prompt(decision)[:400],
             })
         if decision.get("fired"):
@@ -1441,9 +1461,15 @@ class CoachAgent(Agent):
             except Exception:
                 tzinfo = timezone.utc
         today_local = datetime.now(tzinfo).date()
+        today_str = today_local.isoformat()
         out = []
         for m in meals:
             if str((m.get("flags") or {}).get("eaten", "yes")).lower() == "no":
+                continue
+            # Prefer the stored local_date; fall back to converting the timestamp.
+            if m.get("local_date"):
+                if m["local_date"] == today_str:
+                    out.append(m)
                 continue
             try:
                 d = datetime.fromisoformat(
@@ -1589,11 +1615,13 @@ class CoachAgent(Agent):
 
     @function_tool
     async def get_local_time(self, context: RunContext) -> str:
-        """The user's LOCAL time of day (you run in cloud UTC, so use this — never
-        guess the time). Use it to greet appropriately and to factor time of day
-        into coaching (e.g. a heavy session late at night before sleep)."""
+        """The user's LOCAL DATE and time (you run in cloud UTC, so use this — never
+        guess). Returns today's full date + time. Use the DATE to reason about
+        history: records carry their own date (e.g. '2026-07-11'), so compare to
+        today's date to know if something was yesterday, this week, etc. Also use
+        the time of day to greet and to factor timing into coaching."""
         d = self._tod.describe()
-        return d or "I don't have their local time yet."
+        return d or "I don't have their local date/time yet."
 
     @function_tool
     async def set_workout_label(self, context: RunContext, label: str) -> str:
@@ -1613,6 +1641,7 @@ class CoachAgent(Agent):
                 "decided": label,
                 "suggested": json.dumps(suggested),
                 "discussion": discussion,
+                "local_date": local_date_for(self._tod.tz),
             })
         return "Shown on their screen."
 
@@ -2132,6 +2161,7 @@ async def entrypoint(ctx: agents.JobContext):
             "user_id": "ishwar",
             "started_at": _iso(started_at),
             "ended_at": _iso(time.time()),
+            "local_date": local_date_for(tod.tz),
             "duration_min": duration_min,
             "activity_type": data.get("activity_type"),
             "focus": data.get("focus"),
@@ -2258,6 +2288,7 @@ async def entrypoint(ctx: agents.JobContext):
                 await asyncio.wait_for(store.save_conversation({
                     "user_id": "ishwar",
                     "turns": "\n".join(turns[-120:]),
+                    "local_date": local_date_for(tod.tz),
                 }), timeout=8)
             except Exception as e:
                 logger.warning("conversation save on shutdown failed: %s", e)
