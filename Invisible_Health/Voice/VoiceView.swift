@@ -143,6 +143,23 @@ struct VoiceView: View {
         }
         .padding(.vertical, 20)
         .onChange(of: isLive) { live in pulse = live }
+        .onChange(of: call.state) { state in
+            // All-day context: whenever we connect (not only at workout start),
+            // push local time + the latest Whoop so the coach can answer time /
+            // readiness questions in normal chat (issues #1, #3). Sent a few times
+            // to beat the agent-join race (the agent may not be in the room the
+            // instant we connect).
+            guard state == .connected else { return }
+            let ow = OpenWearablesManager.shared
+            ow.checkConnectionStatus { ow.performSync() }
+            for ms in [0, 800, 2200] {
+                Task {
+                    try? await Task.sleep(nanoseconds: UInt64(ms) * 1_000_000)
+                    await call.sendLocalTime()
+                    await call.sendWhoopContext(whoopSnapshot())
+                }
+            }
+        }
         .onChange(of: exerciseDeck != nil) { deckOpen in
             // While the deck is open the user is browsing (silent) — ping the
             // coach to stay awake so it doesn't time out mid-browse.

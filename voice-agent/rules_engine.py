@@ -154,8 +154,13 @@ class RulesEngine:
     def to_prompt(decision: dict) -> str:
         """Render the resolved decision as hard constraints for the LLM."""
         if decision.get("empty"):
-            return ("No specific rules fired for this situation — coach off the "
-                    "general method + what they're telling you, and stay safe.")
+            return ("NO SPECIFIC RULE covers this. Do NOT improvise concrete "
+                    "prescriptions (no invented food pairings, macros, sets/reps, or "
+                    "'you should' claims the rules didn't authorize). Instead: SAY "
+                    "plainly you don't have a specific rule for this yet, give only "
+                    "what IS grounded (their safety guardrails + what they told you), "
+                    "and either ask ONE clarifying question or offer to note it for "
+                    "the weekly review with dad / the nutritionist.")
         lines = []
         if decision["vetoes"]:
             lines.append("MUST NOT (absolute): " + "; ".join(decision["vetoes"]))

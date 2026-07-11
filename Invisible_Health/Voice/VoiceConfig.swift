@@ -91,10 +91,10 @@ struct VoiceTokenService {
         }
     }
 
-    static func fetch() async throws -> Response {
+    static func fetch(room: String = VoiceConfig.roomName) async throws -> Response {
         var comps = URLComponents(string: VoiceConfig.tokenServerBaseURL + "/token")!
         comps.queryItems = [
-            URLQueryItem(name: "room", value: VoiceConfig.roomName),
+            URLQueryItem(name: "room", value: room),
             URLQueryItem(name: "identity", value: VoiceConfig.participantIdentity)
         ]
         let (data, resp) = try await URLSession.shared.data(from: comps.url!)

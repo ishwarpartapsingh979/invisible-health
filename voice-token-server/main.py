@@ -83,6 +83,10 @@ def nutrition(user_id: str = "ishwar"):
     today_key = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     for m in meals:
         fl = m.get("flags") or {}
+        # Skip hypotheticals ("about to order" / "what if") — they're assessed but
+        # not eaten, so they must not inflate the tab or counts (issue #4).
+        if str(fl.get("eaten", "yes")).lower() == "no":
+            continue
         desc = m.get("description") or "(meal)"
         try:
             d = datetime.fromisoformat((m.get("logged_at") or "").replace("Z", "+00:00"))

@@ -59,6 +59,21 @@ except Exception as _e:  # pragma: no cover
     _LF = None
     logging.getLogger("voice-agent").warning("Langfuse unavailable: %s", _e)
 
+# --- Gemini (Google Search grounding) for product/menu lookup ---------------
+# The realtime model can't know a local café's "banana latte" or which Whole Truth
+# bar someone means (issues #9/#5). Gemini with Google Search grounding can. Fully
+# optional: no-ops if GEMINI_API_KEY is absent.
+try:
+    from google import genai as _genai
+    from google.genai import types as _genai_types
+    _GEMINI = (_genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+               if os.environ.get("GEMINI_API_KEY") else None)
+    if _GEMINI:
+        logging.getLogger("voice-agent").info("Gemini product lookup enabled")
+except Exception as _e:  # pragma: no cover
+    _GEMINI = None
+    logging.getLogger("voice-agent").warning("Gemini unavailable: %s", _e)
+
 
 class SessionTracer:
     """Traces one voice session to Langfuse. Safe to use even when disabled."""
@@ -546,6 +561,19 @@ your background understanding; the engine is the authority for the actual decisi
 Remember the driver is BOTH the wearable AND what they SAY — and what they say (a
 red flag, being under-fuelled, real pain) OVERRIDES the numbers.
 
+# RULES-FIRST, AND ADMIT THE GAP (this is non-negotiable)
+For ANY training or nutrition guidance, you CONSULT THE RULES FIRST — call
+get_active_coaching_rules (training/readiness) or check_meal (food) BEFORE you give
+the answer, every time, not at your discretion. Then answer WITHIN what they return.
+If the rules say "NO SPECIFIC RULE": do NOT fall back to your own opinion dressed up
+as their plan. Instead, say plainly you don't have a specific rule for this yet,
+give only what IS grounded (their safety guardrails + what they told you), and ask
+ONE question or offer to note it for the weekly review with dad / the nutritionist.
+NEVER invent concrete prescriptions the rules didn't authorize — no made-up food
+pairings ("have fruit with your coffee"), macros, or sets/reps. General education is
+fine ("added sugar spikes blood sugar"); presenting un-ruled specifics as their
+prescribed plan is not. When unsure whether something is ruled: check, don't guess.
+
 # DAD'S RULES + SPORTS-SCIENCE DECISIONS LIVE IN THE RULES ENGINE (not here)
 The specific dad + sports-science decisions (sequencing/arc, load, injury
 guardrails, session structure, motivation) are DATA in the rules engine — you get
@@ -643,23 +671,30 @@ what motivates them) — your judgement. When you have it all, call save_profile
 with the fields, then confirm warmly in one sentence. Keep it conversational, not
 a rigid form.
 
-# NUTRITION (all day — assess, advise, and log by voice)
+# NUTRITION (all day — identify, assess against the rules, advise, log)
 Food is half of what you do. They'll ask what to eat or when, or tell you what they
-had / are about to order — by voice, whenever they want (NOT every meal). Whenever
-food comes up, ASSESS + LOG it: judge the flags (refined base? fried? sugar incl.
-jaggery/honey/juice? protein?) and call check_meal. Give a SHORT keep / limit /
-avoid + ONE better swap — no lecture. For "what should I eat now?" use the time of
-day (get_local_time): protein-forward breakfast, a real lunch, a lighter earlier
-dinner (their sleep runs short). Their goal is body recomposition (fat loss + build
-muscle): protein every meal is the top lever; "no added sugar" only counts if the
-item is NOT a refined base and NOT fried; rotate proteins and greens. check_meal
-returns the exact nutrition rules — follow them. IMPORTANT: whenever a meal is
-SETTLED — they tell you what they ate, OR you two land on what they'll have (you
-suggested breakfast and they agree, they say "I'll do dal and roti") — call
-check_meal (set `meal` to breakfast/lunch/dinner/snack) so it lands on their
-Nutrition tab. That tab is how they SEE today's food; if you don't log a decided
-meal, it won't show. Don't nag about food they didn't bring up. For a weekly
-picture to show their nutritionist, weekly_nutrition_summary.
+had / are about to order — by voice, whenever they want. Your flow:
+1. IDENTIFY the exact item FIRST. If it's a BRANDED or MULTI-VARIANT product (e.g.
+   "Whole Truth bar", "a latte from <café>") don't answer generically — you can't
+   assess "a bar" or "a latte". Either call lookup_product to find out what it
+   actually is (ingredients/sugar/protein/calories), OR ask ONE sharp question
+   ("which Whole Truth — the protein bar or the energy bar?"). Never hedge with
+   "may add sugar and calories".
+2. ASSESS against the rules: judge the flags (refined base? fried? sugar incl.
+   jaggery/honey/juice? protein?) and call check_meal — it returns the exact
+   nutrition rules; FOLLOW them. Do NOT invent swaps or pairings the rules didn't
+   give you (see RULES-FIRST). If nothing's ruled, say so and address the real
+   concern (e.g. the syrup/sugar in the drink), don't make up a combination.
+3. For "what should I eat now?" use the time of day (get_local_time): protein-forward
+   breakfast, a real lunch, a lighter earlier dinner (sleep runs short). Goal is
+   recomposition: protein every meal is the top lever; "no added sugar" only counts
+   if NOT a refined base and NOT fried; rotate proteins and greens.
+LOGGING DISCIPLINE (so the meal count stays honest): call check_meal to LOG only
+when a meal is actually EATEN or firmly decided — set eaten='yes'. For a hypothetical
+they're just asking about, or "about to order / thinking about", assess it but pass
+eaten='no' so it is NOT counted as a meal eaten today. Don't log the same meal
+twice. Set `meal` to breakfast/lunch/dinner/snack. Don't nag about food they didn't
+bring up. For a weekly picture to show their nutritionist, weekly_nutrition_summary.
 
 # GETTING TO KNOW THEM (you improve the more they talk — do this REACTIVELY)
 You get more useful every conversation by LEARNING this person. Two habits:
@@ -1195,34 +1230,99 @@ class CoachAgent(Agent):
         meal: str = "", is_refined: str = "", is_fried: str = "",
         contains_sugar: str = "", has_protein: str = "", craving: str = "",
         need: str = "", product: str = "", training_day: str = "", verdict: str = "",
+        eaten: str = "yes",
     ) -> str:
-        """When the user tells you BY VOICE (as they choose — NOT every meal) what
-        they just ate, or something they're about to eat/order, ASSESS it against
-        their nutrition rules and LOG it. Fill the flags from the food (leave blank
-        if not applicable): is_refined='yes' if the base is maida/white bread/white
-        rice/cornflour; is_fried='yes'; contains_sugar='yes' incl. jaggery/honey/
-        juice; has_protein='yes'/'no'; meal; and craving/need/product/training_day
-        if relevant. Set verdict to your one-word call: 'keep'/'limit'/'avoid'.
-        Returns the nutrition rules — give a SHORT keep/limit/avoid + ONE better
-        swap, no lecture. This gets saved for the weekly nutritionist summary."""
+        """Assess a food against their nutrition rules and log it. Fill the flags
+        from the food (blank if N/A): is_refined='yes' if the base is maida/white
+        bread/white rice/cornflour; is_fried='yes'; contains_sugar='yes' incl.
+        jaggery/honey/juice; has_protein='yes'/'no'; meal=breakfast/lunch/dinner/
+        snack; craving/need/product/training_day if relevant. verdict='keep'/'limit'/
+        'avoid'. IMPORTANT: eaten='yes' ONLY when they actually ATE it or firmly
+        decided to; eaten='no' for a hypothetical / "about to order" / "what if" —
+        those are assessed but NOT counted as a meal eaten today. Returns the rules;
+        give a SHORT keep/limit/avoid + ONE swap (from the rules, don't invent)."""
         flags = {k: v for k, v in {
             "is_refined": is_refined, "is_fried": is_fried,
             "contains_sugar": contains_sugar, "has_protein": has_protein,
             "meal": meal, "craving": craving, "need": need, "product": product,
             "training_day": training_day, "goal": "recomp",
+            "eaten": "no" if str(eaten).lower() == "no" else "yes",
         }.items() if v}
         # Variety/caps: count this food across the last 7 logged days so the
         # rotation rules (paneer 3x, chicken 2x, rotate greens/legumes) can fire.
         flags.update(await self._frequency_facts(description))
         decision = await self._rules.resolve(flags, domains=["nutrition"])
-        await self._store.log_meal({
-            "user_id": "ishwar", "description": description, "meal": meal or None,
-            "flags": flags, "verdict": verdict or None,
-            "advice": RulesEngine.to_prompt(decision)[:400],
-        })
+        # Only LOG meals actually eaten/decided — not hypotheticals (keeps the meal
+        # count honest, issue #4). Skip a near-duplicate of the last logged meal.
+        if flags.get("eaten") != "no" and not await self._is_dup_meal(description):
+            await self._store.log_meal({
+                "user_id": "ishwar", "description": description, "meal": meal or None,
+                "flags": flags, "verdict": verdict or None,
+                "advice": RulesEngine.to_prompt(decision)[:400],
+            })
         if decision.get("fired"):
             logger.info("🥗 nutrition rules: %s", [f["source"] for f in decision["fired"]])
         return RulesEngine.to_prompt(decision)
+
+    async def _is_dup_meal(self, description: str) -> bool:
+        """True if this looks like the same meal we just logged (avoids the same
+        food becoming several rows when re-mentioned — issue #4)."""
+        try:
+            recent = await self._store.recent_meals(days=1)
+        except Exception:
+            return False
+        d = (description or "").strip().lower()
+        if not d:
+            return False
+        for m in recent[-3:]:
+            prev = (m.get("description") or "").strip().lower()
+            if prev and (prev == d or prev in d or d in prev):
+                return True
+        return False
+
+    @function_tool
+    async def lookup_product(self, context: RunContext, query: str) -> str:
+        """Look up a SPECIFIC named food/drink you can't reliably assess from memory
+        — a café/restaurant menu item ('banana latte from Bangalore Brewing
+        Company'), a branded packaged product ('Whole Truth protein bar, dark
+        chocolate'), a specific dish. Returns a web-grounded best estimate of what it
+        actually is + its nutrition (ingredients, sugar, protein, calories). Call
+        this BEFORE assessing any branded / multi-variant / café item, THEN use the
+        result to call check_meal with real flags. If it can't identify it, ASK the
+        user to describe it — never hedge with 'may add sugar and calories'."""
+        if _GEMINI is None:
+            return ("Product lookup isn't available — ask the user to describe the "
+                    "item (main ingredients, is it sweetened, rough size).")
+        prompt = (
+            "You are a nutrition-facts lookup. Identify this EXACT food/drink (use "
+            "the specific café/restaurant/brand if named) and give a concise best "
+            f"estimate.\nITEM: {query}\n\n"
+            "Reply in <=60 words, exactly:\n"
+            "Item: <what it actually is>\n"
+            "Likely ingredients: <...>\n"
+            "Est per serving: ~<n>g sugar, ~<n>g protein, ~<n> cal\n"
+            "Flags: refined=<yes/no>, fried=<yes/no>, sugar=<yes/no>, protein=<yes/no>\n"
+            "If you genuinely can't identify it, reply only: NOT FOUND")
+        try:
+            resp = await asyncio.to_thread(
+                _GEMINI.models.generate_content,
+                model="gemini-2.5-flash",
+                contents=prompt,
+                config=_genai_types.GenerateContentConfig(
+                    tools=[_genai_types.Tool(google_search=_genai_types.GoogleSearch())],
+                    temperature=0.2,
+                ),
+            )
+            out = (getattr(resp, "text", "") or "").strip()
+            logger.info("🔎 product lookup: %s", query)
+            if not out or "NOT FOUND" in out.upper():
+                return ("Couldn't identify that item — ask the user to describe it "
+                        "(ingredients, sweetened?, size).")
+            return out
+        except Exception as e:
+            logger.warning("lookup_product failed: %s", e)
+            return ("Lookup failed — ask the user to describe the item (ingredients, "
+                    "sweetened?, size).")
 
     @function_tool
     async def remember_about_user(self, context: RunContext, category: str,
@@ -1329,6 +1429,31 @@ class CoachAgent(Agent):
             pass
         return text
 
+    async def _todays_meals(self) -> list:
+        """Meals actually EATEN today in the user's LOCAL calendar day — not a
+        rolling 24h UTC window (issue #4). Uses the app-reported timezone."""
+        meals = await self._store.recent_meals(days=2)
+        tzinfo = timezone.utc
+        if getattr(self._tod, "tz", None):
+            try:
+                from zoneinfo import ZoneInfo
+                tzinfo = ZoneInfo(self._tod.tz)
+            except Exception:
+                tzinfo = timezone.utc
+        today_local = datetime.now(tzinfo).date()
+        out = []
+        for m in meals:
+            if str((m.get("flags") or {}).get("eaten", "yes")).lower() == "no":
+                continue
+            try:
+                d = datetime.fromisoformat(
+                    (m.get("logged_at") or "").replace("Z", "+00:00")).astimezone(tzinfo)
+                if d.date() == today_local:
+                    out.append(m)
+            except Exception:
+                continue
+        return out
+
     @function_tool
     async def day_recap(self, context: RunContext) -> str:
         """END-OF-DAY recap. Call when the user opens the app in the evening or asks
@@ -1337,7 +1462,7 @@ class CoachAgent(Agent):
         (protein? any slips?), whether they moved/trained, and ONE nudge for tonight
         or tomorrow (usually earlier sleep — they run short at ~5:41). Don't invent;
         only use what's logged. If nothing's logged, say so lightly and don't lecture."""
-        meals = await self._store.recent_meals(days=1)
+        meals = await self._todays_meals()
         try:
             sessions = await self._store.recent(limit=4)
         except Exception:
@@ -1349,7 +1474,8 @@ class CoachAgent(Agent):
             slips = [m.get("description") or "a meal" for m in meals
                      if any(str((m.get("flags") or {}).get(k, "")).lower() == "yes"
                             for k in ("is_refined", "is_fried", "contains_sugar"))]
-            facts.append(f"Ate {len(meals)} logged meals today, {protein} with protein.")
+            n = len(meals)
+            facts.append(f"Ate {n} meal{'s' if n != 1 else ''} today, {protein} with protein.")
             if slips:
                 facts.append("To watch: " + "; ".join(slips[:3]) + ".")
         else:

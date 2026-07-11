@@ -16,3 +16,7 @@ python-dotenv~=1.0
 # match backend/requirements.txt (langfuse==2.60.3) so the eval tooling shares an
 # API. The low-level client is used (event-driven agent, not request/response).
 langfuse>=2.60,<3
+# Gemini (Google Search grounding) for the lookup_product tool — identifies named
+# café/branded food items the realtime model can't know (issue #9). No-ops if
+# GEMINI_API_KEY is absent.
+google-genai>=1.0

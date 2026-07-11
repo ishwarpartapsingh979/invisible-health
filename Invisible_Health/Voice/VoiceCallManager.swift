@@ -71,7 +71,11 @@ final class VoiceCallManager: ObservableObject, RoomDelegate {
         state = .connecting
         configureAudioSessionForMusic()
         do {
-            let creds = try await VoiceTokenService.fetch()
+            // Unique room per connect so LiveKit dispatches a FRESH agent every
+            // time — reopening the app no longer lands on a stale/asleep agent in
+            // the same room and going silent (issue #2).
+            let roomName = "\(VoiceConfig.roomName)-\(UUID().uuidString.prefix(8))"
+            let creds = try await VoiceTokenService.fetch(room: roomName)
             room.add(delegate: self)   // receive "moment" data from the agent
             try await room.connect(url: creds.serverUrl, token: creds.token)
             // Publish the microphone. The LiveKit SDK owns AVAudioSession,
