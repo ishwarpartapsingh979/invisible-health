@@ -647,6 +647,11 @@ struct VoiceView: View {
                 return d
             }
         }
+        // Freshness signal (#10): when the Whoop data was last synced, so the coach
+        // knows how old its numbers are and can say so / flag staleness.
+        if let sync = ow.lastSyncDate {
+            s["synced_at"] = ISO8601DateFormatter().string(from: sync)
+        }
         return s
     }
 

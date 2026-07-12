@@ -262,10 +262,12 @@ class SessionStore:
         except Exception as e:
             logger.warning("profile save error: %s", e)
 
-    async def log_meal(self, record: dict) -> None:
-        """Log a voice-reported meal (nutrition_log) for the weekly summary."""
+    async def log_meal(self, record: dict) -> bool:
+        """Log a voice-reported meal (nutrition_log). Returns True only if the row
+        was actually written — so the coach never claims 'logged' on a failed write
+        (issue #20)."""
         if not self.enabled:
-            return
+            return False
         try:
             import aiohttp
             async with aiohttp.ClientSession() as s:
@@ -274,10 +276,12 @@ class SessionStore:
                                   timeout=aiohttp.ClientTimeout(total=15)) as r:
                     if r.status >= 300:
                         logger.warning("meal log %s: %s", r.status, (await r.text())[:200])
-                    else:
-                        logger.info("🍽️  meal logged: %s", (record.get("description") or "")[:50])
+                        return False
+                    logger.info("🍽️  meal logged: %s", (record.get("description") or "")[:50])
+                    return True
         except Exception as e:
             logger.warning("meal log error: %s", e)
+            return False
 
     async def recent_meals(self, days: int = 7, user_id: str = "ishwar") -> list:
         """Meals logged in the last `days` (for the weekly nutritionist summary)."""
@@ -353,6 +357,21 @@ class SessionStore:
         except Exception as e:
             logger.warning("recent_conversations error: %s", e)
         return []
+
+    async def save_rule_gap(self, record: dict) -> None:
+        """Log a question the coach answered WITHOUT a backing rule (issue #21) so
+        it can become a rule after the nutritionist/dad weighs in."""
+        if not self.enabled:
+            return
+        try:
+            import aiohttp
+            async with aiohttp.ClientSession() as s:
+                await s.post(f"{self.url}/rest/v1/rule_gaps", json=[record],
+                             headers=self._headers({"Prefer": "return=minimal"}),
+                             timeout=aiohttp.ClientTimeout(total=10))
+            logger.info("📝 rule gap logged: %s", (record.get("question") or "")[:60])
+        except Exception as e:
+            logger.warning("save_rule_gap failed: %s", e)
 
     async def recent_facts(self, limit: int = 60, user_id: str = "ishwar") -> list:
         """Everything the coach has learned about the user (active facts), newest
@@ -454,7 +473,7 @@ def local_date_for(tz) -> str:
 
 
 DURABLE_FACT_CATS = {"preference", "constraint", "motivation", "body_response",
-                     "context", "food"}
+                     "context", "food", "interest"}
 
 
 def format_learned(facts: list) -> str:
@@ -586,6 +605,13 @@ NEVER invent concrete prescriptions the rules didn't authorize — no made-up fo
 pairings ("have fruit with your coffee"), macros, or sets/reps. General education is
 fine ("added sugar spikes blood sugar"); presenting un-ruled specifics as their
 prescribed plan is not. When unsure whether something is ruled: check, don't guess.
+
+# ATTRIBUTE YOUR ANSWERS (trust layer)
+Make clear WHERE guidance comes from. When it's rule-backed, say so briefly ("your
+dad's rule is…", "per your nutritionist's plan…"). When it's your own read (no rule
+fired), flag it honestly ("there's no specific rule for this, but my take is…") AND
+call log_rule_gap with their question + your answer, so it becomes a rule after the
+nutritionist/dad weighs in. Don't pretend your own judgment is their prescribed plan.
 
 # DAD'S RULES + SPORTS-SCIENCE DECISIONS LIVE IN THE RULES ENGINE (not here)
 The specific dad + sports-science decisions (sequencing/arc, load, injury
@@ -919,6 +945,23 @@ class WhoopContext:
             lines.append("Recent activities (each with the day it happened): "
                          + "; ".join(descs))
 
+        # Freshness (#10): how old the Whoop data is, so the coach can say so and
+        # flag staleness rather than judging silently off old numbers.
+        if d.get("synced_at"):
+            try:
+                synced = datetime.fromisoformat(str(d["synced_at"]).replace("Z", "+00:00"))
+                hrs = (datetime.now(timezone.utc) - synced).total_seconds() / 3600
+                if hrs < 1:
+                    age = "synced <1h ago"
+                elif hrs < 48:
+                    age = f"synced ~{round(hrs)}h ago"
+                else:
+                    age = f"synced ~{round(hrs / 24)}d ago"
+                stale = " — STALE, likely not today's reading; tell them and don't over-rely" if hrs > 18 else ""
+                lines.append(f"Data freshness: {age}{stale}")
+            except Exception:
+                pass
+
         return "\n".join(lines) if lines else None
 
 
@@ -1250,16 +1293,18 @@ class CoachAgent(Agent):
         contains_sugar: str = "", has_protein: str = "", craving: str = "",
         need: str = "", product: str = "", training_day: str = "", verdict: str = "",
         eaten: str = "yes",
+        calories: str = "", protein_g: str = "", carbs_g: str = "", fat_g: str = "",
     ) -> str:
         """Assess a food against their nutrition rules and log it. Fill the flags
         from the food (blank if N/A): is_refined='yes' if the base is maida/white
         bread/white rice/cornflour; is_fried='yes'; contains_sugar='yes' incl.
         jaggery/honey/juice; has_protein='yes'/'no'; meal=breakfast/lunch/dinner/
         snack; craving/need/product/training_day if relevant. verdict='keep'/'limit'/
-        'avoid'. IMPORTANT: eaten='yes' ONLY when they actually ATE it or firmly
-        decided to; eaten='no' for a hypothetical / "about to order" / "what if" —
-        those are assessed but NOT counted as a meal eaten today. Returns the rules;
-        give a SHORT keep/limit/avoid + ONE swap (from the rules, don't invent)."""
+        'avoid'. If you know rough NUMBERS (from lookup_product or clear knowledge),
+        pass calories/protein_g/carbs_g/fat_g so they're stored. IMPORTANT:
+        eaten='yes' ONLY when they actually ATE it or firmly decided to; eaten='no'
+        for a hypothetical / "about to order". Returns the rules + whether it saved —
+        only tell the user it's 'logged' if the result says SAVED."""
         flags = {k: v for k, v in {
             "is_refined": is_refined, "is_fried": is_fried,
             "contains_sugar": contains_sugar, "has_protein": has_protein,
@@ -1271,18 +1316,33 @@ class CoachAgent(Agent):
         # rotation rules (paneer 3x, chicken 2x, rotate greens/legumes) can fire.
         flags.update(await self._frequency_facts(description))
         decision = await self._rules.resolve(flags, domains=["nutrition"])
+        prompt = RulesEngine.to_prompt(decision)
         # Only LOG meals actually eaten/decided — not hypotheticals (keeps the meal
         # count honest, issue #4). Skip a near-duplicate of the last logged meal.
-        if flags.get("eaten") != "no" and not await self._is_dup_meal(description):
-            await self._store.log_meal({
-                "user_id": "ishwar", "description": description, "meal": meal or None,
-                "flags": flags, "verdict": verdict or None,
-                "local_date": local_date_for(self._tod.tz),
-                "advice": RulesEngine.to_prompt(decision)[:400],
-            })
+        save_note = ""
+        if flags.get("eaten") != "no":
+            if await self._is_dup_meal(description):
+                save_note = "\n(Already logged just now — didn't duplicate.)"
+            else:
+                def _num(v):
+                    try:
+                        return float(str(v).replace("g", "").strip())
+                    except (TypeError, ValueError):
+                        return None
+                saved = await self._store.log_meal({
+                    "user_id": "ishwar", "description": description, "meal": meal or None,
+                    "flags": flags, "verdict": verdict or None,
+                    "local_date": local_date_for(self._tod.tz),
+                    "calories": _num(calories), "protein_g": _num(protein_g),
+                    "carbs_g": _num(carbs_g), "fat_g": _num(fat_g),
+                    "advice": prompt[:400],
+                })
+                save_note = ("\n(SAVED to their log.)" if saved else
+                             "\n(SAVE FAILED — do NOT tell them it's logged; say you "
+                             "couldn't save it right now.)")
         if decision.get("fired"):
             logger.info("🥗 nutrition rules: %s", [f["source"] for f in decision["fired"]])
-        return RulesEngine.to_prompt(decision)
+        return prompt + save_note
 
     async def _is_dup_meal(self, description: str) -> bool:
         """True if this looks like the same meal we just logged (avoids the same
@@ -1345,6 +1405,46 @@ class CoachAgent(Agent):
                     "sweetened?, size).")
 
     @function_tool
+    async def web_lookup(self, context: RunContext, query: str) -> str:
+        """Look up CURRENT real-world info you can't know from memory that ISN'T a
+        specific food's nutrition — local fitness classes/gyms (e.g. a Cult class
+        near them), a place/studio, an event, or a general health/fitness fact that
+        needs the web. Returns a concise grounded answer. (For a named FOOD item's
+        nutrition, use lookup_product instead.) If nothing solid is found, say so."""
+        if _GEMINI is None:
+            return "Web lookup isn't available right now."
+        try:
+            resp = await asyncio.to_thread(
+                _GEMINI.models.generate_content,
+                model="gemini-3.5-flash",
+                contents=f"Answer concisely (<=70 words) using current web info: {query}",
+                config=_genai_types.GenerateContentConfig(
+                    tools=[_genai_types.Tool(google_search=_genai_types.GoogleSearch())],
+                    temperature=0.3,
+                ),
+            )
+            out = (getattr(resp, "text", "") or "").strip()
+            logger.info("🔎 web lookup: %s", query)
+            return out or "Couldn't find anything reliable on that."
+        except Exception as e:
+            logger.warning("web_lookup failed: %s", e)
+            return "Web lookup failed right now."
+
+    @function_tool
+    async def log_rule_gap(self, context: RunContext, question: str,
+                           coach_answer: str = "", domain: str = "nutrition") -> str:
+        """When you answer from your OWN knowledge because NO rule covers it, log the
+        question here (issue #21) so it can be taken to the nutritionist/dad to
+        become a real rule. Call it right after giving such an un-ruled answer.
+        domain = nutrition | coach | sports_science | general."""
+        await self._store.save_rule_gap({
+            "user_id": "ishwar", "domain": domain, "question": question,
+            "coach_answer": coach_answer[:400],
+            "local_date": local_date_for(self._tod.tz),
+        })
+        return "gap noted"
+
+    @function_tool
     async def remember_about_user(self, context: RunContext, category: str,
                                   fact: str, confidence: str = "medium") -> str:
         """Save something DURABLE you just learned about the user so future
@@ -1357,6 +1457,9 @@ class CoachAgent(Agent):
         - body_response: how their body reacts — 'sleeps badly after evening coffee'
         - context: life context — 'travels most weeks for work'
         - food: standing food fact — 'vegetarian on weekdays'
+        - interest: a topic they keep asking about — 'often asks about cheat meals',
+          'curious about macros', 'keeps asking about running form' (use it to
+          anticipate what they care about)
         - adherence: did they follow a plan/advice — 'skipped the easy run I suggested'
         - mood: how they felt this time — 'felt wiped and unmotivated today'
         Keep `fact` SHORT, specific, third-person. confidence: low | medium | high."""

@@ -13,6 +13,7 @@ none of the agent's dependency conflicts.
 
 import json
 import os
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
@@ -52,6 +53,48 @@ app.add_middleware(
 @app.get("/health")
 def health():
     return {"ok": True}
+
+
+@app.get("/status")
+def status():
+    """Runtime diagnosis reachable from anywhere (issue #15) — so 'coach went
+    silent' can be traced from a phone/cloud session without opening a Mac. Checks
+    the usual culprits: OpenAI billing/quota and Supabase."""
+    out = {"token_server": "ok"}
+    okey = os.environ.get("OPENAI_API_KEY")
+    if okey:
+        try:
+            req = urllib.request.Request(
+                "https://api.openai.com/v1/models",
+                headers={"Authorization": f"Bearer {okey}"})
+            with urllib.request.urlopen(req, timeout=10) as r:
+                out["openai"] = "ok" if r.status == 200 else f"http {r.status}"
+        except urllib.error.HTTPError as e:
+            body = ""
+            try:
+                body = e.read().decode()[:200]
+            except Exception:
+                pass
+            if e.code == 429 or "insufficient_quota" in body:
+                out["openai"] = "⚠️ QUOTA/BILLING problem (top up OpenAI credits)"
+            elif e.code == 401:
+                out["openai"] = "⚠️ AUTH problem (bad/rotated OPENAI_API_KEY)"
+            else:
+                out["openai"] = f"http {e.code}: {body[:80]}"
+        except Exception as e:
+            out["openai"] = f"error: {e}"
+    else:
+        out["openai"] = "no key on token server"
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            req = urllib.request.Request(
+                f"{SUPABASE_URL}/rest/v1/nutrition_log?select=id&limit=1",
+                headers={"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"})
+            with urllib.request.urlopen(req, timeout=10) as r:
+                out["supabase"] = "ok" if r.status < 300 else f"http {r.status}"
+        except Exception as e:
+            out["supabase"] = f"error: {e}"
+    return out
 
 
 def _fetch_meals(user_id: str, days: int) -> list:
