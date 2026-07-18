@@ -26,7 +26,16 @@ struct NutritionSummary: Codable {
         var description: String?
         var verdict: String?
         var meal: String?
+        var calories: Double?
+        var protein_g: Double?
         var id: String { (description ?? "") + (verdict ?? "") }
+        /// "~450 cal · 30g P" when known.
+        var macroLine: String? {
+            var parts: [String] = []
+            if let c = calories { parts.append("~\(Int(c)) cal") }
+            if let p = protein_g { parts.append("\(Int(p))g P") }
+            return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        }
     }
 
     enum CodingKeys: String, CodingKey {
@@ -267,8 +276,13 @@ struct NutritionTabView: View {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(m.description ?? "(meal)")
                             .font(.subheadline).foregroundColor(.white)
-                        if let v = m.verdict, !v.isEmpty {
-                            Text(v.capitalized).font(.caption).foregroundColor(verdictColor(v))
+                        HStack(spacing: 8) {
+                            if let v = m.verdict, !v.isEmpty {
+                                Text(v.capitalized).font(.caption).foregroundColor(verdictColor(v))
+                            }
+                            if let macros = m.macroLine {
+                                Text(macros).font(.caption).foregroundColor(.gray)
+                            }
                         }
                     }
                     Spacer(minLength: 0)

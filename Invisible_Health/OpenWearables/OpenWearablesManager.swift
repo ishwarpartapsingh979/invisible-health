@@ -356,6 +356,14 @@ class OpenWearablesManager: NSObject, ObservableObject {
         }
     }
 
+    /// Ask OW to pull FRESH data from Whoop, then pull OW → app. Use this (not bare
+    /// performSync) whenever you want today's latest — the periodic timer and the
+    /// voice-connect path both need the fresh Whoop pull first (issues #27/#36).
+    func refreshFromWhoop(completion: (() -> Void)? = nil) {
+        triggerProviderSync()
+        performSync(completion: completion)
+    }
+
     /// POSTs to OW asking it to pull fresh data from Whoop. Fire-and-forget.
     func triggerProviderSync(provider: String = "whoop") {
         guard let uid = userId,
@@ -371,7 +379,7 @@ class OpenWearablesManager: NSObject, ObservableObject {
     private func startPeriodicSync() {
         syncTimer?.invalidate()
         syncTimer = Timer.scheduledTimer(withTimeInterval: Double(OpenWearablesConfig.syncIntervalMinutes * 60), repeats: true) { [weak self] _ in
-            self?.performSync()
+            self?.refreshFromWhoop()   // pull FRESH from Whoop, not just OW→app (#27)
         }
     }
 

@@ -789,6 +789,11 @@ alternate strength/endurance, don't let strength lapse, go LIGHTER after a high-
 day, ease in after a layoff. Concretely — if they trained hard/strength yesterday,
 dad gives a light run + easy cardio today, NOT another strength session. Never
 default to "do a strength session" without checking the arc. Say WHY it fits the arc.
+WHENEVER they settle on a workout — even casually ("I'll just do a run", "abs and
+stretching") — call set_workout_label with a short title so it shows on their
+WORKOUT tab (#39), AND call show_exercises for the main movements so the demo videos
+pop up on their screen (#38). Do this the moment it's decided, not only in a formal
+"start workout" flow.
 
 # STARTING A WORKOUT (voice-first — you LEAD this)
 When a workout starts, you PROPOSE, they DECIDE — all by voice:
@@ -2700,9 +2705,10 @@ async def entrypoint(ctx: agents.JobContext):
     # which interrupts the greeting and drops the agent to sleep until "Hey
     # Coach". In the normal Voice tab no wake_mode arrives and behavior is
     # unchanged (always listening).
-    # Give a chip-triggered "ask" (sent right after connect) a moment to arrive, so
-    # we can answer THAT instead of a generic greeting.
-    await asyncio.sleep(0.4)
+    # Give a chip-triggered "ask" (sent right after connect) a brief moment to
+    # arrive, so we can answer THAT instead of a generic greeting. Kept short so the
+    # coach greets fast on a normal open (#34).
+    await asyncio.sleep(0.2)
     pending["greeted"] = True
     if pending["ask"]:
         ask, pending["ask"] = pending["ask"], None

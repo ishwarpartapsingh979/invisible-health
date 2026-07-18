@@ -157,7 +157,8 @@ def nutrition(user_id: str = "ishwar"):
             watch.append({"desc": desc, "issues": ", ".join(bad)})
         if is_today:
             today.append({"description": desc, "verdict": m.get("verdict"),
-                          "meal": m.get("meal")})
+                          "meal": m.get("meal"), "calories": m.get("calories"),
+                          "protein_g": m.get("protein_g")})
     return {
         "total": len(meals), "protein_hits": protein_hits, "flagged": flagged,
         "days": [{"day": k, "items": v} for k, v in by_day.items()],

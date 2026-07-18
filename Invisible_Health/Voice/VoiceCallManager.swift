@@ -58,6 +58,10 @@ final class VoiceCallManager: ObservableObject, RoomDelegate {
 
     @Published private(set) var state: VoiceCallState = .idle
     @Published private(set) var isMicEnabled = true
+    /// True once the agent has actually joined the room and is ready to hear you.
+    /// Until then the UI shows "waking your coach" so early speech isn't lost to the
+    /// warm-up gap (issue #29).
+    @Published private(set) var agentReady = false
 
     /// Called when the agent publishes a logged workout "moment" (transcript +
     /// breathing analysis + HR) back over the data channel during a workout.
@@ -100,6 +104,7 @@ final class VoiceCallManager: ObservableObject, RoomDelegate {
         }
 
         state = .connecting
+        agentReady = false
         configureAudioSessionForMusic()
         do {
             // Unique room per connect so LiveKit dispatches a FRESH agent every
@@ -114,9 +119,20 @@ final class VoiceCallManager: ObservableObject, RoomDelegate {
             try await room.localParticipant.setMicrophone(enabled: true)
             isMicEnabled = true
             state = .connected
+            // Fallback: if we never see the agent join, treat as ready after a few
+            // seconds so the UI doesn't get stuck on "waking".
+            Task { [weak self] in
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                await MainActor.run { self?.agentReady = true }
+            }
         } catch {
             state = .failed(error.localizedDescription)
         }
+    }
+
+    /// The agent (a remote participant) joined → it's now listening.
+    nonisolated func room(_ room: Room, participantDidConnect participant: RemoteParticipant) {
+        Task { @MainActor in self.agentReady = true }
     }
 
     /// Leave the room and tear the call down.

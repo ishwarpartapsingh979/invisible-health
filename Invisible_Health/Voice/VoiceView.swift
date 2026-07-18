@@ -154,13 +154,21 @@ struct VoiceView: View {
             // to beat the agent-join race (the agent may not be in the room the
             // instant we connect).
             guard state == .connected else { return }
-            let ow = OpenWearablesManager.shared
-            ow.checkConnectionStatus { ow.performSync() }
+            // Local time immediately (doesn't depend on any sync); repeated to beat
+            // the agent-join race.
             for ms in [0, 800, 2200] {
                 Task {
                     try? await Task.sleep(nanoseconds: UInt64(ms) * 1_000_000)
                     await call.sendLocalTime()
-                    await call.sendWhoopContext(whoopSnapshot())
+                    await call.sendWhoopContext(whoopSnapshot())   // whatever's cached now
+                }
+            }
+            // Pull FRESH Whoop, then send the real snapshot once it's actually in —
+            // not the empty one before the sync finished (issues #36/#27).
+            let ow = OpenWearablesManager.shared
+            ow.checkConnectionStatus {
+                ow.refreshFromWhoop {
+                    Task { await call.sendWhoopContext(whoopSnapshot()) }
                 }
             }
             // Coarse location for "restaurants/gyms near me" lookups (nearby_places).
@@ -701,7 +709,7 @@ struct VoiceView: View {
         switch call.state {
         case .idle:        return "Tap to talk — or pick a shortcut"
         case .connecting:  return "Connecting…"
-        case .connected:   return "Listening — just speak"
+        case .connected:   return call.agentReady ? "Listening — just speak" : "Waking your coach…"
         case .failed:      return "Tap to try again"
         }
     }
