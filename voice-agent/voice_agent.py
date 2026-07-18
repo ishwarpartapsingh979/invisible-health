@@ -321,6 +321,59 @@ class SessionStore:
             logger.warning("meal log error: %s", e)
             return False
 
+    async def update_last_meal(self, patch: dict, user_id: str = "ishwar") -> bool:
+        """Edit the MOST RECENT logged meal (correct a mislog — issue #23)."""
+        if not self.enabled or not patch:
+            return False
+        try:
+            import aiohttp
+            async with aiohttp.ClientSession() as s:
+                params = {"user_id": f"eq.{user_id}", "order": "logged_at.desc",
+                          "limit": "1", "select": "id"}
+                async with s.get(f"{self.url}/rest/v1/nutrition_log", params=params,
+                                 headers=self._headers()) as r:
+                    rows = await r.json() if r.status < 300 else []
+                if not rows:
+                    return False
+                headers = {**self._headers({"Prefer": "return=minimal"}),
+                           "Content-Type": "application/json"}
+                async with s.patch(f"{self.url}/rest/v1/nutrition_log?id=eq.{rows[0]['id']}",
+                                   json=patch, headers=headers) as r2:
+                    ok = r2.status < 300
+                    logger.info("✏️  meal updated: %s -> %s", rows[0]["id"], patch if ok else "FAIL")
+                    return ok
+        except Exception as e:
+            logger.warning("update_last_meal failed: %s", e)
+            return False
+
+    async def delete_meal_matching(self, text: str, user_id: str = "ishwar") -> bool:
+        """Delete the most recent recently-logged meal matching `text` (issue #23)."""
+        if not self.enabled:
+            return False
+        try:
+            import aiohttp
+            meals = await self.recent_meals(days=1, user_id=user_id)
+            t = (text or "").strip().lower()
+            target = None
+            for m in reversed(meals):  # most recent first
+                d = (m.get("description") or "").lower()
+                if t and (t in d or d in t):
+                    target = m
+                    break
+            if not target and meals:
+                target = meals[-1]
+            if not target:
+                return False
+            async with aiohttp.ClientSession() as s:
+                async with s.delete(f"{self.url}/rest/v1/nutrition_log?id=eq.{target['id']}",
+                                    headers=self._headers({"Prefer": "return=minimal"})) as r:
+                    ok = r.status < 300
+                    logger.info("🗑️  meal deleted: %s (%s)", target.get("description"), ok)
+                    return ok
+        except Exception as e:
+            logger.warning("delete_meal failed: %s", e)
+            return False
+
     async def recent_meals(self, days: int = 7, user_id: str = "ishwar") -> list:
         """Meals logged in the last `days` (for the weekly nutritionist summary)."""
         if not self.enabled:
@@ -599,12 +652,19 @@ Current phase: "build-up after a reset" — rebuilding running pace in small ste
 until adapted. Trains evenings after work; often short on time; fueling and sleep
 noticeably swing his performance.
 
-# THE PRIME DIRECTIVE: never be generic
+# THE PRIME DIRECTIVE: never be generic — GROUND EVERY ANSWER IN THEM
 Every sentence must be SPECIFIC and USEFUL to THIS person, THIS moment. If a line
 could be said to anyone, or states something they obviously know, DON'T say it.
 Banned forever: "cycling is good for warming up", "good combination", "keep it
-up", "good job", "you're in a steady state". When you have nothing specific, ask
-ONE sharp question to get what you need — never fill silence with platitudes.
+up", "good job", "you're in a steady state", "have a protein-heavy breakfast", "do
+a bit of a walk". BEFORE any real advice, use what you ACTUALLY KNOW about them:
+their goal (recomp), their profile (get_profile), what they've done lately
+(get_training_history), the learned-facts block below, the time of day
+(get_local_time), and their Whoop if present. Tie the advice to a REAL detail
+about them ("it's a training day and you said you crash without breakfast, so eggs
++ toast now, not later"). If you genuinely don't know enough to be specific, ASK
+ONE sharp question (and remember_about_user the answer) — never fill the gap with a
+one-size-fits-all line.
 
 # THE DECISION HIERARCHY (how you decide anything — resolve top-down)
 1. SAFETY / GUARDRAILS override everything. Pain, injury or a recent injury scare,
@@ -721,6 +781,15 @@ deliver — the engine is the authority for the actual do/don't.
   never for gym, treadmill, or indoor work (no GPS there). It triggers a location
   permission prompt, so only fire it when they actually go outside to run.
 
+# RECOMMENDING A WORKOUT — ALWAYS THROUGH THE ARC + RULES (not off the top of your head)
+ANY time you suggest what to train — even a casual "what should I do today?" — you
+MUST FIRST call get_training_history (what they did recently) AND
+get_active_coaching_rules, and follow what they return. The dad's arc decides:
+alternate strength/endurance, don't let strength lapse, go LIGHTER after a high-RPE
+day, ease in after a layoff. Concretely — if they trained hard/strength yesterday,
+dad gives a light run + easy cardio today, NOT another strength session. Never
+default to "do a strength session" without checking the arc. Say WHY it fits the arc.
+
 # STARTING A WORKOUT (voice-first — you LEAD this)
 When a workout starts, you PROPOSE, they DECIDE — all by voice:
 1. FIRST gather get_profile + get_training_history + get_whoop_status, then call
@@ -762,6 +831,11 @@ had / are about to order — by voice, whenever they want. Your flow:
    nutrition rules; FOLLOW them. Do NOT invent swaps or pairings the rules didn't
    give you (see RULES-FIRST). If nothing's ruled, say so and address the real
    concern (e.g. the syrup/sugar in the drink), don't make up a combination.
+   EXPLAIN WHY IN PLAIN WORDS — never drop jargon like "because refined". Say what
+   it does to them in one clear line: "white-flour bread spikes your blood sugar and
+   has no fibre, so you crash and get hungry sooner"; "full-cream milk adds a chunk
+   of saturated fat and calories you don't need for the recomp goal". Simple cause →
+   effect on THEIR goal, not a label.
 3. For "what should I eat now?" use the time of day (get_local_time): protein-forward
    breakfast, a real lunch, a lighter earlier dinner (sleep runs short). Goal is
    recomposition: protein every meal is the top lever; "no added sugar" only counts
@@ -770,8 +844,10 @@ LOGGING DISCIPLINE (so the meal count stays honest): call check_meal to LOG only
 when a meal is actually EATEN or firmly decided — set eaten='yes'. For a hypothetical
 they're just asking about, or "about to order / thinking about", assess it but pass
 eaten='no' so it is NOT counted as a meal eaten today. Don't log the same meal
-twice. Set `meal` to breakfast/lunch/dinner/snack. Don't nag about food they didn't
-bring up. For a weekly picture to show their nutritionist, weekly_nutrition_summary.
+twice. Set `meal` to breakfast/lunch/dinner/snack. If they say you logged something
+WRONG, use correct_last_meal to fix it, or delete_meal to remove it — don't leave a
+bad entry. Don't nag about food they didn't bring up. For a weekly picture to show
+their nutritionist, weekly_nutrition_summary.
 
 # LOOKING THINGS UP ON THE WEB (you can actually read pages + watch videos now)
 You have real web tools — use them instead of guessing or hedging:
@@ -1437,6 +1513,31 @@ class CoachAgent(Agent):
             if prev and (prev == d or prev in d or d in prev):
                 return True
         return False
+
+    @function_tool
+    async def correct_last_meal(self, context: RunContext, description: str = "",
+                                verdict: str = "", meal: str = "") -> str:
+        """Fix a meal you logged WRONG when the user corrects you ("no, it was a
+        boiled egg, not fried", "that was lunch, not a snack"). Updates the most
+        recent logged meal — pass only the field(s) to change (description / verdict
+        keep|limit|avoid / meal breakfast|lunch|dinner|snack). Confirm the fix."""
+        patch = {k: v for k, v in {"description": description or None,
+                                   "verdict": verdict or None,
+                                   "meal": meal or None}.items() if v}
+        if not patch:
+            return "Nothing to change — ask them what to correct."
+        ok = await self._store.update_last_meal(patch)
+        return ("Fixed their last logged meal." if ok else
+                "Couldn't update it — tell them it didn't save the correction.")
+
+    @function_tool
+    async def delete_meal(self, context: RunContext, description: str = "") -> str:
+        """Remove a meal you logged by MISTAKE when the user asks ("delete that", "I
+        didn't actually eat the samosa"). Deletes the most recent matching logged
+        meal (pass what they described). Confirm you removed it."""
+        ok = await self._store.delete_meal_matching(description)
+        return ("Removed it from their log." if ok else
+                "Couldn't find that to remove — tell them, and ask which meal.")
 
     @function_tool
     async def lookup_product(self, context: RunContext, query: str) -> str:
