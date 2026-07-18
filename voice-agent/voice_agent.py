@@ -22,6 +22,7 @@ import json
 import logging
 import os
 import random
+import re
 import time
 from datetime import datetime, timezone
 
@@ -73,6 +74,43 @@ try:
 except Exception as _e:  # pragma: no cover
     _GEMINI = None
     logging.getLogger("voice-agent").warning("Gemini unavailable: %s", _e)
+
+
+async def _gemini_generate(prompt, *, search=False, url_context=False,
+                           youtube_url=None, temperature=0.3,
+                           model="gemini-3.5-flash") -> str:
+    """Single entry point for Gemini calls. Returns the text ('' on failure/no key).
+    search=Google Search grounding; url_context=read the URL(s) named in the prompt
+    (verified working); youtube_url=analyse a YouTube video (verified working)."""
+    if _GEMINI is None:
+        return ""
+    tools = []
+
+    def _tool(field, cls):
+        # Prefer the typed class; fall back to the raw dict shape (validated via REST)
+        # so an SDK version difference can't break it.
+        try:
+            return _genai_types.Tool(**{field: getattr(_genai_types, cls)()})
+        except Exception:
+            return {field: {}}
+    if search:
+        tools.append(_tool("google_search", "GoogleSearch"))
+    if url_context:
+        tools.append(_tool("url_context", "UrlContext"))
+    if youtube_url:
+        contents = [{"role": "user", "parts": [
+            {"text": prompt}, {"file_data": {"file_uri": youtube_url}}]}]
+    else:
+        contents = prompt
+    try:
+        resp = await asyncio.to_thread(
+            _GEMINI.models.generate_content, model=model, contents=contents,
+            config=_genai_types.GenerateContentConfig(
+                tools=tools or None, temperature=temperature))
+        return (getattr(resp, "text", "") or "").strip()
+    except Exception as e:
+        logging.getLogger("voice-agent").warning("gemini call failed: %s", e)
+        return ""
 
 
 class SessionTracer:
@@ -735,6 +773,24 @@ eaten='no' so it is NOT counted as a meal eaten today. Don't log the same meal
 twice. Set `meal` to breakfast/lunch/dinner/snack. Don't nag about food they didn't
 bring up. For a weekly picture to show their nutritionist, weekly_nutrition_summary.
 
+# LOOKING THINGS UP ON THE WEB (you can actually read pages + watch videos now)
+You have real web tools — use them instead of guessing or hedging:
+- browse_web — READ a specific site's live/structured data: class schedules & slots
+  ("Cult / Sonnet dance-fitness slots next week"), a restaurant's actual MENU, hours,
+  prices. Pass a url if you know it, else describe what you want.
+- nearby_places — real places NEAR them (restaurants to eat, gyms/studios) from their
+  live location. Use for "good places to eat near me". Then browse_web the chosen
+  place's menu and rank items by their macros.
+- recipe_ideas — fresh meal ideas from popular cooking videos, fitted to their goal +
+  tastes, for when they're bored of their food.
+- lookup_product (a named food's nutrition) and web_lookup (a quick general web fact)
+  as before.
+CRUCIAL — no dead air: these take a few seconds, and the mic is live. BEFORE calling
+any of them, say a SHORT bridge line out loud ("let me pull that up", "one sec, let
+me check what's around you", "let me find you some ideas") so it never goes silent.
+And ATTRIBUTE: say it's from the web/their site/a popular recipe, not a dad/
+nutritionist rule.
+
 # GETTING TO KNOW THEM (you improve the more they talk — do this REACTIVELY)
 You get more useful every conversation by LEARNING this person. Two habits:
 1. CAPTURE: whenever they reveal something DURABLE — a preference ("hate burpees"),
@@ -834,6 +890,27 @@ class TimeContext:
         day = self.date_str or self.date or ""
         return (f"{day}, {self.time_str} ({self.period}) local time"
                 + (f" ({self.tz})" if self.tz else "")).strip(", ")
+
+
+class LocationContext:
+    """The user's COARSE location, streamed from the app for 'near me' lookups
+    (restaurants/gyms via nearby_places). Distinct from the workout GPS (GeoContext,
+    which is live distance/pace during a run)."""
+
+    def __init__(self) -> None:
+        self.lat = None
+        self.lng = None
+        self.area = None
+
+    def update(self, msg: dict) -> None:
+        self.lat = msg.get("lat")
+        self.lng = msg.get("lng")
+        self.area = msg.get("area")
+
+    def position(self):
+        if self.lat is not None and self.lng is not None:
+            return self.lat, self.lng
+        return None
 
 
 class ProfileContext:
@@ -1221,8 +1298,9 @@ class CoachAgent(Agent):
     def __init__(self, hr: HRContext, whoop: WhoopContext, publish_exercises, wake,
                  store: "SessionStore", geo: "GeoContext", profile: "ProfileContext",
                  publish_plans, publish_signal, tod: "TimeContext",
-                 learned: str = "") -> None:
+                 learned: str = "", loc: "LocationContext" = None) -> None:
         super().__init__(instructions=INSTRUCTIONS + (learned or ""))
+        self._loc = loc
         self._hr = hr
         self._whoop = whoop
         self._publish_exercises = publish_exercises
@@ -1383,26 +1461,12 @@ class CoachAgent(Agent):
             "Est per serving: ~<n>g sugar, ~<n>g protein, ~<n> cal\n"
             "Flags: refined=<yes/no>, fried=<yes/no>, sugar=<yes/no>, protein=<yes/no>\n"
             "If you genuinely can't identify it, reply only: NOT FOUND")
-        try:
-            resp = await asyncio.to_thread(
-                _GEMINI.models.generate_content,
-                model="gemini-3.5-flash",
-                contents=prompt,
-                config=_genai_types.GenerateContentConfig(
-                    tools=[_genai_types.Tool(google_search=_genai_types.GoogleSearch())],
-                    temperature=0.2,
-                ),
-            )
-            out = (getattr(resp, "text", "") or "").strip()
-            logger.info("🔎 product lookup: %s", query)
-            if not out or "NOT FOUND" in out.upper():
-                return ("Couldn't identify that item — ask the user to describe it "
-                        "(ingredients, sweetened?, size).")
-            return out
-        except Exception as e:
-            logger.warning("lookup_product failed: %s", e)
-            return ("Lookup failed — ask the user to describe the item (ingredients, "
-                    "sweetened?, size).")
+        out = await _gemini_generate(prompt, search=True, temperature=0.2)
+        logger.info("🔎 product lookup: %s", query)
+        if not out or "NOT FOUND" in out.upper():
+            return ("Couldn't identify that item — ask the user to describe it "
+                    "(ingredients, sweetened?, size).")
+        return out
 
     @function_tool
     async def web_lookup(self, context: RunContext, query: str) -> str:
@@ -1413,22 +1477,150 @@ class CoachAgent(Agent):
         nutrition, use lookup_product instead.) If nothing solid is found, say so."""
         if _GEMINI is None:
             return "Web lookup isn't available right now."
+        out = await _gemini_generate(
+            f"Answer concisely (<=70 words) using current web info: {query}",
+            search=True)
+        logger.info("🔎 web lookup: %s", query)
+        return out or "Couldn't find anything reliable on that."
+
+    @function_tool
+    async def browse_web(self, context: RunContext, query: str, url: str = "") -> str:
+        """READ a specific website's LIVE/structured data — class schedules & slots
+        (e.g. 'Cult / Sonnet dance-fitness slots for next week'), a restaurant's
+        actual MENU, opening hours, prices — not a vague search summary. Pass `url`
+        if you know the exact page; otherwise leave it blank and describe what you
+        want in `query` and it'll find + read the right page. SAY a short 'let me
+        pull that up' BEFORE calling (it takes a few seconds). Returns the concrete
+        info found; if the page can't be read, say so plainly."""
+        if _GEMINI is None:
+            return "Web browsing isn't available right now."
+        if url:
+            prompt = (f"Read this page: {url}\nExtract exactly what's asked, concise + "
+                      f"structured (list slots/times/menu items as bullet lines).\n"
+                      f"Question: {query}\nIf the page can't be read, say NOT AVAILABLE.")
+        else:
+            prompt = (f"Find the most relevant official/source page and READ it to "
+                      f"answer, concise + structured (list slots/times/menu items as "
+                      f"bullets). Question: {query}\nIf not found, say NOT AVAILABLE.")
+        out = await _gemini_generate(prompt, search=not url, url_context=True)
+        logger.info("🔎 browse: %s%s", query, f" [{url}]" if url else "")
+        if not out or "NOT AVAILABLE" in out.upper():
+            return "Couldn't read that page's live data — tell them you couldn't pull it up."
+        return out
+
+    @function_tool
+    async def nearby_places(self, context: RunContext, query: str) -> str:
+        """Find real places NEAR the user — restaurants/cafés to eat, gyms, studios.
+        Use for 'good places to eat near me', 'healthy lunch nearby'. Returns a
+        COMPLETE ranked list (name, rating, area) from Google Places using their live
+        location — much better than guessing. SAY 'let me check what's around you'
+        first. Then, for a place they pick, use browse_web on its menu to rank items
+        by their macros. If location is unknown, ask which area they're in."""
+        loc = getattr(self, "_loc", None)
+        pos = loc.position() if loc else None
+        if not pos:
+            return ("I don't have their location yet — ask which area/neighbourhood "
+                    "they're in, then you can still browse_web for places there.")
+        lat, lng = pos
+        key = os.environ.get("GOOGLE_MAPS_KEY")
+        if not key:
+            return "Places search isn't configured — fall back to web_lookup for now."
         try:
-            resp = await asyncio.to_thread(
-                _GEMINI.models.generate_content,
-                model="gemini-3.5-flash",
-                contents=f"Answer concisely (<=70 words) using current web info: {query}",
-                config=_genai_types.GenerateContentConfig(
-                    tools=[_genai_types.Tool(google_search=_genai_types.GoogleSearch())],
-                    temperature=0.3,
-                ),
-            )
-            out = (getattr(resp, "text", "") or "").strip()
-            logger.info("🔎 web lookup: %s", query)
-            return out or "Couldn't find anything reliable on that."
+            import aiohttp
+            headers = {"Content-Type": "application/json", "X-Goog-Api-Key": key,
+                       "X-Goog-FieldMask": "places.displayName,places.rating,"
+                       "places.formattedAddress,places.priceLevel,places.googleMapsUri"}
+            body = {"textQuery": query,
+                    "locationBias": {"circle": {"center": {"latitude": lat,
+                                     "longitude": lng}, "radius": 4000.0}},
+                    "maxResultCount": 6}
+            async with aiohttp.ClientSession() as s:
+                async with s.post("https://places.googleapis.com/v1/places:searchText",
+                                  json=body, headers=headers,
+                                  timeout=aiohttp.ClientTimeout(total=12)) as r:
+                    if r.status >= 300:
+                        logger.warning("places %s: %s", r.status, (await r.text())[:160])
+                        return "Places search failed — fall back to web_lookup."
+                    data = await r.json()
         except Exception as e:
-            logger.warning("web_lookup failed: %s", e)
-            return "Web lookup failed right now."
+            logger.warning("nearby_places failed: %s", e)
+            return "Places search failed — fall back to web_lookup."
+        items = []
+        for p in (data.get("places") or [])[:6]:
+            nm = (p.get("displayName") or {}).get("text") or "a place"
+            addr = p.get("formattedAddress") or ""
+            rating = p.get("rating")
+            sub = " · ".join(x for x in [f"{rating}★" if rating else "",
+                                         addr.split(",")[0]] if x)
+            items.append({"title": nm, "subtitle": sub, "detail": addr,
+                          "url": p.get("googleMapsUri") or "", "action": "menu"})
+        logger.info("📍 nearby_places: %s (%d)", query, len(items))
+        if not items:
+            return "Nothing came up nearby — ask them to widen the area or a cuisine."
+        # Render the list on screen (cards); coach just speaks a short summary.
+        try:
+            await self._publish_signal("results", {
+                "kind": "places", "title": f"Near you — {query}", "items": items})
+        except Exception:
+            pass
+        top = ", ".join(i["title"] for i in items[:3])
+        return (f"Showed {len(items)} places on their screen (top: {top}). Say a "
+                "ONE-line summary + your top pick — don't read the whole list; they "
+                "can tap one to see its menu.")
+
+    @function_tool
+    async def recipe_ideas(self, context: RunContext, theme: str = "") -> str:
+        """Suggest FRESH meal ideas to beat food monotony — when they're bored of
+        their food or want something new that still fits the goal. Finds popular
+        cooking videos and adapts real recipes to their recomp goal + macros + what
+        they like/dislike. `theme` = optional cuisine/craving ('high-protein dinner',
+        'quick breakfast', 'paneer'). SAY 'let me find you some ideas' first (takes a
+        few seconds). Give 2-3 concrete dishes: what it is, a quick how-to, rough
+        macros, and that it's adapted from a popular recipe."""
+        if _GEMINI is None:
+            return "Recipe ideas aren't available right now."
+        likes = []
+        try:
+            for f in await self._store.recent_facts(limit=40):
+                if (f.get("category") or "") in ("food", "preference"):
+                    likes.append(f.get("fact") or "")
+        except Exception:
+            pass
+        profile = self._profile.summary() if self._profile else ""
+        prompt = (
+            "You are a nutrition-savvy chef. Find 2-3 POPULAR cooking videos on "
+            f"YouTube for: {theme or 'varied healthy Indian-friendly meals'}. Adapt "
+            "each into a dish that fits a body-RECOMPOSITION goal (high protein, "
+            "moderate calories, not deep-fried, minimal refined carbs).\n"
+            f"User profile: {profile or 'busy professional, fat loss + build muscle'}\n"
+            f"Likes/notes: {'; '.join([x for x in likes if x][:8]) or 'Indian home food'}\n"
+            "Return ONLY a JSON array of 2-3 objects, no prose:\n"
+            '[{"dish":"name","how":"one-line how-to","macros":"~<n>g protein · ~<n> cal",'
+            '"video":"<youtube url or empty>"}]')
+        out = await _gemini_generate(prompt, search=True)
+        logger.info("🍳 recipe_ideas: %s", theme or "(general)")
+        items = []
+        try:
+            txt = re.sub(r"^```(?:json)?|```$", "", out.strip(), flags=re.M).strip()
+            for r in (json.loads(txt) or [])[:3]:
+                items.append({"title": r.get("dish", "a dish"),
+                              "subtitle": r.get("macros", ""),
+                              "detail": r.get("how", ""),
+                              "url": r.get("video", ""), "action": ""})
+        except Exception:
+            items = []
+        if items:
+            try:
+                await self._publish_signal("results", {
+                    "kind": "recipes",
+                    "title": f"Meal ideas{(' — ' + theme) if theme else ''}",
+                    "items": items})
+            except Exception:
+                pass
+            names = ", ".join(i["title"] for i in items)
+            return (f"Showed {len(items)} meal ideas on their screen ({names}). Give a "
+                    "ONE-line pitch for your favourite; they can tap one to watch it.")
+        return out or "Couldn't pull recipe ideas right now — ask what flavours they want."
 
     @function_tool
     async def log_rule_gap(self, context: RunContext, question: str,
@@ -1913,6 +2105,7 @@ async def entrypoint(ctx: agents.JobContext):
     geo = GeoContext()
     profile = ProfileContext()
     tod = TimeContext()
+    loc = LocationContext()
     wake = WakeController()
     store = SessionStore()
 
@@ -1990,6 +2183,9 @@ async def entrypoint(ctx: agents.JobContext):
             logger.info("🧑 profile: %s", profile.summary())
         elif kind == "local_time":
             tod.update(msg)
+        elif kind == "location":
+            loc.update(msg)
+            logger.info("📍 location: %s", msg.get("area") or (msg.get("lat"), msg.get("lng")))
         elif kind == "wake_mode":
             # iOS enables this when a workout starts (hands-free "Hey Coach").
             if msg.get("enabled"):
@@ -2177,7 +2373,7 @@ async def entrypoint(ctx: agents.JobContext):
 
     coach = CoachAgent(hr, whoop, publish_exercises, wake, store,
                        geo, profile, publish_plans, publish_signal, tod,
-                       learned=learned)
+                       learned=learned, loc=loc)
     coach._planstate = planstate
     coach._get_turns = lambda: wlog["turns"][-40:]
     await session.start(

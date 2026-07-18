@@ -82,7 +82,7 @@ jobs:
           # OPENAI_API_KEY = the coach's brain + the moment-analysis calls.
           # LANGFUSE_* = tracing every turn/decision for the weekly evals (the
           # tracer no-ops if these are absent, so it's safe either way).
-          SECRET_LIST: OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},LANGFUSE_PUBLIC_KEY=${{ secrets.LANGFUSE_PUBLIC_KEY }},LANGFUSE_SECRET_KEY=${{ secrets.LANGFUSE_SECRET_KEY }},LANGFUSE_HOST=${{ secrets.LANGFUSE_HOST }},SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }},GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
+          SECRET_LIST: OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},LANGFUSE_PUBLIC_KEY=${{ secrets.LANGFUSE_PUBLIC_KEY }},LANGFUSE_SECRET_KEY=${{ secrets.LANGFUSE_SECRET_KEY }},LANGFUSE_HOST=${{ secrets.LANGFUSE_HOST }},SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }},GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }},GOOGLE_MAPS_KEY=${{ secrets.GOOGLE_MAPS_KEY }}
         with:
           OPERATION: deploy
           WORKING_DIRECTORY: voice-agent

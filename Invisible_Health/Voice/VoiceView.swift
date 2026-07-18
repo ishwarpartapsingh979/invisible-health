@@ -36,6 +36,10 @@ struct VoiceView: View {
     private struct ExerciseDeck: Identifiable { let id = UUID(); let muscle: String; let items: [ExerciseItem] }
     @State private var exerciseDeck: ExerciseDeck?
 
+    /// A results list the coach pushed to show on screen (nearby places, meal ideas).
+    private struct ResultsDeck: Identifiable { let id = UUID(); let results: AgentResults }
+    @State private var resultsDeck: ResultsDeck?
+
     /// Today's 3 plan options pushed by the coach (#11), and the onboarding sheet.
     @State private var planDeck: [CoachPlan]?
     @State private var showOnboarding = false
@@ -159,6 +163,8 @@ struct VoiceView: View {
                     await call.sendWhoopContext(whoopSnapshot())
                 }
             }
+            // Coarse location for "restaurants/gyms near me" lookups (nearby_places).
+            Task { await call.sendLocation() }
         }
         .onChange(of: exerciseDeck != nil) { deckOpen in
             // While the deck is open the user is browsing (silent) — ping the
@@ -200,6 +206,14 @@ struct VoiceView: View {
             ExerciseCardsView(muscle: deck.muscle, items: deck.items) {
                 exerciseDeck = nil
             }
+        }
+        .sheet(item: $resultsDeck) { deck in
+            ResultsCardsView(results: deck.results, onAction: { item in
+                resultsDeck = nil
+                // "See menu" → ask the coach to rank that place's menu for the goal.
+                Task { await call.sendAsk(
+                    "What's the best item at \(item.title) for my goals, with protein and calories?") }
+            }, onClose: { resultsDeck = nil })
         }
         .fullScreenCover(item: Binding(
             get: { planDeck.map { PlanDeck(plans: $0) } },
@@ -564,6 +578,8 @@ struct VoiceView: View {
         call.onCoachState = { state in handleCoachState(state) }
         // Agent → app: today's 3 plan options → present the plan cards (#11).
         call.onPlans = { plans in planDeck = plans }
+        // Agent → app: a results list (nearby places / meal ideas) → show cards.
+        call.onResults = { results in resultsDeck = ResultsDeck(results: results) }
         // Agent → app: outdoor run → start GPS (triggers the permission prompt).
         call.onStartGPS = { workout.startLocation() }
         // Agent → app: opening chat done → switch to hands-free "Hey Coach".
