@@ -50,6 +50,11 @@ struct VoiceView: View {
     @State private var keepAliveTimer: Timer?
 
     var body: some View {
+      // Scroll when the content is taller than the screen (small phones / big
+      // dynamic type) so it never compresses or shifts up (#28); minHeight keeps
+      // it vertically centered when it does fit.
+      GeometryReader { geo in
+       ScrollView {
         VStack(spacing: 28) {
             VStack(spacing: 3) {
                 Text(greeting)
@@ -145,6 +150,7 @@ struct VoiceView: View {
                     .padding(.horizontal, 32)
             }
         }
+        .frame(maxWidth: .infinity, minHeight: geo.size.height)
         .padding(.vertical, 20)
         .onChange(of: isLive) { live in pulse = live }
         .onChange(of: call.state) { state in
@@ -250,6 +256,8 @@ struct VoiceView: View {
                     NotificationManager.shared.schedulePreWorkoutNudge()
                 })
         }
+       }   // ScrollView
+      }    // GeometryReader
     }
 
     /// Wrapper so an array can drive `.fullScreenCover(item:)`.
