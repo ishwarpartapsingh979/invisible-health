@@ -518,6 +518,33 @@ class SessionStore:
             logger.warning("profile fetch error: %s", e)
         return {}
 
+    async def get_schedules(self, kind: str = "", user_id: str = "ishwar") -> list:
+        """Schedules the user has SHOWN us (user_schedules) — login-gated class
+        timetables / diet charts extracted by Gemini vision, still within their
+        validity window (valid_to today-or-later, or open-ended). Newest first."""
+        if not self.enabled:
+            return []
+        try:
+            import datetime as _dt
+            import aiohttp
+            today = _dt.date.today().isoformat()
+            params = {"user_id": f"eq.{user_id}", "order": "captured_at.desc",
+                      "limit": "10",
+                      # still valid: no end date, or ends today-or-later.
+                      "or": f"(valid_to.is.null,valid_to.gte.{today})"}
+            if kind:
+                params["kind"] = f"eq.{kind}"
+            async with aiohttp.ClientSession() as s:
+                async with s.get(f"{self.url}/rest/v1/user_schedules",
+                                 params=params, headers=self._headers(),
+                                 timeout=aiohttp.ClientTimeout(total=15)) as r:
+                    if r.status < 300:
+                        return await r.json()
+                    logger.warning("schedules fetch %s", r.status)
+        except Exception as e:
+            logger.warning("schedules fetch error: %s", e)
+        return []
+
     @staticmethod
     def summarize_for_coach(sessions: list) -> str:
         """A compact human string of recent sessions for the coach's context."""
@@ -811,16 +838,20 @@ When a workout starts, you PROPOSE, they DECIDE — all by voice:
    go quiet for the rest of the workout (they say "Hey Coach" to reach you). From
    here on, coach the session they actually chose.
 
-# ONBOARDING (voice-first — you interview them)
+# ONBOARDING (voice-first — you interview them, TRAINING *and* NUTRITION)
 When you're asked to set up their profile (a "let's set up" / onboarding cue),
-run a short, warm VOICE interview — one question at a time — to learn: their main
-goal; how they like to train (gym strength / running / dance / mixed); experience
-level; days per week; equipment / where they train; any injuries or limits. THEN,
-before finishing, ask ONE more thing YOU think matters that they haven't told you
-(e.g., their schedule/time of day, a target event, what's held them back before,
-what motivates them) — your judgement. When you have it all, call save_profile
-with the fields, then confirm warmly in one sentence. Keep it conversational, not
-a rigid form.
+run a short, warm VOICE interview — one question at a time, conversational, not a
+rigid form. Cover BOTH sides:
+TRAINING: their main goal; how they like to train (gym strength / running / dance /
+mixed); experience level; days per week; equipment / where they train; any injuries
+or limits.
+NUTRITION: their diet type (veg / non-veg / vegan / eggetarian); any allergies or
+foods they must avoid; foods they LOVE and ones they hate; how often they cook vs
+eat out; rough meals a day; and their nutrition goal (fat loss / build muscle /
+recomp / maintain / just eat healthier).
+THEN ask ONE more thing YOUR judgement says matters they haven't told you (schedule,
+a target event, what's held them back, what motivates them). When you have it all,
+call save_profile with everything, then confirm warmly in one sentence.
 
 # NUTRITION (all day — identify, assess against the rules, advise, log)
 Food is half of what you do. They'll ask what to eat or when, or tell you what they
@@ -859,13 +890,25 @@ You have real web tools — use them instead of guessing or hedging:
 - browse_web — READ a specific site's live/structured data: class schedules & slots
   ("Cult / Sonnet dance-fitness slots next week"), a restaurant's actual MENU, hours,
   prices. Pass a url if you know it, else describe what you want.
-- nearby_places — real places NEAR them (restaurants to eat, gyms/studios) from their
-  live location. Use for "good places to eat near me". Then browse_web the chosen
-  place's menu and rank items by their macros.
+- nearby_places — ALWAYS use this for "places near me" (restaurants to eat, gyms,
+  studios) — it uses their live location and shows a card list. Do NOT use browse_web
+  to hunt for nearby places. After they pick one, browse_web its menu.
 - recipe_ideas — fresh meal ideas from popular cooking videos, fitted to their goal +
   tastes, for when they're bored of their food.
+- get_my_schedules — read a class timetable / diet chart they've already SHOWN you
+  (Cult, a studio, society classes, a nutritionist's PDF). Use this FIRST for "my
+  classes / my timetable / my diet chart" — it's the login-gated stuff you can't browse.
+- show_me — opens a capture screen so they can screenshot / screen-record something
+  you can't reach (anything behind a login). Then read it back with get_my_schedules.
 - lookup_product (a named food's nutrition) and web_lookup (a quick general web fact)
   as before.
+DON'T LOOP / DON'T BURN TOKENS: call a web tool ONCE. If it comes back "NOT
+AVAILABLE" or the page needs a LOGIN (e.g. a Cult/studio class schedule behind an
+account), do NOT retry it with reworded queries. Instead: for THEIR gated schedule or
+diet chart, call get_my_schedules — and if that's empty, call show_me so they can
+show it to you (say "I can't get in there, but show me and I'll remember it"). For
+anything else gated, just say plainly you can't get it and offer what you CAN.
+Repeated retries cause rate-limit failures and dead air.
 CRUCIAL — no dead air: these take a few seconds, and the mic is live. BEFORE calling
 any of them, say a SHORT bridge line out loud ("let me pull that up", "one sec, let
 me check what's around you", "let me find you some ideas") so it never goes silent.
@@ -1022,6 +1065,21 @@ class ProfileContext:
             parts.append(f"equipment: {d['equipment']}")
         if d.get("injuries"):
             parts.append(f"injuries/limits: {d['injuries']}")
+        # Nutrition side of the profile — so food advice is personalised too.
+        if d.get("nutrition_goal"):
+            parts.append(f"nutrition goal: {d['nutrition_goal']}")
+        if d.get("diet_type"):
+            parts.append(f"diet: {d['diet_type']}")
+        if d.get("food_avoid"):
+            parts.append(f"avoids/allergic: {d['food_avoid']}")
+        if d.get("food_likes"):
+            parts.append(f"loves: {d['food_likes']}")
+        if d.get("food_dislikes"):
+            parts.append(f"dislikes: {d['food_dislikes']}")
+        if d.get("meals_per_day"):
+            parts.append(f"{d['meals_per_day']} meals/day")
+        if d.get("cooks_or_eats_out"):
+            parts.append(f"cooking: {d['cooks_or_eats_out']}")
         return "; ".join(parts) if parts else None
 
 
@@ -1615,6 +1673,58 @@ class CoachAgent(Agent):
         return out
 
     @function_tool
+    async def get_my_schedules(self, context: RunContext, kind: str = "") -> str:
+        """Read schedules the user has already SHOWN you — their Cult/studio class
+        timetable, society fitness classes, or a nutritionist's diet chart (the
+        login-gated stuff you can't browse). Use this FIRST when they ask about their
+        classes/timetable or their diet chart. `kind` = "fitness" or "nutrition"
+        (blank = all). If it returns nothing, call show_me to ask them to show it —
+        do NOT try browse_web on a login-gated app."""
+        rows = await self._store.get_schedules(kind=kind)
+        if not rows:
+            return ("Nothing on file yet. Call show_me so they can screenshot / "
+                    "screen-record it for you.")
+        out = []
+        for s in rows[:4]:
+            ex = s.get("extracted") or {}
+            title = s.get("title") or ex.get("title") or (s.get("kind") or "schedule")
+            vt = s.get("valid_to") or ex.get("valid_to")
+            head = title + (f" (until {vt})" if vt else "")
+            lines = []
+            for it in (ex.get("items") or [])[:12]:
+                prim = it.get("name") or it.get("slot") or ""
+                extra = it.get("items")
+                bits = [it.get("day"), it.get("time"), it.get("location")]
+                if extra:
+                    bits.append(", ".join(extra) if isinstance(extra, list) else str(extra))
+                sub = " · ".join(x for x in bits if x)
+                lines.append(f"  - {prim}{(' — ' + sub) if sub else ''}")
+            out.append(head + ("\n" + "\n".join(lines) if lines else ""))
+        logger.info("🗓️ get_my_schedules: kind=%s (%d)", kind or "all", len(rows))
+        return "Their saved schedules:\n" + "\n".join(out)
+
+    @function_tool
+    async def show_me(self, context: RunContext, kind: str = "fitness",
+                      reason: str = "") -> str:
+        """Ask the user to SHOW you something you can't access — a login-gated class
+        timetable (Cult, a studio, society classes) or a diet chart. Opens a capture
+        screen on their phone (screenshot / screen-recording / PDF) which you then
+        read back with get_my_schedules. Call this INSTEAD of retrying browse_web on
+        anything behind a login. `kind` = "fitness" or "nutrition"; `reason` = one
+        short line for the screen (e.g. "Cult needs a login — show me the classes").
+        SAY a short 'I can't get in there, but if you show me I'll remember it' too."""
+        try:
+            await self._publish_signal("show_me", {
+                "kind": kind if kind in ("fitness", "nutrition") else "fitness",
+                "reason": reason})
+        except Exception as e:
+            logger.warning("show_me publish failed: %s", e)
+            return "Couldn't open the capture screen — ask them to add it from the Workout tab."
+        logger.info("📸 show_me: kind=%s", kind)
+        return ("Opened the capture screen on their phone. Tell them to screenshot or "
+                "screen-record it; once they do, call get_my_schedules to read it.")
+
+    @function_tool
     async def nearby_places(self, context: RunContext, query: str) -> str:
         """Find real places NEAR the user — restaurants/cafés to eat, gyms, studios.
         Use for 'good places to eat near me', 'healthy lunch nearby'. Returns a
@@ -1633,13 +1743,16 @@ class CoachAgent(Agent):
             return "Places search isn't configured — fall back to web_lookup for now."
         try:
             import aiohttp
+            import math
             headers = {"Content-Type": "application/json", "X-Goog-Api-Key": key,
                        "X-Goog-FieldMask": "places.displayName,places.rating,"
-                       "places.formattedAddress,places.priceLevel,places.googleMapsUri"}
+                       "places.userRatingCount,places.priceLevel,"
+                       "places.primaryTypeDisplayName,places.editorialSummary,"
+                       "places.formattedAddress,places.googleMapsUri,places.location"}
             body = {"textQuery": query,
                     "locationBias": {"circle": {"center": {"latitude": lat,
                                      "longitude": lng}, "radius": 4000.0}},
-                    "maxResultCount": 6}
+                    "maxResultCount": 8}
             async with aiohttp.ClientSession() as s:
                 async with s.post("https://places.googleapis.com/v1/places:searchText",
                                   json=body, headers=headers,
@@ -1651,28 +1764,112 @@ class CoachAgent(Agent):
         except Exception as e:
             logger.warning("nearby_places failed: %s", e)
             return "Places search failed — fall back to web_lookup."
-        items = []
-        for p in (data.get("places") or [])[:6]:
+
+        def _km(la, ln):
+            try:
+                dla, dln = math.radians(la - lat), math.radians(ln - lng)
+                a = (math.sin(dla / 2) ** 2 + math.cos(math.radians(lat)) *
+                     math.cos(math.radians(la)) * math.sin(dln / 2) ** 2)
+                return round(6371 * 2 * math.asin(math.sqrt(a)), 1)
+            except Exception:
+                return None
+        PSYM = {"PRICE_LEVEL_INEXPENSIVE": "₹", "PRICE_LEVEL_MODERATE": "₹₹",
+                "PRICE_LEVEL_EXPENSIVE": "₹₹₹", "PRICE_LEVEL_VERY_EXPENSIVE": "₹₹₹₹"}
+        items, lines = [], []
+        for i, p in enumerate((data.get("places") or [])[:8], 1):
             nm = (p.get("displayName") or {}).get("text") or "a place"
+            rating, count = p.get("rating"), p.get("userRatingCount")
+            cuisine = (p.get("primaryTypeDisplayName") or {}).get("text")
+            summary = (p.get("editorialSummary") or {}).get("text")
             addr = p.get("formattedAddress") or ""
-            rating = p.get("rating")
-            sub = " · ".join(x for x in [f"{rating}★" if rating else "",
-                                         addr.split(",")[0]] if x)
-            items.append({"title": nm, "subtitle": sub, "detail": addr,
+            psym = PSYM.get(p.get("priceLevel") or "", "")
+            gl = p.get("location") or {}
+            dist = _km(gl["latitude"], gl["longitude"]) if gl.get("latitude") is not None else None
+            sub = " · ".join(x for x in [
+                (f"{rating}★" + (f" ({count})" if count else "")) if rating else "",
+                cuisine or "", (f"{dist} km" if dist is not None else ""), psym] if x)
+            items.append({"title": nm, "subtitle": sub, "detail": summary or addr,
                           "url": p.get("googleMapsUri") or "", "action": "menu"})
+            parts = [f"{i}. {nm}"]
+            if rating:
+                parts.append(f"{rating}★ ({count or '?'} reviews)")
+            if psym:
+                parts.append(psym)
+            if cuisine:
+                parts.append(cuisine)
+            if dist is not None:
+                parts.append(f"{dist} km")
+            if summary:
+                parts.append(f'"{summary}"')
+            lines.append(" — ".join(parts))
         logger.info("📍 nearby_places: %s (%d)", query, len(items))
         if not items:
             return "Nothing came up nearby — ask them to widen the area or a cuisine."
-        # Render the list on screen (cards); coach just speaks a short summary.
         try:
             await self._publish_signal("results", {
                 "kind": "places", "title": f"Near you — {query}", "items": items})
         except Exception:
             pass
-        top = ", ".join(i["title"] for i in items[:3])
-        return (f"Showed {len(items)} places on their screen (top: {top}). Say a "
-                "ONE-line summary + your top pick — don't read the whole list; they "
-                "can tap one to see its menu.")
+        return ("Places near them (also shown as cards):\n" + "\n".join(lines) +
+                "\n\nYou HAVE their rating, review count, cuisine, price and distance "
+                "— sort/recommend by whatever they ask (best-rated, closest, cheapest, "
+                "a cuisine) and give a SHORT spoken pick for THEIR goals; don't read "
+                "the whole list aloud. For what people love / best dishes at one, use "
+                "place_reviews then browse_web its menu.")
+
+    @function_tool
+    async def place_reviews(self, context: RunContext, query: str) -> str:
+        """What PEOPLE actually say about a specific place — real review snippets +
+        rating — so you can tell them what's loved and the best dishes. Use after
+        nearby_places when they ask 'what's good there / what do people like'. Pair
+        with browse_web for the menu + macros. `query` = the place name (+ area)."""
+        key = os.environ.get("GOOGLE_MAPS_KEY")
+        if not key:
+            return "Reviews aren't available — try browse_web for the place instead."
+        loc = getattr(self, "_loc", None)
+        pos = loc.position() if loc else None
+        try:
+            import aiohttp
+            headers = {"Content-Type": "application/json", "X-Goog-Api-Key": key,
+                       "X-Goog-FieldMask": "places.displayName,places.rating,"
+                       "places.userRatingCount,places.reviews,places.editorialSummary"}
+            body = {"textQuery": query, "maxResultCount": 1}
+            if pos:
+                body["locationBias"] = {"circle": {"center": {"latitude": pos[0],
+                                        "longitude": pos[1]}, "radius": 6000.0}}
+            async with aiohttp.ClientSession() as s:
+                async with s.post("https://places.googleapis.com/v1/places:searchText",
+                                  json=body, headers=headers,
+                                  timeout=aiohttp.ClientTimeout(total=12)) as r:
+                    if r.status >= 300:
+                        logger.warning("place_reviews %s: %s", r.status, (await r.text())[:160])
+                        return "Couldn't pull reviews — use browse_web for the place."
+                    data = await r.json()
+        except Exception as e:
+            logger.warning("place_reviews failed: %s", e)
+            return "Couldn't pull reviews — use browse_web for the place."
+        places = data.get("places") or []
+        if not places:
+            return "Couldn't find that exact place — ask them to confirm the name/area."
+        p = places[0]
+        nm = (p.get("displayName") or {}).get("text") or "the place"
+        rating, count = p.get("rating"), p.get("userRatingCount")
+        summ = (p.get("editorialSummary") or {}).get("text")
+        revs = []
+        for rv in (p.get("reviews") or [])[:4]:
+            t = ((rv.get("text") or {}).get("text")
+                 or (rv.get("originalText") or {}).get("text"))
+            if t:
+                revs.append(t.replace("\n", " ").strip()[:200])
+        logger.info("⭐ place_reviews: %s (%d)", query, len(revs))
+        out = [f"{nm}: {rating}★ ({count or '?'} reviews)."]
+        if summ:
+            out.append(summ)
+        if revs:
+            out.append("What people say:\n- " + "\n- ".join(revs))
+        out.append("Pull the loved DISHES out of these + browse_web the menu for "
+                   "macros, then give them a specific rec for their goal.")
+        return "\n".join(out)
 
     @function_tool
     async def recipe_ideas(self, context: RunContext, theme: str = "") -> str:
@@ -2070,13 +2267,25 @@ class CoachAgent(Agent):
         self, context: RunContext,
         goal: str, preferred: str, level: str, days_per_week: int,
         equipment: str, injuries: str = "", notes: str = "",
+        diet_type: str = "", food_avoid: str = "", food_likes: str = "",
+        food_dislikes: str = "", meals_per_day: str = "", cooks_or_eats_out: str = "",
+        nutrition_goal: str = "",
     ) -> str:
-        """Save the user's profile after the onboarding interview. `notes` holds
-        the extra thing you asked at the end (schedule, target event, motivation,
-        etc.). Call this once you've gathered everything by voice."""
+        """Save the user's profile after the onboarding interview — TRAINING and
+        NUTRITION. Training: goal/preferred/level/days_per_week/equipment/injuries.
+        Nutrition: diet_type (veg/non-veg/vegan/eggetarian), food_avoid (allergies/
+        restrictions), food_likes, food_dislikes, meals_per_day, cooks_or_eats_out,
+        nutrition_goal (fat loss/build muscle/recomp/maintain). `notes` = the extra
+        thing you asked at the end. Call once you've gathered everything by voice."""
         prof = {"goal": goal, "preferred": preferred, "level": level,
                 "days_per_week": days_per_week, "equipment": equipment,
-                "injuries": injuries, "notes": notes}
+                "injuries": injuries, "notes": notes,
+                "diet_type": diet_type, "food_avoid": food_avoid,
+                "food_likes": food_likes, "food_dislikes": food_dislikes,
+                "meals_per_day": meals_per_day,
+                "cooks_or_eats_out": cooks_or_eats_out,
+                "nutrition_goal": nutrition_goal}
+        prof = {k: v for k, v in prof.items() if v not in ("", None)}
         self._profile.update(prof)
         await self._store.save_profile(prof)
         await self._publish_signal("profile_saved", prof)

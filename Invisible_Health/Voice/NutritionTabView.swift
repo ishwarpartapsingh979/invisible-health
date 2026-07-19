@@ -116,6 +116,11 @@ struct NutritionTabView: View {
                     emptyState
                 }
 
+                // Diet charts the user has shown the coach (nutritionist PDF, etc.) —
+                // read from the DB; the coach plans meals around them.
+                SchedulesSection(kind: "nutrition")
+                    .padding(.horizontal, -24)   // section owns its own 24pt inset
+
                 refreshButton
                 if let u = updated {
                     Text("Updated \(u.formatted(date: .abbreviated, time: .shortened))")

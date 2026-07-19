@@ -114,6 +114,10 @@ struct PlanTabView: View {
                     .padding(.horizontal, 24)
                 }
 
+                // Class timetables the user has shown the coach (Cult, society yoga…),
+                // read from the DB — the coach plans around them.
+                SchedulesSection(kind: "fitness")
+
                 Button { Task { await refresh() } } label: {
                     Label(loading ? "Refreshing…" : "Refresh", systemImage: "arrow.clockwise")
                         .font(.subheadline).foregroundColor(.gray)

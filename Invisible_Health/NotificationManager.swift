@@ -126,7 +126,10 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
         //
         // print("⏰ Scheduled 3 Daily Check-ins (9 AM, 1 PM, 8 PM)")
 
-        scheduleWaterReminders()
+        // Water reminders removed — they fired every 45 min (~20/day) and were
+        // more annoying than helpful. Actively clear any still scheduled on-device.
+        UNUserNotificationCenter.current().removePendingNotificationRequests(
+            withIdentifiers: (0..<20).map { "water_reminder_\($0)" })
         scheduleDietCheckIn()
     }
 

@@ -55,10 +55,11 @@ jobs:
             --source=./voice-token-server \
             --region=us-central1 \
             --allow-unauthenticated \
-            --set-env-vars "LIVEKIT_URL=${{ secrets.LIVEKIT_URL }},LIVEKIT_API_KEY=${{ secrets.LIVEKIT_API_KEY }},LIVEKIT_API_SECRET=${{ secrets.LIVEKIT_API_SECRET }},SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }},OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" \
-            --memory=512Mi \
+            --set-env-vars "LIVEKIT_URL=${{ secrets.LIVEKIT_URL }},LIVEKIT_API_KEY=${{ secrets.LIVEKIT_API_KEY }},LIVEKIT_API_SECRET=${{ secrets.LIVEKIT_API_SECRET }},SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }},OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" \
+            --memory=1Gi \
             --cpu=1 \
-            --max-instances=3
+            --max-instances=3 \
+            --timeout=300
 
   # Voice tab: the hosted agent worker (voice_agent.py → OpenAI Realtime). This
   # is the brain that joins the LiveKit room and talks; the token server above

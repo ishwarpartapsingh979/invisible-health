@@ -11,6 +11,8 @@
     </array>
     <key>NSLocalNetworkUsageDescription</key>
     <string>Invisible Health uses the local network to establish low-latency voice calls.</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>Invisible Health uses your location to suggest gyms, classes, and restaurants near you, and to track outdoor runs.</string>
     <key>NSHealthShareUsageDescription</key>
     <string>Invisible Health needs access to workouts, heart rate, and biomechanics to provide Elite Coaching and holistic recovery analysis.</string>
     <key>NSHealthUpdateUsageDescription</key>

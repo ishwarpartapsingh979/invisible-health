@@ -40,6 +40,11 @@ struct VoiceView: View {
     private struct ResultsDeck: Identifiable { let id = UUID(); let results: AgentResults }
     @State private var resultsDeck: ResultsDeck?
 
+    /// The coach hit a login wall → present the "Show Me" capture sheet so the user
+    /// can screenshot / screen-record the gated schedule for it (get_my_schedules).
+    private struct ShowMeContext: Identifiable { let id = UUID(); let kind: String; let reason: String }
+    @State private var showMe: ShowMeContext?
+
     /// Today's 3 plan options pushed by the coach (#11), and the onboarding sheet.
     @State private var planDeck: [CoachPlan]?
     @State private var showOnboarding = false
@@ -180,6 +185,15 @@ struct VoiceView: View {
             // Coarse location for "restaurants/gyms near me" lookups (nearby_places).
             Task { await call.sendLocation() }
         }
+        .onChange(of: call.agentReady) { ready in
+            // The agent just joined the room — (re)send the connect context so
+            // nothing was lost to the join race. Location only sends once and was
+            // getting dropped when it fetched before the agent arrived.
+            guard ready else { return }
+            Task { await call.sendLocalTime() }
+            Task { await call.sendWhoopContext(whoopSnapshot()) }
+            Task { await call.sendLocation() }
+        }
         .onChange(of: exerciseDeck != nil) { deckOpen in
             // While the deck is open the user is browsing (silent) — ping the
             // coach to stay awake so it doesn't time out mid-browse.
@@ -194,6 +208,7 @@ struct VoiceView: View {
         }
         .onAppear {
             wireWorkout()
+            LocationStore.shared.start()   // keep a coarse fix ready for "near me"
             // First run → onboarding. Otherwise, schedule the daily pre-workout
             // nudge (#12) so it can reach you before you open the app.
             if UserProfile.saved == nil {
@@ -228,6 +243,14 @@ struct VoiceView: View {
                 Task { await call.sendAsk(
                     "What's the best item at \(item.title) for my goals, with protein and calories?") }
             }, onClose: { resultsDeck = nil })
+        }
+        .sheet(item: $showMe) { ctx in
+            ShowMeSheet(initialKind: ctx.kind,
+                        reason: ctx.reason.isEmpty ? nil : ctx.reason) {
+                showMe = nil
+                // Nudge the coach to pick up where it left off, now that it has the data.
+                Task { await call.sendAsk("I've shown you the schedule — go ahead.") }
+            }
         }
         .fullScreenCover(item: Binding(
             get: { planDeck.map { PlanDeck(plans: $0) } },
@@ -596,6 +619,9 @@ struct VoiceView: View {
         call.onPlans = { plans in planDeck = plans }
         // Agent → app: a results list (nearby places / meal ideas) → show cards.
         call.onResults = { results in resultsDeck = ResultsDeck(results: results) }
+        // Agent → app: coach hit a login wall → open the "Show Me" capture sheet so
+        // the user can screenshot / screen-record the gated schedule for it.
+        call.onShowMe = { kind, reason in showMe = ShowMeContext(kind: kind, reason: reason) }
         // Agent → app: outdoor run → start GPS (triggers the permission prompt).
         call.onStartGPS = { workout.startLocation() }
         // Agent → app: opening chat done → switch to hands-free "Hey Coach".

@@ -11,14 +11,17 @@ Only needs livekit-api + fastapi + uvicorn (NOT livekit-agents), so it shares
 none of the agent's dependency conflicts.
 """
 
+import asyncio
 import json
 import os
+import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
-from fastapi import FastAPI
+from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from livekit import api
 
@@ -30,6 +33,18 @@ LIVEKIT_API_SECRET = os.environ["LIVEKIT_API_SECRET"]
 # needing a live voice session. Same keys the agent uses; stay server-side.
 SUPABASE_URL = (os.environ.get("SUPABASE_URL") or "").rstrip("/")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_KEY") or ""
+
+# Gemini vision — reads a login-gated schedule the user can only SHOW us (screenshot
+# / screen-recording / PDF) into structured data. Same key the agent uses.
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") or ""
+_GEMINI = None
+if GEMINI_API_KEY:
+    try:
+        from google import genai
+        from google.genai import types as genai_types
+        _GEMINI = genai.Client(api_key=GEMINI_API_KEY)
+    except Exception:
+        _GEMINI = None
 
 NUTRITION_QUESTIONS = [
     "Am I eating enough protein + total food to build lean mass while training? "
@@ -202,3 +217,132 @@ def token(room: str = "invisible-voice", identity: str = "ios-user"):
         .to_jwt()
     )
     return {"serverUrl": LIVEKIT_URL, "token": jwt}
+
+
+# ── "Show Me": schedule extraction ────────────────────────────────────────────
+# The user can only SHOW us a login-gated timetable / diet chart (Cult classes,
+# society yoga, a nutritionist's PDF). The app sends a screenshot / screen-recording
+# / PDF here; Gemini vision reads it into structured, time-bounded data stored per
+# user in user_schedules; the coach reads it back later (get_my_schedules) instead
+# of trying to browse the gated site.
+
+def _extract_prompt(kind: str) -> str:
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if kind == "nutrition":
+        what = ("a nutrition / diet chart (meal slots, foods, quantities, timings). "
+                "Capture every meal slot and what to eat.")
+        shape = ('{"slot": "breakfast|lunch|snack|dinner", "time": "8am or null", '
+                 '"items": ["..."], "notes": "..."}')
+    else:
+        what = ("a fitness / class timetable (class names, days, times, maybe "
+                "instructor or location). Capture every slot.")
+        shape = ('{"day": "Mon|Tue|...", "time": "6:30am", "name": "HRX / Yoga", '
+                 '"location": "...", "notes": "..."}')
+    return (
+        f"You are reading {what}\nToday is {today}. Return ONLY a JSON object "
+        "(no markdown fences, no prose) of this exact shape:\n"
+        '{ "title": "name if visible else null", '
+        '"valid_from": "YYYY-MM-DD or null (start of the period it covers)", '
+        '"valid_to": "YYYY-MM-DD or null (end; if it says this week, infer from today)", '
+        f'"items": [ {shape} ] }}\n'
+        "Use null for anything not visible. Extract EVERY row you can see.")
+
+
+def _gemini_extract(data: bytes, mime: str, prompt: str) -> str:
+    """Blocking Gemini call (image/pdf inline; video via file API + processing wait).
+    Called through asyncio.to_thread so it never blocks the event loop."""
+    model = "gemini-3.5-flash"
+    if mime.startswith("video"):
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tf:
+            tf.write(data)
+            path = tf.name
+        up = _GEMINI.files.upload(file=path)
+        waited = 0
+        while getattr(up.state, "name", "") == "PROCESSING" and waited < 240:
+            time.sleep(3)
+            waited += 3
+            up = _GEMINI.files.get(name=up.name)
+        resp = _GEMINI.models.generate_content(model=model, contents=[up, prompt])
+    else:
+        part = genai_types.Part.from_bytes(data=data, mime_type=mime)
+        resp = _GEMINI.models.generate_content(model=model, contents=[part, prompt])
+    return (resp.text or "").strip()
+
+
+def _loose_json(text: str) -> dict:
+    t = text.strip()
+    if t.startswith("```"):
+        t = t.strip("`")
+        if t[:4].lower() == "json":
+            t = t[4:]
+    a, b = t.find("{"), t.rfind("}")
+    if a != -1 and b > a:
+        t = t[a:b + 1]
+    return json.loads(t)
+
+
+def _store_schedule(user_id, kind, title, source, extracted, raw_text, vf, vt) -> bool:
+    if not (SUPABASE_URL and SUPABASE_KEY):
+        return False
+    body = json.dumps({
+        "user_id": user_id, "kind": kind, "title": title or None, "source": source,
+        "extracted": extracted, "raw_text": raw_text, "valid_from": vf, "valid_to": vt,
+    }).encode()
+    req = urllib.request.Request(
+        f"{SUPABASE_URL}/rest/v1/user_schedules", data=body, method="POST",
+        headers={"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}",
+                 "Content-Type": "application/json", "Prefer": "return=minimal"})
+    with urllib.request.urlopen(req, timeout=10) as r:
+        return r.status < 300
+
+
+@app.post("/extract")
+async def extract(file: UploadFile = File(...), kind: str = Form("fitness"),
+                  user_id: str = Form("ishwar"), source: str = Form("upload"),
+                  title: str = Form("")):
+    """Screenshot / screen-recording / PDF → Gemini vision → structured, time-bounded
+    schedule stored per user (user_schedules)."""
+    if _GEMINI is None:
+        return {"ok": False, "error": "extraction not configured (no GEMINI_API_KEY)"}
+    data = await file.read()
+    if not data:
+        return {"ok": False, "error": "empty file"}
+    mime = file.content_type or "image/jpeg"
+    try:
+        text = await asyncio.to_thread(_gemini_extract, data, mime, _extract_prompt(kind))
+    except Exception as e:
+        return {"ok": False, "error": f"gemini: {str(e)[:200]}"}
+    try:
+        parsed = _loose_json(text)
+    except Exception:
+        parsed = {"title": title or None, "valid_from": None, "valid_to": None,
+                  "items": [], "unparsed": True}
+    p = parsed if isinstance(parsed, dict) else {}
+    vf, vt = p.get("valid_from"), p.get("valid_to")
+    title_final = title or p.get("title") or ""
+    try:
+        stored = await asyncio.to_thread(_store_schedule, user_id, kind,
+                                         title_final, source, parsed, text[:4000], vf, vt)
+    except Exception as e:
+        return {"ok": False, "error": f"store: {str(e)[:200]}", "extracted": parsed}
+    return {"ok": True, "stored": stored, "extracted": parsed,
+            "valid_from": vf, "valid_to": vt}
+
+
+@app.get("/schedules")
+def schedules(user_id: str = "ishwar", kind: str = ""):
+    """Read back captured schedules for the app tab + the coach. Newest first."""
+    if not (SUPABASE_URL and SUPABASE_KEY):
+        return {"schedules": []}
+    q = {"user_id": f"eq.{user_id}", "order": "captured_at.desc", "limit": "20"}
+    if kind:
+        q["kind"] = f"eq.{kind}"
+    try:
+        req = urllib.request.Request(
+            f"{SUPABASE_URL}/rest/v1/user_schedules?{urllib.parse.urlencode(q)}",
+            headers={"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            rows = json.loads(r.read().decode())
+    except Exception:
+        rows = []
+    return {"schedules": rows}

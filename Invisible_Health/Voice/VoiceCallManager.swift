@@ -2,33 +2,6 @@ import Foundation
 import Combine
 import CoreLocation
 
-/// One-shot COARSE location for "near me" lookups (restaurants/gyms) — separate
-/// from the workout GPS (LocationProvider, which tracks continuously). Fetches a
-/// single fix on demand.
-final class CoarseLocator: NSObject, CLLocationManagerDelegate {
-    private let manager = CLLocationManager()
-    private var completion: ((CLLocation?) -> Void)?
-
-    override init() {
-        super.init()
-        manager.delegate = self
-        manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
-    }
-
-    func fetch(_ done: @escaping (CLLocation?) -> Void) {
-        completion = done
-        manager.requestWhenInUseAuthorization()
-        manager.requestLocation()
-    }
-
-    func locationManager(_ m: CLLocationManager, didUpdateLocations locs: [CLLocation]) {
-        completion?(locs.last); completion = nil
-    }
-    func locationManager(_ m: CLLocationManager, didFailWithError error: Error) {
-        completion?(nil); completion = nil
-    }
-}
-
 /// Drives a live, interruptible voice conversation over LiveKit (WebRTC).
 ///
 /// The whole LiveKit-dependent implementation is guarded by `#if canImport(LiveKit)`
@@ -91,6 +64,10 @@ final class VoiceCallManager: ObservableObject, RoomDelegate {
     /// Coach pushed a results list to show on screen (topic "results") — nearby
     /// places, meal ideas, etc.
     var onResults: ((_ results: AgentResults) -> Void)?
+
+    /// Coach hit a login wall (topic "show_me") → open the "Show Me" capture sheet
+    /// so the user can screenshot / screen-record the gated schedule for it.
+    var onShowMe: ((_ kind: String, _ reason: String) -> Void)?
 
     /// The underlying LiveKit room. Exposed so SwiftUI can observe participant
     /// audio activity (it conforms to ObservableObject in the SDK).
@@ -289,22 +266,18 @@ final class VoiceCallManager: ObservableObject, RoomDelegate {
         await sendControl(["type": "get_nutrition_summary"], topic: "get_nutrition_summary")
     }
 
-    private let coarseLocator = CoarseLocator()
-
     /// Send the user's coarse location so the coach can do "near me" lookups
-    /// (restaurants/gyms via nearby_places). Best-effort; silently skips if denied.
+    /// (restaurants/gyms via nearby_places). Reads the always-fresh LocationStore
+    /// synchronously — instant + reliable, no per-call fetch/geocode to stall.
     func sendLocation() async {
-        let loc: CLLocation? = await withCheckedContinuation { cont in
-            coarseLocator.fetch { cont.resume(returning: $0) }
+        guard let loc = LocationStore.shared.current else {
+            LocationStore.shared.start()   // no fix yet — kick it off for next time
+            return
         }
-        guard let loc else { return }
         var payload: [String: Any] = ["type": "location",
                                       "lat": loc.coordinate.latitude,
                                       "lng": loc.coordinate.longitude]
-        if let place = try? await CLGeocoder().reverseGeocodeLocation(loc).first,
-           let area = place.subLocality ?? place.locality {
-            payload["area"] = area
-        }
+        if let area = LocationStore.shared.area { payload["area"] = area }
         await sendControl(payload, topic: "location")
     }
 
@@ -380,6 +353,11 @@ final class VoiceCallManager: ObservableObject, RoomDelegate {
         case "results":
             guard let r = try? JSONDecoder().decode(AgentResults.self, from: data) else { return }
             Task { @MainActor in self.onResults?(r) }
+        case "show_me":
+            let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+            let kind = obj["kind"] as? String ?? "fitness"
+            let reason = obj["reason"] as? String ?? ""
+            Task { @MainActor in self.onShowMe?(kind, reason) }
         case "coach_state":
             guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let state = obj["state"] as? String else { return }
@@ -415,6 +393,7 @@ final class VoiceCallManager: ObservableObject {
     var onWorkoutLabel: ((_ label: String) -> Void)?
     var onNutritionSummary: ((_ summary: NutritionSummary) -> Void)?
     var onResults: ((_ results: AgentResults) -> Void)?
+    var onShowMe: ((_ kind: String, _ reason: String) -> Void)?
     func sendKeepAlive() async {}
     func sendGeo(distanceMeters: Double, pace: String?) async {}
     func sendProfile(_ profile: [String: Any]) async {}
