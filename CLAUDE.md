@@ -32,6 +32,12 @@ The thesis sharpened during dogfooding. **Keep this front of mind when prioritis
 - **Implication for the backlog:** weight nutrition depth, personalisation, and the
   concierge/automation issues above pure workout features. (See issues #35, #41, #42, #43,
   #44, #45 and the concierge issue.)
+- **Voice-first is the enduring interface (keep this architecture).** The **home is always
+  voice** — the user keeps asking by voice and always gets the answer, details, and chat
+  history there. **Text is secondary:** when they want to read text/chat or see detailed
+  data, they go to the **other tabs** (Workout, Nutrition, Profile, Whoop). Voice stays the
+  front door; text/data tabs support it — we do NOT replace voice with a text-first UI.
+  (Text-as-secondary is tracked in #40.)
 
 ## Architecture (how a request flows)
 - **`voice-agent/voice_agent.py`** — the hosted agent (LiveKit Cloud Agents +
