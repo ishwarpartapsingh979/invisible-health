@@ -12,6 +12,13 @@ science** (RPE / load management), and his **nutritionist's rules**. Core princi
 
 ## Product strategy & positioning (as of 2026-07 — Ishwar's direction)
 The thesis sharpened during dogfooding. **Keep this front of mind when prioritising.**
+- **Core hypothesis (the "why" above everything):** jobs are hectic and only getting
+  more so, so the winning product makes staying healthy **effortless** for time-poor
+  people. Make it as easy as possible to (a) eat good, healthy food, (b) get in touch
+  with **specialists** (nutritionist, trainer), and (c) do **cardio / strength**. It all
+  goes hand in hand — minimise their planning/time cost and keep **help always on hand**.
+  Lower the friction → they do more of it → they stay healthy. **Every feature should be
+  judged by: does this make health *easier* for a busy person?**
 - **Original hypothesis (now narrowed):** "people want someone to talk to in the gym."
   Problem: the gym is ~1 hour/day; only already-**motivated** people go (and motivating
   the unmotivated online is a hard, unsolved problem); of the motivated, many prefer
