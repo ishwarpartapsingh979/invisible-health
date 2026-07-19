@@ -10,6 +10,29 @@ motivation**. The brain fuses three sources: his **dad's coaching rules**, **spo
 science** (RPE / load management), and his **nutritionist's rules**. Core principle:
 **what the user SAYS overrides the wearable number** (subjective + safety win).
 
+## Product strategy & positioning (as of 2026-07 — Ishwar's direction)
+The thesis sharpened during dogfooding. **Keep this front of mind when prioritising.**
+- **Original hypothesis (now narrowed):** "people want someone to talk to in the gym."
+  Problem: the gym is ~1 hour/day; only already-**motivated** people go (and motivating
+  the unmotivated online is a hard, unsolved problem); of the motivated, many prefer
+  group classes or want a companion (like Jasmine) but **not** a coach talking at them
+  the whole time. Each cut shrinks the market. So a gym-companion product is a small TAM.
+- **The pivot — nutrition-first, 80/20:** **Nutrition is ~80% of the value, workouts ~20%.**
+  Build BOTH (fat loss *and* muscle + cardio health — never cardio-only), but lead with
+  nutrition. The **dad + his colleagues (nutritionist)** own the **connection** between
+  the two. This fits the Indian market: people don't work out much but care a lot about
+  **food** — so a food-first product has a bigger, more reachable market.
+- **The product = a nutrition concierge (end-to-end), plus the 20% training.** For people
+  who don't have time to manage it themselves: plan the week **and** the day around their
+  conditions; adapt when they dislike the plan or go off-script (re-plan, don't punish);
+  check what's available vs. not; plan groceries and get them **delivered via quick-commerce**;
+  run a **weekly nutrition review** and liaise with the nutritionist; and layer the 20%
+  workout (muscle + cardio) on top. Everyone will do *something* for their health — funnel
+  the easy 80% (food) first, then the 20% (training).
+- **Implication for the backlog:** weight nutrition depth, personalisation, and the
+  concierge/automation issues above pure workout features. (See issues #35, #41, #42, #43,
+  #44, #45 and the concierge issue.)
+
 ## Architecture (how a request flows)
 - **`voice-agent/voice_agent.py`** — the hosted agent (LiveKit Cloud Agents +
   OpenAI Realtime, `gpt-realtime-2.1`). One `CoachAgent` with function-tools. This
