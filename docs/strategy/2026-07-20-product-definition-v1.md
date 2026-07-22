@@ -287,6 +287,27 @@ Measure: did they **bring it unprompted**, and would they be **"very disappointe
 it. Let a **test**, not a **doubt**, drive any further pivot.
 (To design next: exactly who, the stripped-down build, and the end-of-test questions.)
 
+## D.3 Near-term plan (DECIDED 2026-07-20)
+1. **Build the fitness coach companion (PRIMARY).** The wedge with founder-fit.
+2. **Do Precision Nutrition Level 1 (PN1) side-by-side.** Learn nutrition — PN is
+   behavior-change/adherence-first (= the right skill, per Part E). NOTE: PN1 = competence +
+   credibility, **NOT a moat** (it's a common entry-level cert). For a real nutrition product
+   you'd still want a credentialed nutritionist/RD as the *anchor* (parallel: dad = fitness
+   moat + you = builder → nutritionist = nutrition moat + PN1-you = builder).
+3. **Encode PN1 learnings into the app.** Into the rules engine's existing `nutrition` domain,
+   as coaching/adherence guidance — **not clinical claims**; keep the medical guardrail (refer
+   out on anything medical).
+4. **Dogfood on Ishwar + wife (n=2).** For **learning + product-love, NOT market validation.**
+   Wife = a genuinely *different* user (goals, group-class context, may value nutrition more) —
+   encode/observe to HER needs, not just Ishwar's. n=2 friendly ≠ market signal — still need
+   ~5 external motivated solo trainers for the fitness side (disappointment / bring-along test).
+
+**Why it's good:** keeps the wedge, learns + de-risks nutrition (act 2) cheaply *without*
+un-parking it, and turns the app into the **integrated health expert in miniature** (coach +
+nutrition-coaching) proven on one household first — the billion-person vision, built narrow.
+Priority discipline: fitness = primary build; PN1/nutrition-encoding = side stream (don't let
+it steal the wedge's focus).
+
 ---
 ---
 
