@@ -1,88 +1,292 @@
-# Product Definition v1 — "Your coach, wherever you train"
+# MASTER WORKING DOC — Product Definition v1 + All Learnings (2026-07-20)
 
-> Converged 2026-07-20 after working through the pivot confusion. This is the
-> **workout-companion product Ishwar originally built and missed** — now with a clear
-> job, a moat, and founder-fit. It reconnects the two threads that had split apart
-> (the companion he loved + his dad's coaching intelligence). Youth athletes are one
-> *segment* of this, not a separate product. Nutrition is set aside.
+> **What this is:** the internal, extreme-detail capture of everything Ishwar and Claude
+> worked out on 2026-07-20 — the full strategic journey, the founder-confusion resolution,
+> the Mom Test method, and the converged product ("your coach, wherever you train"), plus a
+> grounded map of **what's already built vs. what's missing** in the codebase.
+>
+> **How to use it (weekend):** pull this down, walk Part C against the actual code, and list
+> where the product is vs. what's missing. **Keep this version internal/detailed** — a
+> generic, user-facing version comes later.
+>
+> **Companion files:** `2026-07-20-youth-athlete-pivot-research.md` (research notes) ·
+> the published report artifact (cricket-vs-tennis market research v0.1).
 
-## The product
-A training companion that is **with you wherever you work out** — gym, road, field,
-home — powered by a **real coach's judgment** (dad's system) and **your own context +
-where you are in your arc**. It does the whole job of a coach across a session:
+---
+---
 
-1. **Plans with you** — builds your workout from your full context and arc.
-2. **Adapts to you** — change the plan based on how you're feeling at that moment.
-3. **Checks what you bring** — got a workout from somewhere (ChatGPT, a friend, YouTube)?
-   It tells you if it's right for you and suggests **minor tweaks** for where you are in
-   your journey.
-4. **Is there while you train** — ask it anything, keep your time/pace, talk through how
-   it's going, and it **logs** it. The trainer next to you, doing it with you, helping you finish.
+# PART A — THE REAL PRODUCT (extreme detail)
 
-## Positioning (important)
-- **Presence + a coach's judgment, delivered as SUPPORT — not surveillance.** It is a
-  companion you want beside you, not a monitor grading your effort.
-- **Autonomy-respecting** — it offers; **you choose** ("it can be your call"). Not a coach
-  talking *at* you the whole time.
-- The effort/safety intelligence still exists, but lives *quietly inside* "adapt to how
-  you're feeling" and "tweak the plan you bring" — felt as responsiveness, not judgment.
-- **De-emphasized on purpose:** do NOT headline "are you overdoing / underdoing it." That
-  reads as policing. The feeling is *someone is here with you.*
+## A.1 Essence
+**A training companion that is *with you wherever you work out* — gym, road, field, home —
+powered by a real coach's judgment (dad's system) and your own context + where you are in
+your training arc.** It does the full job of a coach across a session, delivered as
+*presence and support*, not measurement and correction.
 
-## Where the value / moat lives
-- **The judgment inside the planning & vetting** — plans grounded in a *real coach's system*
-  + *your longitudinal context/arc*, so it's right for *you today*, not a generic template.
-- **The presence during execution** — the attentive companion in the moment (even people
-  with a trainer don't get undivided attention; a remote coach can't be in the room at all).
-- **NOT generation per se.** Anyone can generate a workout (ChatGPT, apps). Generation is a
-  feature; **judgment + presence is the product.** This also neutralizes the "why not just
-  use ChatGPT" objection: bring a ChatGPT plan → we vet it → we coach you through it.
-- Compounding moat over time: accumulated personal context/history + the coach's encoded
-  system + the relationship.
+**One-liner:** *"A trainer who's actually with you — wherever you train. It plans your
+session around where you are, adjusts when you're not feeling it, checks any plan you bring,
+and is right there for whatever you need."*
 
-## The user / market
-**Motivated people who train on their own** — gym-goers, runners, sport players, even a
-walker who wants to check they're doing enough for their goals — who want a coach's
-judgment + presence but **don't have one in the room**. Includes:
-- People with a **remote coach** (like Ishwar: dad in Chandigarh, he's in Bangalore).
-- Solo gym-goers whose trainer is spread across many people (no real attention).
-- **Young academy athletes on solo/home days** (a strong segment, not the whole product).
+## A.2 The four core functions (in depth)
 
-Note: this is the market Ishwar earlier abandoned over the "motivation problem." The worry
-dissolves here — *we serve the already-motivated; we don't try to motivate the unmotivated.*
-Serving motivated solo exercisers is a real, reachable market (cf. Strava/Whoop/Peloton).
+### 1) PLAN — generate the right workout for you
+- Builds a workout from **your full context + where you are in your arc** (not a generic
+  template). Uses: goal, preferred activity, level, days/week, equipment, injuries, recent
+  training history (what you did, RPE, how long ago), and readiness signals.
+- Grounded in **dad's system** (the rules engine) — so the *what* reflects a real coach's
+  sequencing/load logic, not just an LLM guess.
+- Offers options; **you choose** (see design principle A.3: autonomy).
 
-## Founder-fit
+### 2) ADAPT — change the plan to how you're feeling, in the moment
+- Before or during the session: "not feeling it today / tired / sore / short on time" → the
+  plan **re-shapes** around that. Lower the bar, swap the focus, shorten it.
+- This is where the **effort/safety intelligence lives quietly** — felt as *responsiveness
+  to you*, NOT as "you're overdoing it." (See A.3.)
+- Principle: *what you SAY overrides the wearable number* (subjective + safety win).
+
+### 3) VET — check a workout you bring, suggest minor tweaks
+- Bring a plan from anywhere (ChatGPT, a friend, YouTube, your own idea) → it tells you
+  **whether it's right for you** given your arc/context, and suggests **small tweaks** for
+  where you are in your journey.
+- This is the answer to *"why not just use ChatGPT?"* — **ChatGPT generates; it can't vet it
+  FOR YOU against a real coach's judgment + your situation.** You can absorb ChatGPT as an
+  input rather than compete with it.
+- **Build status: this specific "vet a workout" flow does NOT exist yet** (the analogous
+  nutrition tool `check_meal` exists, but there is no workout-vetting tool). See Part C.
+
+### 4) ACCOMPANY — be there while you train
+- Once you've chosen, it's the **trainer next to you** for the whole session, wherever you are:
+  - **Ask it anything** (exercise options, "how do I do X", form cues you're sure of).
+  - **Keep your time/pace** (clock a plank, intervals; live distance + pace for runs).
+  - **Live heart rate** + effort read (talk-test + HR) — surfaced as support, on request.
+  - **Show exercise demos** on the screen.
+  - **Just talk** — say how it's going; it responds like a companion.
+  - **Logs** the session (turns, HR, what you did) for memory + the arc.
+- The emotional core: *someone is here with you, doing it with you, helping you finish.*
+
+## A.3 Positioning & design principles
+- **Presence + judgment, delivered as SUPPORT — not surveillance.** A companion you *want*
+  beside you, not a monitor grading effort. **Do NOT headline "are you overdoing /
+  underdoing it"** — that reads as policing. (Explicit correction from Ishwar, 2026-07-20.)
+- **Autonomy-respecting — "it can be your call."** It offers; you choose. Not a coach
+  talking *at* you the whole time. This is the antidote to the earlier market-shrinking
+  worry (people don't want a coach lecturing them non-stop).
+- **The intelligence is repackaged, not removed.** Effort/safety judgment lives inside
+  "adapt to how you feel" and "vet + tweak the plan you bring" — felt as responsiveness,
+  not judgment. Same coach's brain, warmer delivery.
+- **Wherever you train.** "Gym" is a metaphor — it's there for runs, sport, home, outdoors
+  (GPS/pace already support outdoor).
+
+## A.4 The moat (where value actually lives)
+- **The judgment inside PLAN + VET** — grounded in a *real coach's system* + *your
+  longitudinal context/arc*. Right for *you today*, not generic.
+- **The PRESENCE during ACCOMPANY** — even people with a trainer don't get undivided
+  attention (trainers are 1-to-many, distracted); a remote coach can't be in the room at all.
+- **NOT generation.** Generation is a commodity feature (ChatGPT, apps, YouTube).
+  *Judgment + presence is the product.* Keep the pitch there.
+- **Compounding moat over time:** accumulated personal context/history + the coach's encoded
+  system + the relationship. The more you use it, the more it's *yours*.
+
+## A.5 The user / market
+**Motivated people who train on their own and want a coach's judgment + presence but don't
+have one in the room.** Segments:
+- **Remote-coached people** (Ishwar himself: dad in Chandigarh, he's in Bangalore — the
+  origin of the felt need).
+- **Solo gym-goers** whose trainer is spread across many people (no real attention).
+- **Young academy athletes on solo/home days** (a strong segment — NOT the whole product).
+- **Self-directed exercisers** broadly — runners, sport players, even a walker who wants to
+  check "am I doing enough for my goals?"
+- **The motivation problem dissolves here:** we serve the *already-motivated*; we do NOT try
+  to motivate the unmotivated. Serving motivated solo exercisers is a real, reachable market
+  (cf. Strava / Whoop / Peloton).
+
+## A.6 Founder-market fit
 Ishwar **lives the need** (dad remote), **built the product**, and **missed it** after two
-weeks away — the strongest PMF signal he has. This is the tiebreaker vs. the youth-fitness-
-only idea, where he had no domain pull and couldn't get started.
+weeks away — the strongest PMF signal available. This is the tiebreaker vs. the
+youth-fitness-only idea (where he had no domain pull and couldn't get started after a day).
 
-## The metric (do NOT use daily-active)
-A training companion is not a daily app. Measure:
+## A.7 The metric (do NOT use daily-active)
+A training companion is not a daily app; DAU is a category error. Measure:
 - Of the times they train, how often do they **bring it along** (unprompted)?
-- Would they be **"very disappointed"** if it disappeared? (Sean Ellis PMF test.)
-- Does it slot into their routine (they schedule/plan in it)?
+- Would they be **"very disappointed"** if it vanished? (Sean Ellis PMF test — Ishwar already
+  answers yes.)
+- Does it slot into their **routine** (plan/schedule in it)?
 
-## One-liner
-**"A trainer who's actually with you — wherever you train. It plans your session around
-where you are, adjusts when you're not feeling it, checks any plan you bring, and is right
-there for whatever you need."** A real coach's judgment, delivered as presence.
+## A.8 What it is NOT (scope discipline)
+- **NOT nutrition** (no expertise / no moat — set aside; dad's call).
+- **NOT an effort-policing / surveillance tool.**
+- **NOT a workout-generation race** vs. ChatGPT (generation is a feature, not the pitch).
+- **NOT "motivate the unmotivated."**
+- **NOT academy scheduling/management** (CricVision's lane).
 
-## What's already built toward this
-- Rules engine = the judgment / vet layer.
-- `show_todays_plans` = generation.
-- Voice companion + HR + GPS/pace = accompany (gym + outdoor).
-- Personalization + training arc + facts = the context.
-Most of the machine exists; the work is making the *judgment* (plan/vet against arc+feel)
-genuinely good, and the *presence* feel like a coach beside you.
+---
+---
 
-## Next step (stop refining the concept — go test)
-Smallest version in front of **~5 motivated, solo-training people** (Ishwar + brother +
-a couple of gym-mates + a remote-coached friend). Run *plan → adapt → accompany* for ~3
-weeks. Measure the "very disappointed?" test + whether they brought it unprompted. Let a
-*test*, not a doubt, drive any further pivot.
+# PART B — HOW WE GOT HERE (all of today's learnings)
 
-## Open decisions
-- Exact first segment to test (remote-coached adults vs. young athletes vs. general solo gym-goers).
-- How much planning/generation vs. bring-and-vet to build first.
-- How to make the in-moment presence feel like a coach, not a UI.
+## B.1 The pivot history (the spiral, and why each step happened)
+1. **Working product:** voice AI companion used *during workouts* — HR, exercise examples,
+   time countdown, in-the-moment coaching. Dad provides the workout plan. It worked; Ishwar
+   used it and there were only a few bugs.
+2. **Doubt (untested):** stopped using it when sick/unmotivated → theory: *"only motivated
+   people will open it"* → felt the market shrink.
+3. **Wrong-user test:** considered expanding to brother + Jasmine. Jasmine wanted call
+   scheduling but NOT a gym-companion — **she's a group-class person; the trainer is already
+   her companion.** (n=1 of the *wrong* user, not disproof.)
+4. **Pivot to nutrition** ("daily, everyone eats"). Problems: **no expertise/moat** (neither
+   Ishwar nor dad is a nutritionist), advice is commoditized, and **cult.fit has no open API**
+   (screen-recording is too tiring). Dead end.
+5. **Dad's proposal:** youth sports fitness (S&C + injury prevention for kids in
+   cricket/tennis). Real moat (dad's Ranji credential) but **Ishwar has no domain pull** and
+   couldn't get started after a day; real doubts (time-poor parents, coaches feel replaced).
+6. **Confusion → resolution (this conversation):** unpacked "what is the workout companion
+   even *for*," which produced the converged product in Part A.
+
+## B.2 The meta-learnings (mental-model corrections — the durable lessons)
+- **Pivot on failed TESTS, not on DOUBTS.** Every product has infinite doubts; if you pivot
+  each time one appears, you pivot forever. Only a *disproven test* justifies a pivot.
+- **Mom Test:** compliments, opinions, and hypotheticals ("would you…", "do you think…") are
+  worthless. Anchor on **specific past behavior**. A real problem leaves evidence (they've
+  already spent time/money on it).
+- **"For any and everything" = no job = the real weakness.** A product needs ONE clear job /
+  one moment it exists for. The fuzziness was the true problem, not founder-bias.
+- **Metric error:** judging a companion by daily-active is like judging a running app by
+  daily runs. Use the disappointment / unprompted-bring-along / routine metrics (A.7).
+- **Founder-market fit is the tiebreaker:** "misses his own product" vs. "can't get off the
+  starting line" *is* the signal.
+- **Serving the motivated ≠ solving motivation.** The whole spiral started from conflating
+  "not everyone is motivated" with "no market." False. Motivated people are a real market.
+- **Two tangled products:** the *presence* (companion he loved) vs. the *encoded expertise*
+  (dad's rules he was trying to build). "Coach wherever you train" reunites them: the app
+  carries a real coach's judgment into the moment.
+- **The remote-coach insight (the unlock):** dad gives the *plan* remotely; what's missing is
+  the *in-person* half — "which exercise now?", demos, clocking, "am I pushing right?" (which
+  dad judged by watching). The product delivers **the in-person half of coaching a remote
+  coach can't give.** The user isn't "no coach" — it's "coach not in the room."
+- **The vet insight:** ChatGPT generates but can't *vet-for-you* against your arc + a real
+  coach's judgment. That's the defensible wedge; it lets you absorb AI rather than fight it.
+
+## B.3 The Mom Test — method for validating (for the weekend / the test)
+**Three rules:** (1) talk about their life, not your idea; (2) ask about specific past
+events, not opinions/futures; (3) talk less, listen more.
+**Key principles:** compliments are fool's gold; anything hypothetical/fluffy is worthless;
+a real problem shows in past action (money/time already spent); understand feature requests'
+motives, don't obey; **never pitch** (it biases everything); chase **commitment** (time,
+reputation/intros, money), not compliments; keep it casual; neighbors will be extra nice —
+lean harder on facts.
+
+**Who to interview (three roles, different jobs):**
+- **Parent** = buyer/payer/worrier → problem + WTP (primary, if youth-athlete segment).
+- **Coach** = channel/gatekeeper/expert → the S&C gap + willingness to share/refer.
+- **Kid/User** = the experience → what they'd actually do/abandon (lighter; minors → with
+  parent present).
+> For the CONVERGED product, the primary "user to watch" is the **motivated solo trainer**
+> (incl. remote-coached adults & athletes on solo days). Adapt the question set to *their*
+> training life; keep the method identical.
+
+**Pitching without biasing:** dad's credential is a *sales* asset, not a *discovery* asset.
+Light mention gets you the meeting; keep him out of the questions; save the full credential
+for the conversion moment. If asked "are you building something?" → be honest, then deflect
+back to their experience.
+
+## B.4 Strategy context recorded earlier today (for continuity — some now superseded)
+- CLAUDE.md still holds the earlier **nutrition-first 80/20** strategy + **voice-first** +
+  **core hypothesis** ("make health effortless for busy people"). **Not overwritten** — the
+  converged companion product supersedes the nutrition direction in spirit, but CLAUDE.md
+  stays until Ishwar confirms. The **core hypothesis (effortless, help always on hand)** and
+  **voice-first** still apply to the companion.
+- **Youth-athlete pivot** (dad's idea) → now reframed as **one segment** of the companion,
+  not a separate product. Market research (cricket vs tennis) is still valid *if* that
+  segment is pursued (see research memo + report artifact).
+
+---
+---
+
+# PART C — CURRENT IMPLEMENTATION STATE (for the weekend gap analysis)
+
+> Grounded in today's code investigations. Items marked **[verify]** should be confirmed
+> against the code at the weekend. Codebase: `voice-agent/` (Python agent + rules),
+> `voice-token-server/` (FastAPI), `Invisible_Health/` (iOS SwiftUI), `infra/migrations/`.
+
+## C.1 What EXISTS today (maps to the four functions)
+
+**PLAN (generate):**
+- `show_todays_plans` (voice_agent.py) — pushes 3 plan options; gathers profile + training
+  history + Whoop, composes via the rules engine. **[verify depth of personalization]**
+- `get_active_coaching_rules` + `rules_engine.py` — the judgment layer: deterministic
+  `trigger_conditions → forces/vetoes + tier + source + domain`; domains `coach`,
+  `sports_science`, `nutrition`; dad's 15 CSV rules + dad_log + sports-science (Seerat) +
+  Whoop recovery bands. `resolve()` + `to_prompt()`.
+- Context inputs: `get_profile`, `get_training_history` (`_history_facts` = the arc),
+  `user_facts` (`remember_about_user` / `recall_past_conversations`), `get_whoop_status`.
+
+**ADAPT (to how you feel):**
+- Partial — `get_active_coaching_rules` takes subjective inputs (physical_state, fueling,
+  soreness, RPE, etc.) and *what the user says overrides the wearable*. But there is **no
+  clean "re-plan the session right now because I'm not feeling it" flow** — it's implicit in
+  the LLM + rules, not a first-class feature. **Gap.**
+
+**VET (a workout you bring):**
+- **Does NOT exist for workouts.** `check_meal` vets *food* against nutrition rules; there is
+  no equivalent "vet this workout against my arc + dad's rules + suggest tweaks" tool.
+  **Build needed.**
+
+**ACCOMPANY (in-session):**
+- `get_current_heart_rate` (live HR), `get_distance_pace` (GPS distance+pace, outdoor),
+  `get_workout_duration`, `show_exercises(muscle)` (on-screen demo decks / `ExerciseDemoCard`),
+  `go_handsfree` + wake word ("Hey Coach"), proactive effort cues (ProactiveCoach), session
+  logging (`coaching_sessions`, turns + HR), Adam hype clips (BackgroundAudioPlayer).
+- The whole realtime voice agent (LiveKit + OpenAI Realtime `gpt-realtime-2.1`) = "ask
+  anything / just talk."
+
+**Infra:** token server (`/token`, `/nutrition`, `/workout`); iOS tabs (Voice/Workout/
+Nutrition/Profile/Whoop); Whoop via OpenWearables; Supabase tables (rules, rule_firings,
+coaching_sessions, user_profiles, planned_workouts, nutrition_log, user_facts, conversations).
+
+## C.2 What's MISSING / needs work for the real product
+- **VET-a-workout flow + "minor tweaks" tool** — core to the product, not built.
+- **First-class ADAPT-now flow** ("I'm not feeling it → re-shape the session").
+- **Plan → auto demo-video walkthrough** on the training screen (issue #37 — not built).
+- **Plan persistence to the Workout tab** (issue #39 — likely broken via the `local_date` /
+  migration #16 dependency).
+- **Effort intelligence repackaged as adaptation/support** (not policing) — design + rules.
+- **Depth of generated plans** — confirm `show_todays_plans` produces genuinely
+  personalized, arc-aware sessions vs. shallow options. **[verify]**
+- **Reliability bugs that hit the companion experience** (filed today):
+  - #2 reopen-silence (fixed room name — fix NOT deployed; root cause live).
+  - #29 voice warm-up race (early speech lost). #34 slow start.
+  - #36 Whoop snapshot race (coach gets empty Whoop). #27 Whoop activity sync.
+  - #16/#11/#20 logging reliability (local_date migration unrun → writes fail silently).
+- **De-scope candidates (nutrition — not needed for companion):** `check_meal`,
+  `lookup_product`, `weekly_nutrition_summary`, `day_recap`, nutrition tab/rules. Keep or
+  park depending on whether food stays in scope at all (currently: out).
+
+## C.3 Reusable core (the encouraging part)
+Most of the machine exists: **rules engine = judgment/vet layer**, **voice agent =
+accompany**, **HR/GPS = in-session sensing**, **profile/arc/facts = context**,
+**show_todays_plans = generation**. The build is *extending and sharpening*, not starting over —
+especially (a) making PLAN/VET genuinely good against arc+feel, and (b) making ACCOMPANY
+*feel* like a coach beside you rather than a UI.
+
+---
+---
+
+# PART D — OPEN DECISIONS & NEXT STEP
+
+## D.1 Open decisions
+- First segment to TEST: remote-coached adults vs. young athletes vs. general solo gym-goers.
+- Build order: how much PLAN/generation vs. bring-and-VET first.
+- How to make the in-moment presence feel like a coach, not an app.
+- Whether food stays fully out of scope (current: out).
+- Whether/when the youth-athlete segment + dad's Ranji moat gets pursued (research is ready).
+
+## D.2 Next step — STOP refining the concept; TEST it
+Smallest version of **PLAN → ADAPT → ACCOMPANY** in front of **~5 motivated solo trainers**
+(Ishwar + brother + a couple of gym-mates + a remote-coached friend) for **~3 weeks**.
+Measure: did they **bring it unprompted**, and would they be **"very disappointed"** to lose
+it. Let a **test**, not a **doubt**, drive any further pivot.
+(To design next: exactly who, the stripped-down build, and the end-of-test questions.)
+
+---
+*Internal detailed version. A generic, user-facing version comes later. Last updated
+2026-07-20.*
