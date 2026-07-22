@@ -341,6 +341,30 @@ problem, which decomposes into solvable levers.**
   rule gaps (#17/#18/#19/#24), macros/logging (#12/#22/#16). Core hypothesis ("effortless,
   help always on hand") is the antidote to the motivation framing.
 
+## E.5 Proof point + cautionary tale: Noom
+**What it is:** US weight-loss company (est. 2008) built on *"weight loss is a psychology
+problem, not a diet problem"* — behavior change via CBT. Raised ~$540M, ~$3.7B valuation
+(2021). **Validates the reframe:** nutrition adherence is a real, designable, monetizable
+behavioral problem — not an unsolvable "motivation" wall.
+**How it attacks adherence (levers):** feedback (logging + green/yellow/red food color
+system, no banned foods), habit/mindset (daily CBT micro-lessons on triggers/cravings),
+accountability (human coach). **Weak on FIT** (little deep taste/culture personalization)
+and **doesn't touch FRICTION** (no groceries/ordering) — *exactly the two levers our
+concierge + Indian-taste-fit ideas would own. That's the opening.*
+**Caveats (critical):**
+- Behavior-change has a real **ceiling** — mediocre long-term results, high churn; criticized
+  as "calorie counting + CBT wrapper"; paid ~$56M settlement over hard-to-cancel dark patterns.
+- **GLP-1 disruption (the key twist):** appetite-suppressing drugs (Ozempic/Wegovy) moved
+  weight loss far more than a decade of behavioral apps. Noom pivoted to prescribe them
+  (Noom Med); **WeightWatchers filed for bankruptcy in 2025**, gutted by the drugs.
+  → Implies a big chunk of "motivation/willpower" was actually **biology (appetite)**, and the
+  lever that moved it was pharmacological, not coaching. Partially vindicates "this is very
+  hard" while relocating the cause. **Be clear-eyed about where GLP-1s fit (incl. India)
+  rather than pretending biology isn't part of the story.**
+**Net:** Noom proves the market + reframe, but warns that behavior-alone has limits and the
+category just got disrupted. Our edge = the levers Noom neglects (FIT + FRICTION), done for
+the Indian context, with eyes open on biology.
+
 ---
 *Internal detailed version. A generic, user-facing version comes later. Last updated
 2026-07-20.*
