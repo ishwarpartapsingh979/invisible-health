@@ -288,5 +288,59 @@ it. Let a **test**, not a **doubt**, drive any further pivot.
 (To design next: exactly who, the stripped-down build, and the end-of-test questions.)
 
 ---
+---
+
+# PART E — PARKED: NUTRITION (the "80%" question)
+
+> Ishwar still believes strongly that **nutrition is ~80% of the health puzzle** (workout
+> ~20%) and wants it solved eventually. Parked for now behind the workout companion, but
+> captured here with a critical reframe so it's picked up correctly.
+
+## E.1 Ishwar's thesis (as stated)
+- Nutrition is 80% of the value; workout is 20%.
+- Neither he nor dad is a nutritionist → **need to bring in a nutritionist** (hard blocker).
+- His claim: nutrition is fundamentally **a motivation problem** — if you're motivated you can
+  already solve it (app + Blinkit + order); if you're not, no nutritionist/maid/concierge
+  makes you do it beyond once or twice ("then tell the maid to stop"). And "if you don't like
+  what it says, you won't do it."
+
+## E.2 Critical evaluation (do we actually think it's a motivation problem?)
+**Verdict: half-right. The crux (adherence) is real and IS harder than fitness — but
+"motivation problem" is a mislabel that makes it feel unsolvable. It's an ADHERENCE / DESIGN
+problem, which decomposes into solvable levers.**
+- "Motivation" unpacks into: **friction/ability, fit, feedback, habit/identity, prompt**
+  (Behaviour = Motivation × Ability × Prompt, Fogg). Most "lack of motivation" is really
+  friction + poor fit + no feedback — all designable. (Noom is a whole company on this premise.)
+- **The biggest under-used lever is FIT, not motivation.** Ishwar's own line — "if you don't
+  like what it says you won't do it" — is a *fit* problem (taste/culture/budget/schedule), not
+  willpower. Make the healthy thing something they actually want + can get effortlessly, and
+  most of the "motivation" problem evaporates. (Ties to recipe-variety idea, #44.)
+- **"If motivated, 99% solved" is false.** Even motivated people fail: decision fatigue
+  (5+ food decisions/day vs. one workout), willpower depletion, social/emotional eating,
+  cravings, slow/invisible results. Motivation is necessary-not-sufficient and fluctuates;
+  good products *reduce reliance* on it (make the good choice the default).
+- **The concierge attacks FRICTION only** (Blinkit ordering etc.) — necessary but not
+  sufficient. It doesn't fix FIT (do they want it) or FEEDBACK (is it working). That's why
+  the maid/concierge dies after twice — not because motivation ran out.
+
+## E.3 The two hard truths that ARE real
+1. **Need a nutritionist** — real, separate blocker; no expertise → no moat → no credible product.
+2. **Nutrition is structurally harder than fitness** to build a companion around: fitness is a
+   *discrete, in-the-moment session with a coach present*; nutrition is *diffuse, all-day,
+   many small private decisions, slow feedback* — no natural "coach in the room" moment (would
+   have to manufacture one at the decision points: what to eat now / ordering / at a restaurant).
+
+## E.4 Strategic decision
+- **Park nutrition as the big SECOND act.** Reframe it as **adherence (friction + fit +
+  feedback + habit)**, NOT "unsolvable motivation."
+- **Sequence:** win the easier, sharper **workout companion** first (founder-fit, discrete
+  moment) → learn the mechanics of adherence there → apply them to the harder nutrition case,
+  *with a nutritionist on board*.
+- Bigger prize ≠ first product. Earn the right to nutrition by winning fitness first.
+- **When revived, relevant prior work:** concierge (#46), recipe variety (#44), nutrition
+  rule gaps (#17/#18/#19/#24), macros/logging (#12/#22/#16). Core hypothesis ("effortless,
+  help always on hand") is the antidote to the motivation framing.
+
+---
 *Internal detailed version. A generic, user-facing version comes later. Last updated
 2026-07-20.*
