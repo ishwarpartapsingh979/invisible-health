@@ -387,5 +387,69 @@ category just got disrupted. Our edge = the levers Noom neglects (FIT + FRICTION
 the Indian context, with eyes open on biology.
 
 ---
+---
+
+# PART F — TARGET UX + WEEKEND WORK PLAN (added 2026-07-20)
+
+> Ishwar's directive: keep it **clean & minimal on the surface, everything powerful
+> underneath.** "Extremely good intelligence" is the stated top priority (repeated). It's
+> Claude's duty to bring these up at the start of the weekend work session.
+
+## F.1 The three main surfaces
+1. **HOME — one multimodal window.** Speak, type, OR upload photos — combinable (e.g., talk +
+   attach a photo). The single front door. Voice stays PRIMARY (per CLAUDE.md); text (#40) +
+   **photo upload (NEW)** are added modalities, not replacements.
+2. **WORKOUT tab** — today's workout + previous workouts + what you did.
+3. **HISTORY / CHAT tab** — full chat history (user + AI responses) + any graphs/videos
+   generated, all **SEARCHABLE.**
+
+## F.2 Profile slide-out (everything else hidden here)
+A slide-over drawer from a profile button: your **context** (what the AI knows about you),
+**equipment**, **attached devices/wearables** (Whoop etc.), settings. NOT in the main panel.
+
+## F.3 Restructure vs. current app
+Current iOS = 5 tabs (Voice / Workout / Nutrition / Profile / Whoop). Target = **Home /
+Workout / History + Profile-slider.** So: **Nutrition + Whoop tabs fold into the slider** (or
+de-scope — nutrition parked); Profile becomes a **slide-out**; Home becomes **multimodal**.
+
+## F.4 OPEN QUESTION to resolve: what are photos FOR?
+"Upload photos / whatever" is open-ended — give it a JOB so it's intelligent, not a dumping
+ground (avoid the "for any and everything" trap). Candidates: **form check** (photo/clip of a
+lift), **equipment** (what you have), **injury** (careful — guidance not diagnosis), a
+**whiteboard/handwritten plan** to vet, (later) **food**. Decide the 1–2 real jobs.
+
+## F.5 Bug-fix scope this weekend ("usage + behavior" bugs)
+Prioritize the **experience-breakers** for the fitness companion (nutrition-specific bugs are
+DEPRIORITIZED — nutrition parked — except logging plumbing the companion also needs):
+- **#2** reopen-silence (fixed room name; fix NOT deployed — live). 
+- **#29** voice warm-up race (early speech lost) · **#34** slow start / greeting latency.
+- **#36** Whoop snapshot race (empty Whoop) · **#27** Whoop activity sync.
+- **#28** main UI shifts / distortion.
+- **#39** decided plan not showing on Workout tab · **#16** run `013_local_dates.sql`
+  (blocks plan/session/meal writes → also #11/#20 logging reliability).
+- **#30** convoluted corrective feedback (clarity).
+> Realism: clearing ALL in one weekend is ambitious — some need iOS rebuild (Xcode, can't
+> build in cloud), the #16 Supabase migration (manual), and agent deploys (push to main).
+> Triage to the experience-breakers first.
+
+## F.6 "Extremely good intelligence" — concrete workstreams
+- Make the **PLAN / VET / ADAPT** flows genuinely good against arc + feel (product core; note
+  VET-a-workout tool does NOT exist yet — Part C).
+- Richer **context/personalization** (#35) + the **question/behavior flywheel** (#13).
+- **History as memory** — the searchable chat becomes a store the AI draws on.
+- **Multimodal data in** — once photos have a job (F.4), use them as intelligence inputs.
+- Continuously **capture more/better data** (devices, wearables, logged sessions) → feeds intelligence.
+
+## F.7 Design approach — "Claude design"
+Before building in SwiftUI (which can't be built/tested in a cloud session), **prototype the
+new UX** (Home + Workout + History + Profile-slider) as an interactive Claude **artifact** to
+react to the layout first — cheap, fast iteration before native code.
+
+## F.8 Weekend kickoff order (for Claude)
+1. Bring up this Part F. 2. Gap-analysis (Part C) vs. code. 3. Decide photo job (F.4).
+4. Prototype the UX as an artifact (F.7). 5. Triage + start the bug-fixes (F.5).
+6. Sequence the intelligence work (F.6).
+
+---
 *Internal detailed version. A generic, user-facing version comes later. Last updated
 2026-07-20.*
