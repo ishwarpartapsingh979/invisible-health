@@ -186,6 +186,24 @@ schedule, location, interests — accountability + company + shared sessions.
   companion to train *with*, not an AI). At scale we serve both: AI companion + human buddy.
 - **Sequencing:** EXTREMELY long term / post-scale. Keep parked.
 
+## A.8d Candidate FUTURE platform instances (other expert domains) — NOT the first wedge
+The "expert in your pocket" engine generalizes. Ishwar keeps discovering credentialed moats
+across domains — that's evidence for the PLATFORM thesis, and a TRAP for wedge-picking (every
+credential looks like a reason to pivot). Candidate future instances, parked:
+- **CAT / MBA exam prep** — Ishwar's own moat: **99%ile+ on CAT twice (repeatable) + 750
+  GMAT.** Strongest-founder-fit of the alternatives. Pros: ferociously motivated buyers
+  (motivation problem gone), big Indian coaching-spend market, fits YC "AI tutor," highly
+  adaptive-friendly. Cons: crowded/entrenched (TIME/IMS/CL + free content); credential ≠
+  product (needs content/pedagogy/distribution at scale); **structurally worse retention**
+  (once-a-year, ~1 cycle, seasonal, capped LTV) vs. lifelong health; and it's a **different
+  company**, not an extension.
+- **Chemistry / STEM education** — via mom (chemistry professor); a different (older-student)
+  product than YC's early-literacy RFS, where the family has no moat.
+- **Rule for all of these:** don't pivot on a shiny idea + a credential; pivot on a FAILED
+  TEST. The fitness wedge is untested — no pivot earned. If one ever genuinely excites Ishwar
+  *more* (passion, not credential-flattery — Mom-Test his own motivation), that's a deliberate
+  *replacement* decision, not a reflex. Watch the pattern.
+
 ## A.8 What it is NOT (scope discipline)
 - **NOT nutrition** (no expertise / no moat — set aside; dad's call).
 - **NOT an effort-policing / surveillance tool.**
