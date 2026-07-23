@@ -21,6 +21,15 @@
 **The über theme: make the person FEEL GOOD.** This is the defining principle and must
 reflect across EVERYTHING — how the coach speaks, how guidance/feedback is delivered, the
 motivation/accomplishment videos, the visuals, even error/empty states.
+- **Cross-phase principle (applies to ALL domains).** Fitness now, **nutrition** next, future
+  doctor/buddy — the *principle* is constant; the *expression* flexes case-by-case. Feel-good
+  matters MOST in **nutrition** (the domain most prone to guilt/shame/restriction / "bad
+  foods" / diet-culture moralizing): guilt-free, no bad foods, **treats without punishment**
+  (= the existing "balance across the week, don't punish the next day" rule), abundance over
+  deprivation, fit over restriction. This is part of the *adherence MECHANISM* (people quit
+  nutrition because it feels bad) — not just tone. See Part E. By domain: fitness = celebrate
+  effort/presence; nutrition = guilt-free enjoyment; doctor (far future) = calm/cared-for, not
+  alarmed; buddy = belonging.
 - **Why it's strong/differentiated:** almost all fitness tech makes you feel *bad* (guilt,
   broken streaks, "you're behind," clinical/alarm dashboards). A companion whose job is to
   make you feel *good* about moving is white space — healthier AND more retentive.
