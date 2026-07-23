@@ -112,6 +112,25 @@ A training companion is not a daily app; DAU is a category error. Measure:
   answers yes.)
 - Does it slot into their **routine** (plan/schedule in it)?
 
+## A.8b Candidate delighter feature (Ishwar LOVES this): before/after session videos
+AI-generated short (~30–60s) videos that **bookend the workout** — extending the coach's
+*presence* beyond the session (hype before, celebrate after = what a real coach does).
+Strong **ritual + retention + shareability** mechanic; fits the "feel-good, presence" soul.
+- **BEFORE (hype/priming):** references today's plan + arc + why + a callback, in the
+  coach's voice. Pre-generate when the plan is set → latency-friendly.
+- **AFTER (accomplishment):** built from the ACTUAL session data (PRs, effort, streak, vs.
+  before) + the progress graphs; shareable → organic growth. Delivered shortly after finish.
+- **How:** an *assembly pipeline* — LLM script → AI TTS voiceover → AI/licensed music →
+  AI/stock/user visuals + stat/text overlays. NOT frontier full-generative video (montage
+  avoids the character-consistency / uncanny-valley / cost problems).
+- **Moat:** personalized + in the coach's voice = uncopyable and on-brand (generic
+  motivation videos are worthless). After-video shareability = a growth loop.
+- **Note (drama-app hype check):** the 250M-user microdrama apps (ReelShort/DramaBox) are
+  mostly LIVE-ACTION human-produced, not "entirely AI" — but this montage/voiceover use case
+  IS fully feasible today.
+- **Sequencing:** PHASE 2 delighter, NOT weekend work. The AFTER video *depends on logging
+  working* (reliability fixes / #16) — so the weekend reliability work is a prerequisite.
+
 ## A.8 What it is NOT (scope discipline)
 - **NOT nutrition** (no expertise / no moat — set aside; dad's call).
 - **NOT an effort-policing / surveillance tool.**
