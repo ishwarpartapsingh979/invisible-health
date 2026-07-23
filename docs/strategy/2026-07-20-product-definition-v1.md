@@ -17,6 +17,24 @@
 
 # PART A — THE REAL PRODUCT (extreme detail)
 
+## A.0 NORTH STAR — it's a FEEL-GOOD app
+**The über theme: make the person FEEL GOOD.** This is the defining principle and must
+reflect across EVERYTHING — how the coach speaks, how guidance/feedback is delivered, the
+motivation/accomplishment videos, the visuals, even error/empty states.
+- **Why it's strong/differentiated:** almost all fitness tech makes you feel *bad* (guilt,
+  broken streaks, "you're behind," clinical/alarm dashboards). A companion whose job is to
+  make you feel *good* about moving is white space — healthier AND more retentive.
+- **It unifies decisions already made:** presence-not-surveillance, support-not-policing,
+  "your call" autonomy, celebrate-accomplishments, before/after videos, the coach's warm
+  voice — all are expressions of "feel-good."
+- **How it cashes out (design rules):** tone = warm/specific/encouraging, never nagging or
+  guilt; corrections framed kindly AND clearly (#30); metrics framed as *wins/progress*, NOT
+  deficits/shame (no "you failed your streak"); visuals warm/calm/uplifting, not clinical;
+  errors handled warmly.
+- **Guardrail:** feel-good ≠ hollow flattery. Encouragement must be SPECIFIC and EARNED
+  (existing rule), never blanket praise. It works through genuine progress + warmth + being
+  truly *seen* — not fake cheerleading.
+
 ## A.1 Essence
 **A training companion that is *with you wherever you work out* — gym, road, field, home —
 powered by a real coach's judgment (dad's system) and your own context + where you are in
@@ -130,6 +148,16 @@ Strong **ritual + retention + shareability** mechanic; fits the "feel-good, pres
   IS fully feasible today.
 - **Sequencing:** PHASE 2 delighter, NOT weekend work. The AFTER video *depends on logging
   working* (reliability fixes / #16) — so the weekend reliability work is a prerequisite.
+
+## A.8c Far-future feature (at scale): workout-buddy matching
+Once there are many users: **match people as WORKOUT BUDDIES** based on workouts, goals,
+schedule, location, interests — accountability + company + shared sessions.
+- **Buddy, NOT dating.** Dating = a different, riskier, off-theme business. Buddy-matching is
+  on-brand for a feel-good health product (working out with someone feels good).
+- **Network-effects layer** → only makes sense at scale; a community/lock-in moat.
+- **Closes an old loop:** serves the exact person Jasmine described (wanted a *human*
+  companion to train *with*, not an AI). At scale we serve both: AI companion + human buddy.
+- **Sequencing:** EXTREMELY long term / post-scale. Keep parked.
 
 ## A.8 What it is NOT (scope discipline)
 - **NOT nutrition** (no expertise / no moat — set aside; dad's call).
