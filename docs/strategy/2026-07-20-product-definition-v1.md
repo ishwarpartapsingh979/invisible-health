@@ -44,6 +44,26 @@ motivation/accomplishment videos, the visuals, even error/empty states.
   (existing rule), never blanket praise. It works through genuine progress + warmth + being
   truly *seen* — not fake cheerleading.
 
+## A.0 (SECOND NORTH STAR) — every workout is an IMMERSIVE EXPERIENCE you're excited about
+Make each session **an experience someone looks forward to each day — not "a workout" to
+grind.** Think **SoulCycle / Peloton**: they didn't sell spin (a commodity) — they sold an
+*experience* (dark room, music drop, emotional arc, instructor, tribe, identity). **The
+experience is the product; the exercise is the vehicle.** That's what creates *craving +
+loyalty* — the thing ordinary fitness apps (which feel like chores → abandonment) never get.
+- **Pairs with feel-good:** feel-good = how it *feels* (emotional); immersive-experience = what
+  it *is* (an event, not a task). Together: don't build a fitness *tool*; build an experience
+  people *crave*.
+- **Bigger canvas than a studio:** SoulCycle is chained to a studio/bike/class-time/human.
+  Ours = the same emotional hit but **personalized, adaptive, and ANYWHERE** (party run on the
+  road, candlelit-calm strength at home, stadium-roar finish). Portable, personal transformation.
+- **Unifies the delighters (they're the MECHANISMS; this is the STANDARD):** vibe engine (A.8e)
+  = the world; before/after videos (A.8b) = hype + celebration bookends; presence + coach's
+  voice = the "instructor"; feel-good tone = the emotional room.
+- **Design test:** "Does this make the workout an *experience they're excited about* — or just
+  a workout?" If it doesn't move that, probably don't build it.
+- **It IS the retention engine** — an experience you look forward to daily = the "would you be
+  DISAPPOINTED to lose it" metric, made real.
+
 ## A.0a Notifications & respect (pull, not push)
 Expression of the feel-good theme: **notifications OFF by default** — un-asked-for pushes
 feel pushy and violate feel-good.
