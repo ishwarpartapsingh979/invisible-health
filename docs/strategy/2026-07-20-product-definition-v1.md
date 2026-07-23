@@ -537,6 +537,25 @@ Before building in SwiftUI (which can't be built/tested in a cloud session), **p
 new UX** (Home + Workout + History + Profile-slider) as an interactive Claude **artifact** to
 react to the layout first — cheap, fast iteration before native code.
 
+## F.8b MAIN PRIORITY (added 2026-07-20): AI exercise-demo pipeline
+Build a scalable, **owned** exercise demo-clip library via **motion-conditioned** AI video
+(form is TRANSFERRED from a reference clip, not hallucinated → feasible today). Answers the
+"build our own library vs. Nike" need and supplies the demo layer for workouts (#37) + the
+mix-and-match engine (PLAN/ADAPT).
+**Pipeline:**
+1. **Segment** — a video-understanding LLM (Gemini-class long-video) watches a reference
+   workout video → identifies each exercise + timestamps.
+2. **Extract motion** — per segment, pull the pose/motion reference.
+3. **Generate** — a **motion-conditioned** video model (Higgsfield / Runway / Kling-class)
+   produces a consistent-style per-exercise demo *driven by the reference motion* (so form is
+   correct because it's copied, not invented).
+4. **Tag** — LLM tags each clip: body part(s), level, equipment.
+5. **Store** → exercise library → feeds mix-and-match (dad + sports-science rules + how you
+   feel + time) and plan→demo (#37).
+**Note (choice, not blocker):** source footage IP is a business call — prefer own/consented
+reference (e.g., record dad) or reference-for-motion-only; and expect quality iteration on
+complex movements. Neither blocks starting.
+
 ## F.8 Weekend kickoff order (for Claude)
 1. Bring up this Part F. 2. Gap-analysis (Part C) vs. code. 3. Decide photo job (F.4).
 4. Prototype the UX as an artifact (F.7). 5. Triage + start the bug-fixes (F.5).
