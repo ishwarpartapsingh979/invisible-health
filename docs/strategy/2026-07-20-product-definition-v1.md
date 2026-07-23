@@ -35,6 +35,24 @@ motivation/accomplishment videos, the visuals, even error/empty states.
   (existing rule), never blanket praise. It works through genuine progress + warmth + being
   truly *seen* — not fake cheerleading.
 
+## A.0a Notifications & respect (pull, not push)
+Expression of the feel-good theme: **notifications OFF by default** — un-asked-for pushes
+feel pushy and violate feel-good.
+- **Opt-IN, not opt-out.** App-initiated notifications are off unless the user *specifically*
+  asks for them. (Note the exception: a reminder the user sets themselves — "remind me at
+  6pm" — is *wanted*, opt-in by their own action, and fine. The rule targets app-initiated,
+  un-asked engagement pings.)
+- **Easy opt-out inside every notification.** No dark patterns; the inverse of the Noom
+  "hard-to-cancel" pattern we flagged.
+- **Any notification that DOES fire must itself be feel-good** — warm/celebratory ("your
+  highlight video's ready", "nice work today"), NEVER guilt ("you haven't worked out in 3
+  days"). Every notification earns its place.
+- **Principled tradeoff (accept it):** notifications are the #1 retention lever; opting out
+  by default reduces reactivation. That's the right bet — we measure "do they MISS it" (pull),
+  not how often we can nag them back (push). If we need pings to retain, the product isn't
+  loved enough yet — honest signal, not something to paper over.
+- **Broader ethic:** pull-not-push, respect attention, no dark patterns.
+
 ## A.1 Essence
 **A training companion that is *with you wherever you work out* — gym, road, field, home —
 powered by a real coach's judgment (dad's system) and your own context + where you are in
