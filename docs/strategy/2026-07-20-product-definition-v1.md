@@ -549,8 +549,14 @@ mix-and-match engine (PLAN/ADAPT).
 3. **Generate** — a **motion-conditioned** video model (Higgsfield / Runway / Kling-class)
    produces a consistent-style per-exercise demo *driven by the reference motion* (so form is
    correct because it's copied, not invented).
-4. **Tag** — LLM tags each clip: body part(s), level, equipment.
-5. **Store** → exercise library → feeds mix-and-match (dad + sports-science rules + how you
+4. **VERIFY (human gate)** — every generated clip is reviewed by **dad + a sports-science
+   person** before upload: approve / reject; **rejected clips are redone (regenerated) and
+   re-reviewed**; only approved clips proceed. → makes the library **expert-verified** (a moat
+   + trust signal no raw-AI competitor can claim). Keep it a fast approve/reject queue so the
+   experts *gatekeep* (high-leverage), not create. Rejection reasons feed back to improve the
+   generation prompts/conditioning → fewer rejects over time (quality flywheel).
+5. **Tag** — LLM tags each approved clip: body part(s), level, equipment.
+6. **Store** → exercise library → feeds mix-and-match (dad + sports-science rules + how you
    feel + time) and plan→demo (#37).
 **Note (choice, not blocker):** source footage IP is a business call — prefer own/consented
 reference (e.g., record dad) or reference-for-motion-only; and expect quality iteration on
