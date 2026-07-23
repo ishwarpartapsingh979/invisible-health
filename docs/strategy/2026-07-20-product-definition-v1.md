@@ -204,6 +204,30 @@ credential looks like a reason to pivot). Candidate future instances, parked:
   *more* (passion, not credential-flattery — Mom-Test his own motivation), that's a deliberate
   *replacement* decision, not a reflex. Watch the pattern.
 
+## A.8e Adaptive immersive audio — "vibe engine" / choose-your-world runs
+The fullest expression of the feel-good + presence + audio-first soul. Nike Run Club guided
+runs (Coach Bennett) are **pre-recorded, identical for everyone**; ours is **live, personalized
+to your data, and adaptive in real-time** — a categorical step up.
+- **Worlds (pick, or coach chooses):** party run (crowd/festival energy), woods/trail, calm
+  sea/beach, stadium (you're the pro being cheered), city-night, rain, zen (recovery), and
+  **the pack** (footfalls/breathing beside you + a virtual group pacing/cheering = the "running
+  with a lot of people" sensation).
+- **Two adaptive layers:** (1) **mood-driven** — how you *want* to feel (energy→party,
+  calm→sea/woods); (2) **performance-driven** from HR/pace/effort — fading → crowd rallies +
+  coach steps in; flying → crowd roars; steady → ambient flow; wall → calm + ease off. Coach
+  *decides* to MATCH or deliberately SHIFT your state = atmosphere as **emotional medicine**.
+- **Coach layer (beats Bennett):** dad's voice, **personalized + live** (knows plan, arc, PRs,
+  how you feel today); motivational words on *your* milestones/effort — not a generic recording.
+- **Broader:** tempo-matched adaptive music (BPM↔cadence); non-run modes (gym-floor/hype for
+  strength, class-feel for home, calm for walks); **narrative/adventure mode** (Zombies-Run-style
+  story); **shared/social worlds** (friends' presence, live or ambient → ties to buddy-matching
+  A.8c); learns your vibe preferences over time; bookended with before/after videos (A.8b) =
+  full immersive session.
+- **Feasibility (on-architecture):** real-time layered audio (soundscape stems + adaptive music
+  + live coach TTS) mixed from HR/pace/mood. Already partly there — `BackgroundAudioPlayer`
+  plays audio into the live run, HR + GPS stream, realtime voice coach exists. Buildable by
+  orchestrating layers/state you already have.
+
 ## A.8 What it is NOT (scope discipline)
 - **NOT nutrition** (no expertise / no moat — set aside; dad's call).
 - **NOT an effort-policing / surveillance tool.**
