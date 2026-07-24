@@ -63,6 +63,25 @@ loyalty* — the thing ordinary fitness apps (which feel like chores → abandon
   a workout?" If it doesn't move that, probably don't build it.
 - **It IS the retention engine** — an experience you look forward to daily = the "would you be
   DISAPPOINTED to lose it" metric, made real.
+- **The COACH CRAFT (SoulCycle-style) — in EVERY workout, not just runs.** Great boutique
+  instructors do specific things; encode ALL of them into the coach (dad's voice + style),
+  across strength/gym/home/HIIT, personalized:
+  - **Emotional ARC** — narrate the session as a journey: warm-up build → the climb → a PEAK
+    (leave everything) → triumphant finish. (Strength: hard set = the peak.)
+  - **Meaning/mantras** — dad's philosophy + *your* why, woven in mid-effort, tuned to how you
+    feel (personalized vs. SoulCycle's one-size mantra).
+  - **Ride the beat** — reps/intervals cued to music; the push on the drop.
+  - **Engineered PEAK/catharsis** — a signature high point each session (hardest set, music
+    swells, crowd roars, coach at full energy), then release.
+  - **Countdowns** — "10 seconds, give me everything," tension→release.
+  - **You're SEEN** — your name, history, live wins called out (the app actually knows you).
+  - **Ritual + tribe** — hype video in → atmosphere/world → celebration video out → (later) buddies.
+  - **Differentiator:** SoulCycle = one instructor, same for everyone, one room/class-time. Ours
+    = same emotional experience, **personalized (dad's voice, your data, your mood), any workout,
+    anywhere, anytime.** Frees the studio magic from the studio.
+  - **Where the work is (doable):** the *performance* (arc, timing, emotional delivery) is a
+    design/content craft — grounded in **dad's real coaching style** (the moat) + **expressive
+    AI voices** (tech ready). Not a "can we" problem; a scripting/delivery problem.
 
 ## A.0a Notifications & respect (pull, not push)
 Expression of the feel-good theme: **notifications OFF by default** — un-asked-for pushes
