@@ -335,7 +335,22 @@ Structure the immersive experiences on two dimensions:
   generic, pre-recorded, seated; ours = personalized, live, in-coach's-voice, walking, adaptive.
   Fits the post-work-decompress moment (A.0c) + the calming mood experience.
 
-## A.8 What it is NOT (scope discipline)
+## A.8h Steps / daily-goal coach (India-resonant, low-friction hook)
+Steps are the **easiest** health behavior + **culturally huge in India** (everyone tracks ~10k) →
+a near-zero-friction angle, and a possible **entry WEDGE** (get people in with "hit your steps
+delightfully," then open into the fuller experience). Fits busy-professional (A.0c) + "make
+health effortless" (the original hypothesis).
+- **Feature = personal steps coach:** **personalized goal** (tuned to their baseline/schedule,
+  not a blanket 10k) · **gap-aware** (knows how many steps left today) · **drafts an EXPERIENCE
+  to close the gap** calibrated to what's left ("1,500 to go → a 12-min beach wind-down walk to
+  finish strong"). Hitting the number becomes a *delightful experience, not a chore.*
+- **⚠️ Consistency (critical):** must stay **feel-good + pull-not-push** (A.0a) — **invite, never
+  shame.** Frame the gap POSITIVELY ("finish strong", not "you're behind/you failed"); OFFER a
+  delightful option (on app-open / gentle opt-in), don't guilt-ping. The difference between a
+  step-nag machine (everyone hates) and a feel-good steps coach (nobody else is).
+- **Maps to:** HealthKit (iOS) / Google Fit (Android) for step data + personal goal; the
+  immersive engine for the gap-closing walk (mood-tuned); the mood/adapt input for "motivation
+  wavers." Effortless + delightful for the busy professional.
 - **NOT nutrition** (no expertise / no moat — set aside; dad's call).
 - **NOT an effort-policing / surveillance tool.**
 - **NOT a workout-generation race** vs. ChatGPT (generation is a feature, not the pitch).
