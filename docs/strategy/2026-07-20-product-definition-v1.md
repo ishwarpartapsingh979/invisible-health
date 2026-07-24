@@ -666,6 +666,26 @@ the Indian context, with eyes open on biology.
 > underneath.** "Extremely good intelligence" is the stated top priority (repeated). It's
 > Claude's duty to bring these up at the start of the weekend work session.
 
+## F.0 EXECUTION SEQUENCE (Ishwar's build philosophy)
+**Plumbing first → ship to real people → collect data → improve the experiences.** Build the
+personalised-experience *foundation* (not perfect experiences), get it into others' hands, then
+iterate with data. Matches test-don't-theorize + the data flywheel.
+- **What "the plumbing" IS (build first):** reliable core loop (plan/vet/adapt/accompany) + the
+  experience framework (defaults/custom, pre/during/post) + personalization inputs (profile,
+  mood, HR/steps/GPS, music, history) + **MULTI-USER** + **DATA CAPTURE**.
+- **⚠️ Two easy-to-miss pieces that ARE the plumbing:**
+  1. **MULTI-USER (#7) is a PREREQUISITE, not a parked epic.** "Give it to other people" is
+     impossible while the app is hardcoded single-user (`user_id="ishwar"` everywhere). Even the
+     **wife dogfood** needs it (her own profile/data). Build at least a lightweight version FIRST.
+  2. **DATA CAPTURE / instrumentation.** "Improve as we get data" only works if you log the right
+     things from day 1 (experience picked, how they felt, completion, what worked, outcomes).
+     Build measurement IN — the classic trap is shipping, getting users, and having logged nothing.
+- **v1 experiences can be SIMPLE + instrumented → improve with data.** Don't over-polish the
+  experience (SoulCycle-perfect) before you have users/data; good-enough + measured beats
+  polished + empty.
+- **Reshapes priorities:** plumbing = reliability + core loop + **multi-user** + **data capture**
+  + experience framework. Immersive polish + delighters come AFTER the plumbing ships.
+
 ## F.1 The three main surfaces
 1. **HOME — one multimodal window.** Speak, type, OR upload photos — combinable (e.g., talk +
    attach a photo). The single front door. Voice stays PRIMARY (per CLAUDE.md); text (#40) +
