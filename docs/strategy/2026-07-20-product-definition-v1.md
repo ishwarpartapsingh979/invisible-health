@@ -310,6 +310,23 @@ Two levels:
 feasibility research). Works with ANY music source.
 **Sequencing:** v1 = system-ducking (already have it); v2 = account link (Apple Music first).
 
+## A.8g Experience system — defaults + custom (mood), across pre/during/post
+Structure the immersive experiences on two dimensions:
+- **Default vs. custom:** **defaults** = a menu of ready-made experiences (Party/Woods/Stadium/
+  Zen…) — tap and go, zero decisions (the *effortless* half, great for the busy pro). **Custom**
+  = "how are you feeling?" → the app composes the experience for your **mood/state** (the
+  *personalization* half). Good product design = strong default + deep personalization available.
+- **Phase:** **PRE-workout = a HYPE experience** (Ishwar's idea — attacks the hardest moment,
+  *starting*, and sets the tone for the whole day; the "before" bookend to the accomplishment
+  video) → **DURING** = the immersive session → **POST** = celebrate + cool-down.
+- **Hype is one of several MOOD experiences:** flat→hype/rally · stressed→calming reset ·
+  pumped→full-intensity party · need-to-think→zone-out ambient.
+- **Mood input stays effortless:** a spoken word ("I'm low today"), a one-tap picker, or
+  **inferred** (HR, time, history, later calendar).
+- **Through-line:** this is the core "**adapt to how you feel**" function turned into something
+  the user can PICK, and it's how the busy-professional daily bright spot (A.0c) gets tuned to
+  their day. Defaults keep it effortless; mood-custom + pre-hype make it personal + exciting.
+
 ## A.8 What it is NOT (scope discipline)
 - **NOT nutrition** (no expertise / no moat — set aside; dad's call).
 - **NOT an effort-policing / surveillance tool.**
