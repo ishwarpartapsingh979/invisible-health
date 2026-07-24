@@ -141,6 +141,24 @@ apps CAN'T truthfully make:
 - **Variants in pocket:** experience-forward ("Not workouts — fitness *experiences*…") ·
   moat-forward ("40 years of elite coaching, turned into a hyper-personalised experience made for you").
 
+### A.0d.1 The TWO-LAYER structure (workout × experience; ours OR yours)
+Refined articulation — separates the two layers cleanly:
+- **WORKOUT (the *what* / content):** created by **pro-athlete coaches (40+ yrs)** — OR **brought
+  by the user** (their existing plan or goal).
+- **EXPERIENCE (the *how* / delivery):** the **customisable, personalised** immersive delivery
+  that wraps ANY workout.
+- **Key insight: the EXPERIENCE is the product; the workout is the PAYLOAD (ours or theirs).**
+  The personalisation/immersion/retention live in the experience layer regardless of workout source.
+- **Why "bring your own plan/goal" is strategically strong:** lowers adoption friction (enhance,
+  don't make them abandon their trainer's plan) · broadens the market instantly (anyone with any
+  plan/goal) · keeps moat + flexibility (coach-designed = premium draw; wrap-your-own = inclusive
+  on-ramp; both feed the same engine).
+- **Maps to existing functions:** coach-created workouts = **PLAN** (dad's system + moat);
+  bring-your-own = **VET/adapt**; delivered-as-experience = the immersive layer (A.8e/g).
+- **Tightened line:** *"Your workouts are created by pro-athlete coaches with 40+ years of
+  experience — and delivered through customisable, personalised experiences. Already have a plan
+  or a goal? We build a personalised experience around that, too."*
+
 ## A.1 Essence
 **A training companion that is *with you wherever you work out* — gym, road, field, home —
 powered by a real coach's judgment (dad's system) and your own context + where you are in
