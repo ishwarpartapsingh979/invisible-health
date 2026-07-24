@@ -101,6 +101,31 @@ feel pushy and violate feel-good.
   loved enough yet — honest signal, not something to paper over.
 - **Broader ethic:** pull-not-push, respect attention, no dark patterns.
 
+## A.0c The target MOMENT — a busy professional's daily bright spot (ties both north stars to the user)
+Ishwar's vision: make the workout a **pleasant surprise** and a **launchpad** for people who
+work out around their **corporate jobs** (before work / just arrived). "A workout EXPERIENCE,
+not a workout." Personalized.
+- **The truth:** the day belongs to everyone else (meetings, deadlines); the workout is the one
+  immersive, *for-them* moment. Make it their **bright spot** — they walk into work **already
+  feeling they've won** before the day starts. Not "a workout around your job" → "the best 30
+  min of your morning that carries you into your job."
+- **Pleasant surprise = engineered delight/novelty:** a different world each day, personal
+  callbacks, surprise celebrations, favorite song at the peak — a *treat you're curious about*,
+  never the same grind.
+- **Personalized to your DAY, not just your body:** reads context/mood + (later) calendar and
+  sends you into work in the right state — confident before a big meeting ("you've got that 2pm
+  — walk in like you own the room"), calm when stressed, energized in the morning, decompressed
+  after work.
+- **The AFTERGLOW is the point:** not just during — the accomplishment + a mantra that sticks in
+  your 10am meeting + quiet confidence. It *frames the whole day*. That's the differentiator.
+- **Unification:** this re-anchors the immersive/feel-good north stars on the ORIGINAL user (the
+  busy professional) and the ORIGINAL hypothesis ("make health effortless for time-poor
+  people") — now adding the other half: **make it DELIGHTFUL too.** Effortless AND a pleasant
+  surprise = something they *want*, not just *should* do.
+- **The "how" already exists:** feel-good tone (the treat), immersive worlds + coach craft (the
+  experience), personalization from data+context (reads your day), before/after videos (ritual +
+  afterglow). This vision gives them a *purpose and a moment.*
+
 ## A.1 Essence
 **A training companion that is *with you wherever you work out* — gym, road, field, home —
 powered by a real coach's judgment (dad's system) and your own context + where you are in
