@@ -326,6 +326,14 @@ Structure the immersive experiences on two dimensions:
 - **Through-line:** this is the core "**adapt to how you feel**" function turned into something
   the user can PICK, and it's how the busy-professional daily bright spot (A.0c) gets tuned to
   their day. Defaults keep it effortless; mood-custom + pre-hype make it personal + exciting.
+- **The CALM end of the spectrum — meditative / mindful walk (e.g. evening wind-down).** Same
+  engine as the party run, opposite vibe: a guided, adaptive, *walking* meditation for
+  decompressing after work. **No Headspace/Calm API needed** — those apps have NO public content
+  APIs/MCPs (closed content; partnerships are BD deals, not integrations). **Generate it, better
+  and personalized:** LLM script (tuned to person/evening/mood) + calm coach TTS voice + ambient
+  soundscape + breathing/pacing cues + GPS/time/mood context. Differentiator: Headspace/Calm =
+  generic, pre-recorded, seated; ours = personalized, live, in-coach's-voice, walking, adaptive.
+  Fits the post-work-decompress moment (A.0c) + the calming mood experience.
 
 ## A.8 What it is NOT (scope discipline)
 - **NOT nutrition** (no expertise / no moat — set aside; dad's call).
