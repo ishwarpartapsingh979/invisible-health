@@ -126,6 +126,21 @@ not a workout." Personalized.
   experience), personalization from data+context (reads your day), before/after videos (ritual +
   afterglow). This vision gives them a *purpose and a moment.*
 
+## A.0d POSITIONING STATEMENT / TAGLINE
+> **"Hyper-personalised fitness experiences, designed by pro-athlete coaches with 40+ years of
+> experience."**
+
+The one-line external positioning — compresses the whole product into three claims most fitness
+apps CAN'T truthfully make:
+- **Hyper-personalised** = the adapt-to-you core (your data, mood, day).
+- **fitness EXPERIENCES** (not "workouts"/"plans") = the immersive North Star; "experiences" is
+  the differentiating word.
+- **designed by pro-athlete coaches, 40+ years** = the MOAT as credibility (real: dad — 40 yrs
+  performance-athlete coaching + Ranji). "Coaches" (plural) is forward-looking → the platform
+  (library of elite coaches); already defensible via dad + sports-science + nutritionist colleagues.
+- **Variants in pocket:** experience-forward ("Not workouts — fitness *experiences*…") ·
+  moat-forward ("40 years of elite coaching, turned into a hyper-personalised experience made for you").
+
 ## A.1 Essence
 **A training companion that is *with you wherever you work out* — gym, road, field, home —
 powered by a real coach's judgment (dad's system) and your own context + where you are in
