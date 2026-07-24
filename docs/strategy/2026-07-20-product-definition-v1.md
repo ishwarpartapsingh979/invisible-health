@@ -292,6 +292,24 @@ to your data, and adaptive in real-time** — a categorical step up.
   plays audio into the live run, HR + GPS stream, realtime voice coach exists. Buildable by
   orchestrating layers/state you already have.
 
+## A.8f Music-service sync (Spotify / Apple Music) — compose WITH their music
+Weave the coach voice + effects + ambience together WITH the user's own music (not compete).
+Two levels:
+- **Level 1 (WORKS TODAY, any source, zero integration):** the system audio session already
+  mixes + **ducks** whatever's playing (Spotify/Apple Music via their own app) when the coach
+  speaks — already built (`VoiceCallManager` music-ducking). So "their music + coach + effects
+  together" already functions.
+- **Level 2 (connect their account → tailor it):** read **taste** (playlists/top tracks/genres)
+  → personalize the world/vibe; use **their songs as the pace-matched soundtrack** sequenced to
+  the session arc (build → favorite banger on the PEAK → cool-down); **control playback**
+  (pick/queue/time songs).
+**How:** Apple Music via **MusicKit** = most mixable on iOS (shares system audio); Spotify via
+**SDK** for playback control + reading current track + account for taste.
+**BPM / "every step on the beat":** do NOT rely on Spotify tempo data (restricted for new apps)
+— instead **detect cadence on-device (accelerometer)** and match/time-stretch (per the
+feasibility research). Works with ANY music source.
+**Sequencing:** v1 = system-ducking (already have it); v2 = account link (Apple Music first).
+
 ## A.8 What it is NOT (scope discipline)
 - **NOT nutrition** (no expertise / no moat — set aside; dad's call).
 - **NOT an effort-policing / surveillance tool.**
