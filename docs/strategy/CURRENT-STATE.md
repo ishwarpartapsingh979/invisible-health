@@ -9,6 +9,29 @@
 
 ---
 
+## ⏭️ LAST SESSION HANDOFF (2026-07-25, cloud) — READ THIS TO REVIEW & TAKE OVER
+**Branch:** `claude/travel-base-branch-visibility-xayckv` (based on `travel-base`). **Nothing merged, no PR, nothing deployed.** 3 new commits on top of `travel-base`:
+
+| Commit | What | Risk |
+|---|---|---|
+| `58ae23e` | **Multi-user backend** — agent derives `user_id` from participant identity (`_user_id_from_identity` strips `-ios`/`-watch`/`-web`; `wait_for_participant`, 10s timeout, `"ishwar"` fallback). `SessionStore` gets an instance `user_id`; method params default to it (call sites unchanged). All inline `"ishwar"` writes + tracer + rule-firing log use the derived id. | Low — back-compat `ishwar-ios → ishwar` verified; but it IS live agent behavior, dogfood right after merge. |
+| `88a66ad` | **VET-a-workout tool** — `vet_workout` function-tool + `RulesEngine.vet_prompt` → ENDORSE/MODIFY/SWAP verdict on a plan the user brings, off the same rules. Surfaced in the coach prompt. | Low — net-new tool, no existing behavior touched. |
+| `c131e51` | Docs (this file §8). | None. |
+
+**Verified in-cloud:** `py_compile` both files ✅; identity logic 7/7 cases ✅; `vet_prompt` all 4 verdict shapes ✅. **Not run:** real agent / LiveKit / OpenAI / Supabase (no prod touch).
+
+**HOW TO REVIEW (laptop Claude Code):** ask it to `git fetch && git log --oneline origin/main..claude/travel-base-branch-visibility-xayckv` then `git diff origin/main...claude/travel-base-branch-visibility-xayckv` — or open a PR for the GitHub diff view.
+
+**✅ YOUR PARTS (start here):**
+1. **Review + merge** the branch → CI auto-deploys the agent → dogfood: say *"my trainer wants 5x5 heavy squats today, should I?"* (should trigger VET) and confirm a normal session still saves under you.
+2. **Run migration** `infra/migrations/013_local_dates.sql` in Supabase (still pending, unrelated to above; phone-doable).
+3. **iOS (Xcode) — the multi-user client half** (not started; needs a design call, see §8):
+   - `Invisible_Health/Voice/VoiceConfig.swift:29` — `participantIdentity = "ishwar-ios"` → per-user.
+   - `PlanTabView.swift:138`, `NutritionTabView.swift:150`, `ShowMeSheet.swift:93,441` — hardcoded `user_id=ishwar` → per-user.
+   - Pairs with **Sign in with Apple**. (Cloud can pre-write this Swift on request — just can't build it.)
+
+---
+
 ## 1. What we're building (canonical)
 A **workout EXPERIENCE app, backed by career professionals & pro-athlete coaches.**
 Tagline: **"Hyper-personalised fitness experiences, designed by pro-athlete coaches with 40+
