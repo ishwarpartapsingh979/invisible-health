@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Invisible Health — Voice-first + tabs</title>
+<style>
+  :root{
+    --bg:#F3F0EA; --panel:#FBF9F5; --card:#FFFFFF; --ink:#2E2B27;
+    --muted:#9C948A; --faint:#C9C2B7; --line:#ECE7DE;
+    --accent:#6E7C67; --accent-tint:#EDF0EA;
+    --shadow:0 1px 2px rgba(40,35,28,.04),0 8px 24px rgba(40,35,28,.05);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;background:#E7E2D9;color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+  .page{min-height:100vh;display:flex;flex-direction:column;align-items:center;gap:16px;padding:30px 14px 60px}
+  .legend{max-width:740px;text-align:center;color:#6f685e}
+  .legend h1{font-size:19px;margin:0 0 6px;color:#3a352e;font-weight:600}
+  .legend p{margin:3px 0;font-size:13px;line-height:1.5}
+  .stage{display:flex;gap:30px;flex-wrap:wrap;justify-content:center;align-items:flex-start}
+  .col{display:flex;flex-direction:column;align-items:center;gap:10px}
+  .caption{font-size:11px;color:#8a8277}
+
+  .phone{width:384px;height:812px;border-radius:46px;background:var(--bg);
+    border:1px solid #d8d1c6;box-shadow:0 30px 70px rgba(60,50,38,.22),inset 0 0 0 7px #efe9df;position:relative;overflow:hidden}
+  .notch{position:absolute;top:0;left:50%;transform:translateX(-50%);width:120px;height:24px;background:#efe9df;border-radius:0 0 16px 16px;z-index:40}
+  .statusbar{position:absolute;top:0;left:0;right:0;height:44px;display:flex;justify-content:space-between;align-items:center;padding:0 28px;font-size:12px;color:#8a8277;z-index:30;font-weight:500}
+
+  .screen{position:absolute;inset:0;display:none;flex-direction:column;animation:fade .3s ease;padding-bottom:152px}
+  .screen.active{display:flex}
+  @keyframes fade{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+  .scroll{flex:1;overflow-y:auto;padding:0 22px}
+  .scroll::-webkit-scrollbar{display:none}
+
+  .topbar{display:flex;justify-content:space-between;align-items:center;padding:52px 24px 8px}
+  .h2{font-size:23px;margin:0;font-weight:600}
+  .sub{color:var(--muted);font-size:13px;margin-top:3px}
+  .avatar{width:36px;height:36px;border-radius:50%;background:var(--accent-tint);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:600;cursor:pointer;font-size:14px;border:1px solid var(--line)}
+
+  /* HOME voice canvas */
+  .canvas{display:flex;flex-direction:column;align-items:center;text-align:center;padding:20px 30px 6px}
+  .halo{width:104px;height:104px;border-radius:50%;position:relative;display:flex;align-items:center;justify-content:center;margin-bottom:20px;cursor:pointer}
+  .halo .core{width:15px;height:15px;border-radius:50%;background:var(--accent)}
+  .halo::before,.halo::after{content:"";position:absolute;inset:0;border-radius:50%;border:1px solid var(--accent);opacity:.3;animation:breathe 4.5s ease-in-out infinite}
+  .halo::after{inset:24px;animation-delay:1.2s}
+  @keyframes breathe{0%,100%{transform:scale(.85);opacity:.12}50%{transform:scale(1.08);opacity:.45}}
+  .greet{font-size:22px;font-weight:600}
+  .listen{color:var(--muted);font-size:13.5px;margin-top:4px}
+  .exchange{margin-top:22px;width:100%;max-width:300px;text-align:left;opacity:0;transition:.4s}
+  .exchange.show{opacity:1}
+  .bubble{font-size:14.5px;line-height:1.5;margin:9px 0}
+  .bubble.you{color:var(--faint)}.bubble.coach{color:var(--ink)}
+  .bubble .who{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--faint);margin-bottom:3px}
+  .ghosts{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:20px}
+  .ghost{font-size:12.5px;color:var(--muted);border:1px dashed var(--line);border-radius:20px;padding:7px 13px;cursor:pointer}
+  .ghost:active{background:var(--accent-tint)}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:18px;margin:14px 22px;box-shadow:var(--shadow)}
+  .card.tap{cursor:pointer}
+  .card .k{font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:var(--faint);margin-bottom:8px;font-weight:600}
+  .card .title{font-size:18px;font-weight:600}
+  .card .desc{color:var(--muted);font-size:13.5px;line-height:1.5;margin-top:5px}
+  .row{display:flex;justify-content:space-between;align-items:center;gap:12px}
+  .btn{display:block;width:100%;text-align:center;border:none;border-radius:15px;padding:15px;font-size:15px;font-weight:600;cursor:pointer;margin-top:14px}
+  .btn.primary{background:var(--accent);color:#fff}
+  .btn.quiet{background:transparent;color:var(--accent);border:1px solid var(--line);margin-top:8px}
+  .arrow{color:var(--faint);font-size:20px}
+  /* home: centered voice canvas + small experiences pill */
+  .homebody{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 30px}
+  .exppill{margin:0 22px 6px;display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px 14px;cursor:pointer}
+  .exppill .t{font-size:13.5px;font-weight:500}
+  .exppill .d{font-size:11.5px;color:var(--muted);margin-top:1px}
+  .pillbtn{border:none;background:var(--accent);color:#fff;border-radius:11px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer}
+  /* history transcript */
+  .day{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--faint);margin:16px 0 2px}
+  .qa{padding:14px 0;border-bottom:1px solid var(--line)}
+  .qa:last-child{border:none}
+  .qa .u{font-size:14.5px;color:var(--ink);font-weight:500}
+  .qa .who{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--faint);margin-bottom:3px}
+  .qa .a{font-size:13.5px;color:var(--muted);margin-top:8px;line-height:1.5}
+
+  /* lists */
+  .head{display:flex;align-items:center;gap:14px;padding:52px 22px 4px}
+  .back{font-size:22px;color:var(--muted);cursor:pointer;line-height:1}
+  .hint{font-size:13px;color:var(--muted);margin:2px 22px 8px}
+  .row2{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:15px 0;border-bottom:1px solid var(--line);cursor:pointer}
+  .row2:last-child{border:none}
+  .row2 .t{font-size:15.5px;font-weight:500}.row2 .d{font-size:12.5px;color:var(--muted);margin-top:2px}
+  .play{width:32px;height:32px;border-radius:50%;background:var(--accent-tint);color:var(--accent);display:flex;align-items:center;justify-content:center;flex:0 0 auto;font-size:13px}
+  .seg{display:flex;background:var(--panel);border-radius:14px;padding:4px;margin:6px 22px 12px;border:1px solid var(--line)}
+  .seg div{flex:1;text-align:center;padding:9px;font-size:12.5px;border-radius:11px;cursor:pointer;color:var(--muted)}
+  .seg div.on{background:var(--card);color:var(--ink);font-weight:600;box-shadow:var(--shadow)}
+  .field{width:calc(100% - 44px);margin:0 22px;background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:14px 16px;color:var(--ink);font-size:14px}
+  .field::placeholder{color:var(--faint)}
+
+  /* persistent coach strip */
+  .coachbar{position:absolute;left:12px;right:12px;bottom:88px;height:54px;background:var(--panel);border:1px solid var(--line);border-radius:17px;box-shadow:var(--shadow);display:flex;align-items:center;gap:11px;padding:0 12px 0 16px;z-index:26}
+  .coachbar.off{opacity:.7}
+  .live{width:10px;height:10px;border-radius:50%;background:var(--accent);position:relative;flex:0 0 auto}
+  .live::after{content:"";position:absolute;inset:-5px;border-radius:50%;border:1px solid var(--accent);opacity:.5;animation:ping 2.6s ease-out infinite}
+  @keyframes ping{0%{transform:scale(.7);opacity:.6}100%{transform:scale(1.5);opacity:0}}
+  .coachbar.off .live{background:var(--faint)}.coachbar.off .live::after{animation:none;opacity:0}
+  .clabel{flex:1;font-size:13px;color:var(--ink)}.clabel small{display:block;color:var(--muted);font-size:11px}
+  .cicon{width:32px;height:32px;border-radius:11px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted)}
+  .cicon svg{width:18px;height:18px;fill:currentColor}
+
+  .tabbar{position:absolute;bottom:0;left:0;right:0;height:80px;background:rgba(251,249,245,.94);backdrop-filter:blur(20px);border-top:1px solid var(--line);display:flex;z-index:25;padding-bottom:10px}
+  .tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;color:var(--faint);font-size:10.5px;cursor:pointer;font-weight:500}
+  .tab svg{width:22px;height:22px;fill:currentColor}
+  .tab.on{color:var(--accent)}
+
+  /* IN-SESSION rest */
+  .rest{position:absolute;inset:0;background:linear-gradient(180deg,#EFEAE0,#E6DFD2);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px}
+  .rest .k{font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--faint)}
+  .rest h3{font-size:25px;font-weight:600;margin:8px 0 2px;transition:.3s}
+  .breath{width:150px;height:150px;border-radius:50%;position:relative;margin-bottom:22px}
+  .breath::before,.breath::after{content:"";position:absolute;inset:0;border-radius:50%;border:1px solid rgba(94,107,88,.4);animation:breathe 5s ease-in-out infinite}
+  .breath::after{inset:34px;animation-delay:1.5s}
+  .breath .cc{position:absolute;inset:66px;border-radius:50%;background:rgba(94,107,88,.5)}
+  .earpods{display:flex;align-items:center;gap:9px;color:var(--muted);font-size:14px;margin-top:26px}
+  .earpods .live{background:#5e6b58}.earpods .live::after{border-color:#5e6b58}
+  .track{color:var(--faint);font-size:12.5px;margin-top:10px}
+  .voicehint{margin-top:26px;border:1px dashed var(--line);border-radius:20px;padding:9px 15px;font-size:12.5px;color:var(--muted);cursor:pointer}
+  .end{margin-top:16px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:16px;padding:13px 30px;font-size:15px;font-weight:600;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="legend">
+    <h1>Invisible Health — voice-first, with tabs for lookup</h1>
+    <p><b>Home = talk.</b> <b>Tabs</b> (Workout / History / Profile) = direct lookup, not voice. <b>Experiences</b> opens from Home → browse all + create your own + apply. Right = once you start: phone rests, and you change the vibe by <b>voice</b>.</p>
+  </div>
+
+  <div class="stage">
+   <!-- ===== PHONE 1 ===== -->
+   <div class="col">
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="statusbar"><span>9:41</span><span>◍ 100%</span></div>
+
+      <!-- HOME -->
+      <div class="screen active" id="s-home">
+        <div class="topbar"><div><div class="h2">Good morning</div><div class="sub">Just talk — I’m here.</div></div><div class="avatar" onclick="setTab('profile')">U</div></div>
+
+        <!-- voice canvas, centered -->
+        <div class="homebody">
+          <div class="halo" onclick="talk()"><div class="core"></div></div>
+          <div class="listen" id="listen">Tap to talk, or say “hey coach.”</div>
+          <div class="exchange" id="exchange">
+            <div class="bubble you"><div class="who">You</div><span id="you-t">“Should I train today?”</span></div>
+            <div class="bubble coach"><div class="who">Coach</div><span id="coach-t">Recovery’s solid — yes. Your sunrise session’s ready. Say “let’s go.”</span></div>
+          </div>
+          <div class="ghosts">
+            <div class="ghost" onclick="talk('“Give me something calm”','A woodland run suits your mood. Applied — say “start.”')">Something calm</div>
+            <div class="ghost" onclick="talk('“Vet my friend’s plan”','Send it — I’ll check it against your arc and trim it.')">Vet a plan</div>
+          </div>
+        </div>
+
+        <!-- small experiences pill -->
+        <div class="exppill">
+          <div style="flex:1" onclick="goExp()"><div class="t" id="exp-name">Experiences</div><div class="d" id="exp-desc">Browse or create your own</div></div>
+          <button class="pillbtn" id="beginbtn" style="display:none" onclick="startSession(currentExp)">Begin</button>
+          <div class="arrow" id="exp-arrow" onclick="goExp()">›</div>
+        </div>
+      </div>
+
+      <!-- EXPERIENCES browser -->
+      <div class="screen" id="s-exp">
+        <div class="head"><span class="back" onclick="setTab('home')">‹</span><div class="h2">Experiences</div></div>
+        <div class="hint">Just say “start the beach run.” Or pick one to apply.</div>
+        <div class="scroll">
+          <div class="card tap" onclick="goCustom()"><div class="row"><div><div class="title">✨ Create your own</div><div class="desc">Describe any vibe — “rainy jazz-cafe night run.”</div></div><div class="arrow">›</div></div></div>
+          <div style="padding:0 22px">
+            <div class="row2" onclick="applyExp('Woodland run','Calm · birds, soft trail')"><div><div class="t">Woodland run</div><div class="d">Calm · birds, soft trail</div></div><div class="play">▷</div></div>
+            <div class="row2" onclick="applyExp('Beach run','Energising · waves, open horizon')"><div><div class="t">Beach run</div><div class="d">Energising · waves, open horizon</div></div><div class="play">▷</div></div>
+            <div class="row2" onclick="applyExp('Stadium finish','Big · a crowd carrying you home')"><div><div class="t">Stadium finish</div><div class="d">Big · a crowd carrying you home</div></div><div class="play">▷</div></div>
+            <div class="row2" onclick="applyExp('Sunrise strength','Warm · gym floor, steady build to a peak')"><div><div class="t">Sunrise strength</div><div class="d">Warm · steady build to a peak</div></div><div class="play">▷</div></div>
+            <div class="row2" onclick="applyExp('City night run','Cool · neon streets, a pulse')"><div><div class="t">City night run</div><div class="d">Cool · neon streets, a pulse</div></div><div class="play">▷</div></div>
+            <div class="row2" onclick="applyExp('Evening wind-down walk','Soothing · a guided walking reset')"><div><div class="t">Evening wind-down walk</div><div class="d">Soothing · a guided walking reset</div></div><div class="play">▷</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CUSTOM experience -->
+      <div class="screen" id="s-custom">
+        <div class="head"><span class="back" onclick="goExp()">‹</span><div class="h2">Create your own</div></div>
+        <div class="hint">Describe the vibe — or just tell the coach out loud.</div>
+        <div class="scroll">
+          <input class="field" id="customin" placeholder="e.g. rainy jazz-cafe night run"/>
+          <div class="ghosts" style="justify-content:flex-start;margin:14px 22px">
+            <div class="ghost" onclick="fillCustom('Rainy night run, mellow beats')">Rainy night, mellow</div>
+            <div class="ghost" onclick="fillCustom('Sunrise beach, upbeat')">Sunrise beach, upbeat</div>
+            <div class="ghost" onclick="fillCustom('Silent forest, no music')">Forest, no music</div>
+          </div>
+          <div style="margin:0 22px"><button class="btn primary" onclick="createCustom()">Create &amp; apply</button></div>
+          <div class="hint" style="margin-top:16px">Or say: “make me a rainy night run with mellow beats.”</div>
+        </div>
+      </div>
+
+      <!-- WORKOUT (tab · lookup) -->
+      <div class="screen" id="s-workout">
+        <div class="topbar"><div><div class="h2">Workout</div><div class="sub">Today’s plan</div></div><div class="avatar" onclick="setTab('profile')">U</div></div>
+        <div class="seg"><div class="on" onclick="segSel(this)">Coach’s plan</div><div onclick="segSel(this)">Bring your own</div></div>
+        <div class="scroll">
+          <div class="card" style="margin:0 0 14px"><div class="title">Lower body</div><div class="desc">Warm-up · four working sets to a hard peak · finisher. On your dad’s system + how you’re recovering.</div></div>
+          <div class="row2"><div><div class="t">Goblet squat</div><div class="d">3 × 10</div></div></div>
+          <div class="row2"><div><div class="t">Romanian deadlift</div><div class="d">4 × 8</div></div></div>
+          <div class="row2"><div><div class="t">Walking lunges</div><div class="d">finisher</div></div></div>
+        </div>
+      </div>
+
+      <!-- HISTORY (tab · your words + the coach’s replies) -->
+      <div class="screen" id="s-history">
+        <div class="topbar"><div><div class="h2">History</div><div class="sub">What you asked · what I said</div></div><div class="avatar" onclick="setTab('profile')">U</div></div>
+        <div class="scroll">
+          <input class="field" style="width:100%;margin:0 0 6px" placeholder="Search what you’ve said…"/>
+          <div class="day">Today · 8:10 AM</div>
+          <div class="qa"><div class="who">You</div><div class="u">“Should I train today?”</div><div class="who" style="margin-top:10px">Coach</div><div class="a">Recovery’s solid and you slept well — yes. I built you a lower-body session, steady build to one hard set.</div></div>
+          <div class="qa"><div class="who">You</div><div class="u">“Make it a bit shorter, I’m busy”</div><div class="who" style="margin-top:10px">Coach</div><div class="a">Done — trimmed to 28 minutes, kept the peak. Say “let’s go” when you’re ready.</div></div>
+          <div class="day">Yesterday</div>
+          <div class="qa"><div class="who">You</div><div class="u">“Vet this plan my friend sent”</div><div class="who" style="margin-top:10px">Coach</div><div class="a">Good base, but too much volume for where you are this week. I trimmed the accessory work and saved it as “Friend’s plan (adjusted).”</div></div>
+          <div class="qa"><div class="who">You</div><div class="u">“How’s my week looking?”</div><div class="who" style="margin-top:10px">Coach</div><div class="a">Three solid sessions, effort trending up, sleep steady. One more easy day and you’re on track.</div></div>
+          <div class="day">Mon</div>
+          <div class="qa"><div class="who">You</div><div class="u">“Change today to upper body”</div><div class="who" style="margin-top:10px">Coach</div><div class="a">Switched — upper push. Went well: RPE 7, 42 min, logged.</div></div>
+        </div>
+      </div>
+
+      <!-- PROFILE (tab) -->
+      <div class="screen" id="s-profile">
+        <div class="topbar"><div><div class="h2">Uday</div><div class="sub">You & your setup</div></div><div class="avatar">U</div></div>
+        <div class="scroll">
+          <div class="card" style="margin:0 0 14px"><div class="k">What your coach knows</div><div class="desc">Build + stay lean · 4×/week · home + gym · tight left hamstring. On your dad’s system.</div></div>
+          <div class="card" style="margin:0 0 14px"><div class="k">Devices</div><div class="desc">Apple Watch — connected · Whoop — not linked</div></div>
+          <div class="card" style="margin:0"><div class="k">Coach &amp; experiences</div><div class="desc">Voice: your dad’s style · default: Sunrise · music: Apple Music · notifications off</div></div>
+        </div>
+      </div>
+
+      <!-- coach strip (persistent) -->
+      <div class="coachbar" id="coachbar">
+        <div class="live"></div>
+        <div class="clabel" id="cstate">Coach on<small>Tap to talk · say “stop listening”</small></div>
+        <div class="cicon" onclick="talk('⌨️ typed','Got it.')"><svg viewBox="0 0 24 24"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zm2 3v2h2V8H6zm4 0v2h2V8h-2zm4 0v2h2V8h-2zm-8 4v2h2v-2H6zm4 0v2h6v-2h-6zm8 0v2h2v-2h-2z"/></svg></div>
+        <div class="cicon" onclick="talk('📷 shared a photo','Your left knee caves a touch — nudge it out.')"><svg viewBox="0 0 24 24"><path d="M9 4l-2 2H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-3l-2-2H9zm3 5a4 4 0 1 1 0 8 4 4 0 0 1 0-8z"/></svg></div>
+        <div class="cicon" id="coff" style="color:var(--accent)" onclick="toggleCoach()"><svg viewBox="0 0 24 24"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2z"/></svg></div>
+      </div>
+
+      <!-- tab bar -->
+      <div class="tabbar">
+        <div class="tab on" id="t-home" onclick="setTab('home')"><svg viewBox="0 0 24 24"><path d="M12 3 4 9v12h5v-7h6v7h5V9z"/></svg>Home</div>
+        <div class="tab" id="t-workout" onclick="setTab('workout')"><svg viewBox="0 0 24 24"><path d="M20.5 8H19V6a1 1 0 0 0-2 0v2h-2V6a1 1 0 0 0-2 0v5h-2V6a1 1 0 0 0-2 0v2H5a1 1 0 0 0 0 2v4a1 1 0 0 0 2 0v-2h2v5a1 1 0 0 0 2 0v-2h2v2a1 1 0 0 0 2 0v-5h2v2a1 1 0 0 0 2 0v-4a1 1 0 0 0 0-2z"/></svg>Workout</div>
+        <div class="tab" id="t-history" onclick="setTab('history')"><svg viewBox="0 0 24 24"><path d="M13 3a9 9 0 1 0 8.9 10.5l-2-.3A7 7 0 1 1 13 5v4l5-5-5-5z"/></svg>History</div>
+        <div class="tab" id="t-profile" onclick="setTab('profile')"><svg viewBox="0 0 24 24"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zm0 2c-5 0-9 2.5-9 6v2h18v-2c0-3.5-4-6-9-6z"/></svg>Profile</div>
+      </div>
+    </div>
+    <div class="caption">Talk on Home · tabs for lookup · Experiences from Home</div>
+   </div>
+
+   <!-- ===== PHONE 2: in session ===== -->
+   <div class="col">
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="rest">
+        <div class="breath"><div class="cc"></div></div>
+        <div class="k">In your session</div>
+        <h3 id="sess-name">Sunrise strength</h3>
+        <div class="earpods"><span class="live"></span> Coach in your ears — say anything</div>
+        <div class="track">Tracking on your Apple Watch · Whoop</div>
+        <div class="voicehint" onclick="changeVibe()">🎙 “Change the vibe → make it a beach run”</div>
+        <button class="end" onclick="popd('Nice work — saved. Rest up.')">End · or say “I’m done”</button>
+      </div>
+    </div>
+    <div class="caption">Phone rests · change the vibe by voice, mid-workout</div>
+   </div>
+  </div>
+</div>
+
+<div id="toast" style="position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(20px);background:#3a352e;color:#f3f0ea;padding:12px 20px;border-radius:14px;font-size:13.5px;opacity:0;transition:.25s;z-index:99;max-width:320px;text-align:center"></div>
+
+<script>
+  let currentExp=null;
+  function setTab(name){
+    document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+    document.getElementById('s-'+name).classList.add('active');
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
+    const tab=document.getElementById('t-'+name); if(tab)tab.classList.add('on');
+  }
+  function showScreen(id,tabToLight){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));document.getElementById('t-'+tabToLight).classList.add('on');}
+  function goExp(){showScreen('s-exp','home');}
+  function goCustom(){showScreen('s-custom','home');}
+
+  let toastT;
+  function popd(msg){const t=document.getElementById('toast');t.textContent=msg;t.style.opacity=1;t.style.transform='translateX(-50%) translateY(0)';
+    clearTimeout(toastT);toastT=setTimeout(()=>{t.style.opacity=0;t.style.transform='translateX(-50%) translateY(20px)';},2400);}
+
+  const canned=[['“What should I do today?”','Recovery’s solid — a lower-body session. Say “let’s go.”'],
+    ['“I’m a bit tired”','Then we keep it light — shorter, easy. Ready when you are.'],
+    ['“Anything fun?”','A beach run suits your mood. Want it?']];
+  let ci=0;
+  function talk(you,coach){const ex=document.getElementById('exchange');ex.classList.add('show');
+    if(!you){const p=canned[ci%canned.length];you=p[0];coach=p[1];ci++;}
+    document.getElementById('you-t').textContent=you;document.getElementById('coach-t').textContent=coach;
+    document.getElementById('listen').textContent='…';setTimeout(()=>document.getElementById('listen').textContent='Tap to talk, or say “hey coach.”',900);}
+
+  let coachOn=true;
+  function toggleCoach(){coachOn=!coachOn;const b=document.getElementById('coachbar');b.classList.toggle('off',!coachOn);
+    document.getElementById('cstate').innerHTML=coachOn?'Coach on<small>Tap to talk · say “stop listening”</small>':'Coach off<small>Tap to turn on</small>';
+    document.getElementById('coff').style.color=coachOn?'var(--accent)':'var(--faint)';popd(coachOn?'Coach on':'Coach off — silence, any time.');}
+
+  function applyExp(name,desc){currentExp=name;
+    document.getElementById('exp-name').textContent=name;
+    document.getElementById('exp-desc').textContent=desc+' · applied';
+    document.getElementById('beginbtn').style.display='block';
+    setTab('home');popd('“'+name+'” applied — say “start” or tap Begin.');}
+  function fillCustom(v){document.getElementById('customin').value=v;}
+  function createCustom(){const v=document.getElementById('customin').value||'Your custom experience';
+    applyExp(v,'Custom, made for you');}
+
+  function startSession(name){document.getElementById('sess-name').textContent=name||'Sunrise strength';
+    popd('Starting “'+(name||'Sunrise strength')+'” — put your phone away, I’m in your ears.');setTab('home');}
+  function changeVibe(){document.getElementById('sess-name').textContent='Beach run';popd('Coach: “Beach run it is — waves coming in.”');}
+</script>
+</body>
+</html>
