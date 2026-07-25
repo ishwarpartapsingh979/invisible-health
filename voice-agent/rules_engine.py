@@ -173,3 +173,46 @@ class RulesEngine:
         lines.append("Follow these EXACTLY. Vetoes are absolute; on any conflict, "
                      "higher tier and dad's rules win. Deliver in your own warm voice.")
         return "\n".join(lines)
+
+    @staticmethod
+    def vet_prompt(decision: dict, plan: str = "", source: str = "") -> str:
+        """Render the resolved decision as a VERDICT on a workout the user BROUGHT
+        (their trainer's / an app's / ChatGPT's plan, or their own idea). Same rules
+        as to_prompt, framed as ENDORSE / MODIFY / SWAP so the coach reacts to the
+        specific plan instead of proposing one from scratch — the 'why not just ask
+        ChatGPT' answer."""
+        plan = (plan or "").strip()
+        brought = (f'The user brought this plan to vet: "{plan}".' if plan
+                   else "The user brought a plan to vet.")
+        src = f" (source: {source})" if source else ""
+        if decision.get("empty"):
+            return (brought + src + " NO SPECIFIC RULE flags it. Do NOT rubber-stamp "
+                    "it with invented specifics (sets/reps/macros or 'you should' "
+                    "claims the rules didn't authorize). Instead: say plainly you have "
+                    "no rule that speaks to this exact plan, sanity-check it ONLY "
+                    "against what IS grounded (their safety guardrails + what they told "
+                    "you today), and if key state is unknown (how they feel, fuel, "
+                    "yesterday's session) ask ONE clarifying question before endorsing. "
+                    "You may offer to note it for the weekly review with dad / the "
+                    "nutritionist.")
+        lines = [brought + src]
+        if decision["vetoes"]:
+            lines.append("VERDICT: SWAP — do NOT endorse as-is. It hits an absolute "
+                         "rule — MUST NOT: " + "; ".join(decision["vetoes"]) +
+                         ". Offer the safer alternative these rules force instead.")
+        elif any(decision["forces_by_tier"].get(t) for t in decision["forces_by_tier"]):
+            lines.append("VERDICT: MODIFY — the plan can stand, but apply the "
+                         "rule-mandated adjustments below before endorsing it.")
+        else:
+            lines.append("VERDICT: ENDORSE — no rule blocks this plan; back it warmly "
+                         "and coach it well.")
+        for tier in sorted(decision["forces_by_tier"]):
+            fs = decision["forces_by_tier"][tier]
+            if fs:
+                lines.append(f"DO ({TIER_NAMES.get(tier, tier)}): " + "; ".join(fs))
+        if decision["because"]:
+            lines.append("Because: " + " ".join(decision["because"][:3]))
+        lines.append("Follow this EXACTLY. A veto is absolute — it overrides the "
+                     "brought plan, its source, and your own knowledge. Higher tier "
+                     "and dad's rules win ties. Deliver in your own warm voice.")
+        return "\n".join(lines)

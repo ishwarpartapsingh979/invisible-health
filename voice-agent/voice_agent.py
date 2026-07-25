@@ -732,6 +732,13 @@ your background understanding; the engine is the authority for the actual decisi
 Remember the driver is BOTH the wearable AND what they SAY — and what they say (a
 red flag, being under-fuelled, real pain) OVERRIDES the numbers.
 
+When the user BRINGS a workout — their trainer's plan, an app's, ChatGPT's, or their
+own idea — and asks whether to do it, call vet_workout (not get_active_coaching_rules)
+with the plan + how they feel. It returns a verdict — ENDORSE / MODIFY / SWAP — from
+the SAME rules; deliver that verdict warmly, and if it's a SWAP or MODIFY explain the
+one reason why and offer the safer version. This vetting against dad's rules + their
+real state is why they bring plans to YOU instead of just asking a chatbot.
+
 # RULES-FIRST, AND ADMIT THE GAP (this is non-negotiable)
 For ANY training or nutrition guidance, you CONSULT THE RULES FIRST — call
 get_active_coaching_rules (training/readiness) or check_meal (food) BEFORE you give
@@ -1516,6 +1523,56 @@ class CoachAgent(Agent):
                         [f["source"] for f in decision["fired"]], ctx)
             await self._rules.log_firing(ctx, decision, user_id=self._store.user_id)
         return RulesEngine.to_prompt(decision)
+
+    @function_tool
+    async def vet_workout(
+        self, context: RunContext,
+        plan: str,
+        exercise_type: str = "", intensity: str = "", volume: str = "",
+        source: str = "",
+        physical_state: str = "", pain_location: str = "",
+        previous_day_activity: str = "", symptom: str = "",
+        psychological_state: str = "", current_day_focus: str = "",
+        fueling: str = "", sleep_quality: str = "", previous_rpe: str = "",
+        injury_scare: str = "", weather: str = "", available_time_minutes: str = "",
+    ) -> str:
+        """VET a workout the user BRINGS — their trainer's / an app's / ChatGPT's
+        plan, or their own idea — against the coaching rules + their state RIGHT NOW.
+        This is the "why not just ask ChatGPT" answer: call it whenever the user
+        proposes a specific workout and wants to know if they should do it today.
+        Describe the brought plan:
+        - plan: the workout in the user's words (e.g. "5x5 heavy back squats then a
+          5k", "trainer wants HIIT legs")
+        - exercise_type: what it trains (e.g. 'heavy squats'|'long run'|'upper body')
+        - intensity: 'max'|'heavy'|'RPE 9'|'easy' etc.  · volume: '5x5'|'10k'|'60 min'
+        - source: where it came from — 'trainer'|'app'|'chatgpt'|'self'
+        The current-state keys mean the same as in get_active_coaching_rules and
+        OVERRIDE the wearable when the user SAYS how they feel. If you don't know the
+        key ones (how they feel, fuel, yesterday), ASK first, then call this.
+        Returns a DETERMINISTIC verdict — ENDORSE / MODIFY (with the rule-mandated
+        change) / SWAP (a veto). FOLLOW IT EXACTLY; a veto is absolute, even against
+        the brought plan and its source."""
+        # Same fused context as get_active_coaching_rules (derived arc + WHOOP first,
+        # subjective LAST so what the user SAYS wins), PLUS the brought plan's own
+        # attributes as flags so a rule keyed on e.g. heavy/max intensity fires here.
+        derived = await self._history_facts()
+        derived.update(self._whoop_facts())
+        ctx = {**derived, **{k: v for k, v in {
+            "physical_state": physical_state, "pain_location": pain_location,
+            "previous_day_activity": previous_day_activity, "symptom": symptom,
+            "psychological_state": psychological_state,
+            "current_day_focus": current_day_focus, "fueling": fueling,
+            "sleep_quality": sleep_quality, "previous_rpe": previous_rpe,
+            "injury_scare": injury_scare, "exercise_type": exercise_type,
+            "intensity": intensity, "volume": volume, "weather": weather,
+            "available_time_minutes": available_time_minutes,
+        }.items() if v}}
+        decision = await self._rules.resolve(ctx, domains=["coach", "sports_science"])
+        if decision.get("fired"):
+            logger.info("🩺 vet fired: %s (plan=%r ctx=%s)",
+                        [f["source"] for f in decision["fired"]], plan, ctx)
+            await self._rules.log_firing(ctx, decision, user_id=self._store.user_id)
+        return RulesEngine.vet_prompt(decision, plan, source)
 
     @function_tool
     async def check_meal(
@@ -2753,8 +2810,9 @@ async def entrypoint(ctx: agents.JobContext):
             f"The user just tapped a shortcut meaning they're asking: \"{text}\"."
             + (f" It's {tnow}." if tnow else "") +
             " Answer directly as their all-day guide — use your tools (day_recap for "
-            "a recap, get_active_coaching_rules, get_local_time, show_exercises, "
-            "check_meal, get_whoop_status) as needed. Keep it short and specific."))
+            "a recap, get_active_coaching_rules, vet_workout for a plan they bring, "
+            "get_local_time, show_exercises, check_meal, get_whoop_status) as needed. "
+            "Keep it short and specific."))
     oai = AsyncOpenAI()  # for the speaking/breathing analysis (reads OPENAI_API_KEY)
 
     # Background audio player for the Adam hype clips (plays MP3s into the room on
