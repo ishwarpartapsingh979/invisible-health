@@ -122,10 +122,19 @@ Design direction is agreed. **Voice is THE interface; buttons are the exception.
 4. **End every session by updating THIS file** (§8) so the next session is oriented.
 
 ## 8. What to build next (living list — update me)
-- [ ] **Multi-user backend** — un-hardcode `user_id` (agent derives from participant identity;
-      `SessionStore` uses an instance `user_id`; back-compat "ishwar" fallback). *(started once,
-      reverted — clean path is documented in §4.)*
-- [ ] **VET-a-workout tool** (agent function-tool; the core missing feature).
+- [x] **Multi-user backend** — DONE (branch `claude/travel-base-branch-visibility-xayckv`,
+      2026-07-25). Agent derives `user_id` from the joining participant's identity
+      (`_user_id_from_identity` strips a `-ios`/`-watch`/`-web` client suffix → stable id;
+      `wait_for_participant`, 10s timeout, `"ishwar"` fallback). `SessionStore` holds an
+      instance `user_id`; per-method params default to it so call sites are unchanged. All
+      inline `"ishwar"` writes + tracer + rule-firing log now use the derived id. Back-compat:
+      today's `"ishwar-ios"` → `"ishwar"`, so nothing changes for the current user.
+      **Still needs (LAPTOP/iOS):** app sends a real per-user identity (`participantIdentity`
+      + `/workout?user_id=` etc. are still hardcoded `ishwar`) — pairs with Sign in with Apple.
+- [x] **VET-a-workout tool** — DONE (same branch/date). `vet_workout` function-tool: checks a
+      workout the user BRINGS against the same rules + their state → ENDORSE/MODIFY/SWAP verdict
+      (`RulesEngine.vet_prompt`). Surfaced in the coach prompt. *Next: real dogfood + maybe a
+      "log the vetted plan" follow-through.*
 - [ ] **Reliability:** #29 warm-up race + #2 reopen-silence; add migration `#16` and flag it.
 - [ ] **Coach craft** in the agent prompt (arc/mantra/peak/countdown/"you're seen").
 - [ ] iOS (LAPTOP): Sign in with Apple + send per-user identity + workout-only scoping.
