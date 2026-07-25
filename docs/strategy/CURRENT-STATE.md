@@ -171,6 +171,24 @@ Design direction is agreed. **Voice is THE interface; buttons are the exception.
 - [x] **Coach craft** — DONE (`b08b52d`). In-workout delivery block in the STYLE prompt
       (presence/arc/peak/"seen"). Taste-dependent — **listen when dogfooding**; 1-commit revert.
 - [ ] iOS (LAPTOP): **workout-only scoping** (hide nutrition/eating surfaces) — not yet done.
+- [ ] **Connect Apple Music / Spotify at onboarding** (Ishwar, 2026-07-25) — music is part of the
+      immersive experience (coach voice + world soundscape + **music** over AirPods, §2). Let the
+      user link a music service during onboarding so the experience can drive it in-session.
+      **Design:**
+      - Add a `musicService` choice to onboarding (`apple_music` | `spotify` | `none`) → store on
+        `UserProfile` + stream to the coach (so it knows what to control) — this slice is pure
+        cloud-doable, no external setup.
+      - **Apple Music = the easier first target** (self-contained, no external account): **MusicKit**
+        `MusicAuthorization.request()` at onboarding; in-session playback via `ApplicationMusicPlayer`.
+        *Needs (Xcode/laptop):* the **MusicKit capability** + an **`NSAppleMusicUsageDescription`**
+        (the app has no checked-in Info.plist — it's generated from build settings, so this is set in
+        Xcode's Info tab / build settings, not a file a cloud session can add).
+      - **Spotify = more setup, later:** register a **Spotify Developer app** (client ID + redirect
+        URI), add the **Spotify iOS SDK** (SPM) + a URL scheme + `LSApplicationQueriesSchemes`; control
+        playback via **`SPTAppRemote`** (drives the installed Spotify app; requires Spotify installed +
+        Premium for full control). None of this can be added/compiled from a cloud session.
+      - **Open design call:** do we CONTROL playback in-app (Apple Music can; Spotify only via App
+        Remote hand-off), or just deep-link/hand off to their app during a workout? Decides the engine.
 - Parked: Show-Me screen-recording (code exists, off-surface), nutrition concierge/wallet, the
   broadcast extension `ShowMeBroadcast`.
 
