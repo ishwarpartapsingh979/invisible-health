@@ -90,7 +90,7 @@ enum ShowMeUploader {
         req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
 
         var body = Data()
-        let fields = ["kind": kind, "user_id": "ishwar", "source": file.source, "title": title]
+        let fields = ["kind": kind, "user_id": VoiceConfig.currentUserId, "source": file.source, "title": title]
         for (k, v) in fields {
             body.appendStr("--\(boundary)\r\n")
             body.appendStr("Content-Disposition: form-data; name=\"\(k)\"\r\n\r\n")
@@ -438,7 +438,7 @@ struct SchedulesSection: View {
     }
 
     private func refresh() async {
-        guard let url = URL(string: VoiceConfig.tokenServerBaseURL + "/schedules?user_id=ishwar&kind=\(kind)")
+        guard let url = URL(string: VoiceConfig.tokenServerBaseURL + "/schedules?user_id=\(VoiceConfig.currentUserId)&kind=\(kind)")
         else { return }
         loading = true; defer { loading = false }
         do {

@@ -135,7 +135,7 @@ struct PlanTabView: View {
 
     /// Read the decided workout + discussion from the DB (via the token server).
     private func refresh() async {
-        guard let url = URL(string: VoiceConfig.tokenServerBaseURL + "/workout?user_id=ishwar")
+        guard let url = URL(string: VoiceConfig.tokenServerBaseURL + "/workout?user_id=\(VoiceConfig.currentUserId)")
         else { return }
         loading = true
         defer { loading = false }

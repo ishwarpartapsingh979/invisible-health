@@ -147,7 +147,7 @@ struct NutritionTabView: View {
     /// Fetch today's meals + the weekly summary from the token server (which reads
     /// Supabase server-side). No coach, no voice — just data.
     private func refresh() async {
-        guard let url = URL(string: VoiceConfig.tokenServerBaseURL + "/nutrition?user_id=ishwar")
+        guard let url = URL(string: VoiceConfig.tokenServerBaseURL + "/nutrition?user_id=\(VoiceConfig.currentUserId)")
         else { return }
         refreshing = true
         defer { refreshing = false }

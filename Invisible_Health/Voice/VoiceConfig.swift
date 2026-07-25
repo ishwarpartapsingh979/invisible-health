@@ -25,8 +25,25 @@ enum VoiceConfig {
     /// The room the iOS client and the Python agent both join.
     static let roomName = "invisible-voice"
 
-    /// Identity for this app's participant in the room.
-    static let participantIdentity = "ishwar-ios"
+    /// Dev/continuity override for the per-user id. When set, it wins over Sign
+    /// in with Apple and skips the sign-in gate — the whole app runs as this user.
+    ///
+    /// Leave `nil` for the normal multi-user path (each person signs in with
+    /// Apple; see `AuthManager`). Ishwar: set this to `"ishwar"` on your build to
+    /// keep your existing Supabase history and skip the gate. (A shared TestFlight
+    /// build must ship with this `nil` so Uday/Jasmine get their own ids.)
+    static let devUserIdOverride: String? = nil
+
+    /// The current per-user `user_id` for all data reads/writes (token identity +
+    /// `?user_id=` on the data tabs). Falls back to `"ishwar"` only if somehow
+    /// unresolved, matching the agent's back-compat fallback.
+    static var currentUserId: String {
+        AuthManager.shared.userId ?? "ishwar"
+    }
+
+    /// Identity for this app's participant in the room: `"<user>-ios"`. The agent
+    /// strips the `-ios` suffix to recover `currentUserId`.
+    static var participantIdentity: String { "\(currentUserId)-ios" }
 
     /// True once `tokenServerBaseURL` has been pointed somewhere real.
     static var isConfigured: Bool {
