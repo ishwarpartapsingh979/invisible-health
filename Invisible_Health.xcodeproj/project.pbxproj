@@ -581,6 +581,7 @@
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "We use your health data to track your hydration and nutrition.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "We save your water and food logs to Apple Health.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "We use your location during outdoor workouts to track distance and pace.";
+				INFOPLIST_KEY_NSAppleMusicUsageDescription = "We use Apple Music to play your soundtrack during workouts.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "We use the microphone to let you log by voice.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "We use the gallery to let you upload photos.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
@@ -628,6 +629,7 @@
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "We use your health data to track your hydration and nutrition.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "We save your water and food logs to Apple Health.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "We use your location during outdoor workouts to track distance and pace.";
+				INFOPLIST_KEY_NSAppleMusicUsageDescription = "We use Apple Music to play your soundtrack during workouts.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "We use the microphone to let you log by voice.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "We use the gallery to let you upload photos.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;

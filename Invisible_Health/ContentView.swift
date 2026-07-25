@@ -125,10 +125,12 @@ struct ContentView: View {
                         TabButton(icon: "chart.bar", text: "DATA", isSelected: selectedTab == 1) { selectedTab = 1 }
                         */
                         
-                        // Dogfood v2 tab bar: VOICE (home), PLAN, PROFILE, WHOOP, DEVICES.
+                        // Workout-only scope (fitness-companion wedge; nutrition is parked):
+                        // VOICE (home), WORKOUT, PROFILE, WHOOP, DEVICES. The NUTRITION tab is
+                        // hidden — the tab + NutritionTabView code stay for when nutrition (act 2)
+                        // is revived; just not surfaced.
                         TabButton(icon: "waveform", text: "VOICE", isSelected: selectedTab == 17) { selectedTab = 17 }
                         TabButton(icon: "figure.run", text: "WORKOUT", isSelected: selectedTab == 19) { selectedTab = 19 }
-                        TabButton(icon: "fork.knife", text: "NUTRITION", isSelected: selectedTab == 20) { selectedTab = 20 }
                         TabButton(icon: "person.fill", text: "PROFILE", isSelected: selectedTab == 18) { selectedTab = 18 }
 
                         TabButton(icon: "waveform.path.ecg", text: "WHOOP", isSelected: selectedTab == 15) { selectedTab = 15 }
