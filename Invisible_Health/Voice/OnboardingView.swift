@@ -10,6 +10,10 @@ struct UserProfile: Codable {
     var daysPerWeek: Int = 3
     var equipment: String = ""
     var injuries: String = ""
+    /// Music service linked at onboarding ("apple_music" | "spotify" | ""), so the
+    /// immersive workout experience can drive it. Tolerant default keeps old saved
+    /// profiles decodable.
+    var musicService: String = ""
 
     static let key = "user_profile_v1"
 
@@ -28,7 +32,8 @@ struct UserProfile: Codable {
     /// Payload sent to the coach over the "profile" data channel.
     var dictionary: [String: Any] {
         ["goal": goal, "preferred": preferred, "level": level,
-         "days_per_week": daysPerWeek, "equipment": equipment, "injuries": injuries]
+         "days_per_week": daysPerWeek, "equipment": equipment, "injuries": injuries,
+         "music_service": musicService]
     }
 }
 
@@ -136,6 +141,11 @@ struct OnboardingView: View {
                 Section("Injuries or limits (optional)") {
                     TextField("e.g. sensitive right hamstring", text: $profile.injuries,
                               axis: .vertical)
+                }
+                Section("Music (optional)") {
+                    MusicConnectView { service in
+                        profile.musicService = service.rawValue
+                    }
                 }
                 Section {
                     Button("Save") {

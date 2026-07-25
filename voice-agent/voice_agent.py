@@ -1118,6 +1118,12 @@ class ProfileContext:
             parts.append(f"{d['meals_per_day']} meals/day")
         if d.get("cooks_or_eats_out"):
             parts.append(f"cooking: {d['cooks_or_eats_out']}")
+        # Music service they linked at onboarding — so the coach can talk about
+        # the music/experience it can drive during a workout.
+        if d.get("music_service") and d["music_service"] != "none":
+            pretty = {"apple_music": "Apple Music", "spotify": "Spotify"}.get(
+                d["music_service"], d["music_service"])
+            parts.append(f"music: {pretty}")
         return "; ".join(parts) if parts else None
 
 
