@@ -216,3 +216,42 @@ class RulesEngine:
                      "brought plan, its source, and your own knowledge. Higher tier "
                      "and dad's rules win ties. Deliver in your own warm voice.")
         return "\n".join(lines)
+
+    @staticmethod
+    def adapt_prompt(decision: dict, current_plan: str = "", reason: str = "") -> str:
+        """Render the decision as an IN-THE-MOMENT reshape of the session the user
+        ALREADY has, because of how they feel right now ("tired / not feeling it /
+        short on time"). Framed KEEP / EASE / SWAP — a warm, responsive adjustment
+        that meets them where they are, NEVER "you're overdoing it"."""
+        cur = (current_plan or "").strip()
+        have = (f'Their planned session: "{cur}".' if cur
+                else "They have a session planned.")
+        why = f" They said: {reason}." if reason else ""
+        if decision.get("empty"):
+            return (have + why + " NO SPECIFIC RULE forces a change. Use judgement, not "
+                    "invented prescriptions: if they're low/tired/short on time, offer to "
+                    "shorten or ease it (fewer sets, lower intensity, or just the key "
+                    "movement); if they feel fine, keep it and let it be THEIR call. Frame "
+                    "it as being responsive to them today — never as policing. Ask ONE "
+                    "quick question if you need it (how much time / how they feel).")
+        lines = [have + why]
+        if decision["vetoes"]:
+            lines.append("RESHAPE: SWAP — an absolute rule means change it today. MUST "
+                         "NOT: " + "; ".join(decision["vetoes"]) + ". Offer the lighter "
+                         "alternative these rules force — warmly, as looking after them.")
+        elif any(decision["forces_by_tier"].get(t) for t in decision["forces_by_tier"]):
+            lines.append("RESHAPE: EASE — keep the shape but apply the adjustments below; "
+                         "present it as meeting them where they are today.")
+        else:
+            lines.append("RESHAPE: KEEP — nothing forces a change. If they're just low, "
+                         "offer a shorter/easier version but let it be THEIR call; don't "
+                         "over-adjust.")
+        for tier in sorted(decision["forces_by_tier"]):
+            fs = decision["forces_by_tier"][tier]
+            if fs:
+                lines.append(f"DO ({TIER_NAMES.get(tier, tier)}): " + "; ".join(fs))
+        if decision["because"]:
+            lines.append("Because: " + " ".join(decision["because"][:3]))
+        lines.append("Deliver warmly as responsiveness to how they feel — support, not "
+                     "policing. Vetoes are absolute; higher tier + dad's rules win ties.")
+        return "\n".join(lines)

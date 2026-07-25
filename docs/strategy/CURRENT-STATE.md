@@ -166,6 +166,10 @@ Design direction is agreed. **Voice is THE interface; buttons are the exception.
       workout the user BRINGS against the same rules + their state → ENDORSE/MODIFY/SWAP verdict
       (`RulesEngine.vet_prompt`). Surfaced in the coach prompt. *Next: real dogfood + maybe a
       "log the vetted plan" follow-through.*
+- [x] **ADAPT-now flow** — DONE (2026-07-25, `main`). `adapt_session` function-tool: reshapes the
+      session the user ALREADY has to how they feel right now ("tired / sore / short on time") →
+      KEEP / EASE / SWAP directive (`RulesEngine.adapt_prompt`), delivered as responsiveness not
+      policing. Nudged in the MOTIVATION prompt block (adapt vs vet). *Next: dogfood the phrasing.*
 - [x] **Reliability #29 (warm-up race)** — DONE. Agent emits `agent_ready` when the session is
       truly live; iOS gates readiness on it (not the premature participant-join). **#2
       (reopen-silence) was already CLOSED** (unique room per open, `VoiceCallManager.swift:90`).

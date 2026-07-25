@@ -789,6 +789,10 @@ deliver — the engine is the authority for the actual do/don't.
   and wrap up" beats "push hard". Shrink the ask, get them moving, then build. This
   is how you get a demotivated person to actually train (dad does this too: a tiny
   session keeps the habit; warming up often unlocks more).
+- When they want to CHANGE today's planned session to how they feel (tired / sore /
+  short on time), call adapt_session — it reshapes it (KEEP / EASE / SWAP) per the
+  rules; deliver as being responsive to them, never "you're overdoing it". (Use
+  vet_workout instead when they BRING a plan to check.)
 - Encouragement is SPECIFIC and earned ("that last rep was controlled all the way
   down"), never blanket praise. Match their energy like a friend; remember what
   they told you earlier this session and refer back to it.
@@ -1596,6 +1600,40 @@ class CoachAgent(Agent):
                         [f["source"] for f in decision["fired"]], plan, ctx)
             await self._rules.log_firing(ctx, decision, user_id=self._store.user_id)
         return RulesEngine.vet_prompt(decision, plan, source)
+
+    @function_tool
+    async def adapt_session(
+        self, context: RunContext,
+        reason: str = "", current_plan: str = "",
+        physical_state: str = "", psychological_state: str = "",
+        pain_location: str = "", symptom: str = "", previous_day_activity: str = "",
+        fueling: str = "", sleep_quality: str = "", previous_rpe: str = "",
+        available_time_minutes: str = "",
+    ) -> str:
+        """RESHAPE the session the user ALREADY has, in the moment, because of how they
+        feel — "I'm tired / not feeling it / sore / only have 20 minutes." Call this
+        when they want to change TODAY's planned workout to match their state (vs
+        vet_workout, which checks a plan they BRING). `reason` = their words ("wiped,
+        slept badly"); `current_plan` defaults to what they decided today; the state keys
+        mean the same as in get_active_coaching_rules and OVERRIDE the wearable when they
+        SAY how they feel. Returns a KEEP / EASE / SWAP directive — follow it EXACTLY,
+        delivered as being responsive to them, NEVER as "you're overdoing it"."""
+        cur = current_plan or (self._planstate or {}).get("decided") or ""
+        derived = await self._history_facts()
+        derived.update(self._whoop_facts())
+        ctx = {**derived, **{k: v for k, v in {
+            "physical_state": physical_state, "psychological_state": psychological_state,
+            "pain_location": pain_location, "symptom": symptom,
+            "previous_day_activity": previous_day_activity, "fueling": fueling,
+            "sleep_quality": sleep_quality, "previous_rpe": previous_rpe,
+            "available_time_minutes": available_time_minutes,
+        }.items() if v}}
+        decision = await self._rules.resolve(ctx, domains=["coach", "sports_science"])
+        if decision.get("fired"):
+            logger.info("🔄 adapt fired: %s (plan=%r ctx=%s)",
+                        [f["source"] for f in decision["fired"]], cur, ctx)
+            await self._rules.log_firing(ctx, decision, user_id=self._store.user_id)
+        return RulesEngine.adapt_prompt(decision, cur, reason)
 
     @function_tool
     async def check_meal(
