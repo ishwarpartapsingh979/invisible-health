@@ -10,25 +10,28 @@
 ---
 
 ## ⏭️ LAST SESSION HANDOFF (2026-07-25, cloud) — READ THIS TO REVIEW & TAKE OVER
-**Branch:** `claude/travel-base-branch-visibility-xayckv` (based on `travel-base`). **Nothing merged, no PR, nothing deployed.** 3 new commits on top of `travel-base`:
+**Branch:** `claude/travel-base-branch-visibility-xayckv` (based on `travel-base`). **Nothing merged, nothing deployed.** 7 code/doc commits on top of `travel-base`, grouped by theme:
 
-| Commit | What | Risk |
-|---|---|---|
-| `58ae23e` | **Multi-user backend** — agent derives `user_id` from participant identity (`_user_id_from_identity` strips `-ios`/`-watch`/`-web`; `wait_for_participant`, 10s timeout, `"ishwar"` fallback). `SessionStore` gets an instance `user_id`; method params default to it (call sites unchanged). All inline `"ishwar"` writes + tracer + rule-firing log use the derived id. | Low — back-compat `ishwar-ios → ishwar` verified; but it IS live agent behavior, dogfood right after merge. |
-| `88a66ad` | **VET-a-workout tool** — `vet_workout` function-tool + `RulesEngine.vet_prompt` → ENDORSE/MODIFY/SWAP verdict on a plan the user brings, off the same rules. Surfaced in the coach prompt. | Low — net-new tool, no existing behavior touched. |
-| `c131e51` | Docs (this file §8). | None. |
+| Theme | Commit(s) | What | Risk |
+|---|---|---|---|
+| **Multi-user backend** | `58ae23e` | Agent derives `user_id` from participant identity (`_user_id_from_identity` strips `-ios`/`-watch`/`-web`; `wait_for_participant`, 10s timeout, `"ishwar"` fallback). `SessionStore` gets an instance `user_id`; method params default to it (call sites unchanged). All inline `"ishwar"` writes + tracer + rule-firing log use the derived id. | Low — back-compat `ishwar-ios → ishwar` verified; live agent behavior, dogfood after merge. |
+| **Multi-user iOS** | `5f03d01` | Sign in with Apple: `AuthManager` + `SignInView` gate; `VoiceConfig.currentUserId`/`participantIdentity` per-user + `devUserIdOverride`; data tabs un-hardcoded; `applesignin` entitlement added to both `.entitlements`. | Med — **needs Xcode** (capability + build) & a continuity call, see YOUR PARTS. |
+| **VET tool** | `88a66ad` | `vet_workout` function-tool + `RulesEngine.vet_prompt` → ENDORSE/MODIFY/SWAP verdict on a brought plan, off the same rules. Surfaced in the coach prompt. | Low — net-new. |
+| **#29 warm-up race** | `85a9616` | Agent emits `agent_ready` when the session is truly live; iOS gates `agentReady` on that (not premature participant-join). 5s fallback kept. | Low. |
+| **Coach craft** | `b08b52d` | In-workout delivery guidance (presence/arc/peak/"seen") in the STYLE prompt. | **Review the voice** — taste-dependent, but 1-commit revert. |
+| **Docs** | `c131e51`, `852bb09`, (this) | This file. | None. |
 
-**Verified in-cloud:** `py_compile` both files ✅; identity logic 7/7 cases ✅; `vet_prompt` all 4 verdict shapes ✅. **Not run:** real agent / LiveKit / OpenAI / Supabase (no prod touch).
+**Verified in-cloud:** `py_compile` agent + rules_engine ✅; identity logic 7/7 ✅; `vet_prompt` all 4 shapes ✅. Swift read carefully (can't compile in cloud). **Not run:** real agent / LiveKit / OpenAI / Supabase (no prod touch).
 
-**HOW TO REVIEW (laptop Claude Code):** ask it to `git fetch && git log --oneline origin/main..claude/travel-base-branch-visibility-xayckv` then `git diff origin/main...claude/travel-base-branch-visibility-xayckv` — or open a PR for the GitHub diff view.
+**HOW TO REVIEW (laptop Claude Code):** `git fetch && git log --oneline origin/main..claude/travel-base-branch-visibility-xayckv` then `git diff origin/main...claude/travel-base-branch-visibility-xayckv` — or open a PR for the GitHub diff view. (Merging the branch/PR = the push to `main` that fires your `deploy.yml`; it never auto-deploys on its own.)
 
 **✅ YOUR PARTS (start here):**
-1. **Review + merge** the branch → CI auto-deploys the agent → dogfood: say *"my trainer wants 5x5 heavy squats today, should I?"* (should trigger VET) and confirm a normal session still saves under you.
-2. **Run migration** `infra/migrations/013_local_dates.sql` in Supabase (still pending, unrelated to above; phone-doable).
-3. **iOS (Xcode) — the multi-user client half** (not started; needs a design call, see §8):
-   - `Invisible_Health/Voice/VoiceConfig.swift:29` — `participantIdentity = "ishwar-ios"` → per-user.
-   - `PlanTabView.swift:138`, `NutritionTabView.swift:150`, `ShowMeSheet.swift:93,441` — hardcoded `user_id=ishwar` → per-user.
-   - Pairs with **Sign in with Apple**. (Cloud can pre-write this Swift on request — just can't build it.)
+1. **Review + merge** → your `deploy.yml` ships agent+token-server. Dogfood: *"my trainer wants 5x5 heavy squats today, should I?"* (→ VET); confirm a normal session still saves under you; check the coach voice feels right (coach-craft); confirm no warm-up speech loss (#29).
+2. **iOS (Xcode) — build the multi-user client** (code is written, you build+verify):
+   - Enable the **Sign in with Apple** capability (Signing & Capabilities) so provisioning carries the entitlement.
+   - **Continuity call:** set `VoiceConfig.devUserIdOverride = "ishwar"` on your build to keep your history + skip the gate; leave `nil` for the shared TestFlight build (Uday/Jasmine sign in and get their own ids). If you sign in fresh instead, tell me your Apple `user` id and I'll write a one-time Supabase remap of your `"ishwar"` rows.
+   - New `AuthManager.swift` auto-includes (synchronized group).
+3. **Run migration** `infra/migrations/013_local_dates.sql` in Supabase (still pending, unrelated; phone-doable).
 
 ---
 
@@ -152,15 +155,22 @@ Design direction is agreed. **Voice is THE interface; buttons are the exception.
       instance `user_id`; per-method params default to it so call sites are unchanged. All
       inline `"ishwar"` writes + tracer + rule-firing log now use the derived id. Back-compat:
       today's `"ishwar-ios"` → `"ishwar"`, so nothing changes for the current user.
-      **Still needs (LAPTOP/iOS):** app sends a real per-user identity (`participantIdentity`
-      + `/workout?user_id=` etc. are still hardcoded `ishwar`) — pairs with Sign in with Apple.
+- [x] **Multi-user iOS (Sign in with Apple)** — DONE (same branch, code-complete; **build in
+      Xcode**). `AuthManager` + `SignInView` gate; `VoiceConfig.currentUserId`/`participantIdentity`
+      per-user + `devUserIdOverride` continuity hatch; data tabs un-hardcoded; `applesignin`
+      entitlement added. **Your parts:** enable the Sign in with Apple capability + build; decide
+      the override vs. a Supabase row-remap for your history (see handoff §top).
 - [x] **VET-a-workout tool** — DONE (same branch/date). `vet_workout` function-tool: checks a
       workout the user BRINGS against the same rules + their state → ENDORSE/MODIFY/SWAP verdict
       (`RulesEngine.vet_prompt`). Surfaced in the coach prompt. *Next: real dogfood + maybe a
       "log the vetted plan" follow-through.*
-- [ ] **Reliability:** #29 warm-up race + #2 reopen-silence; add migration `#16` and flag it.
-- [ ] **Coach craft** in the agent prompt (arc/mantra/peak/countdown/"you're seen").
-- [ ] iOS (LAPTOP): Sign in with Apple + send per-user identity + workout-only scoping.
+- [x] **Reliability #29 (warm-up race)** — DONE. Agent emits `agent_ready` when the session is
+      truly live; iOS gates readiness on it (not the premature participant-join). **#2
+      (reopen-silence) was already CLOSED** (unique room per open, `VoiceCallManager.swift:90`).
+      *Still open: migration `#16` `013_local_dates.sql` needs running in Supabase.*
+- [x] **Coach craft** — DONE (`b08b52d`). In-workout delivery block in the STYLE prompt
+      (presence/arc/peak/"seen"). Taste-dependent — **listen when dogfooding**; 1-commit revert.
+- [ ] iOS (LAPTOP): **workout-only scoping** (hide nutrition/eating surfaces) — not yet done.
 - Parked: Show-Me screen-recording (code exists, off-surface), nutrition concierge/wallet, the
   broadcast extension `ShowMeBroadcast`.
 
