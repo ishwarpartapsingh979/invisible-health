@@ -2694,6 +2694,19 @@ async def entrypoint(ctx: agents.JobContext):
 
     wake.on_state_change = _emit_coach_state
 
+    async def publish_agent_ready() -> None:
+        """Tell the client the realtime session is LIVE and consuming audio now
+        (issue #29). The app's mic publishes from connect, but early speech is
+        dropped until the model is actually listening; the UI holds a "waking your
+        coach" state until this signal so nothing the user says in the warm-up gap
+        is lost."""
+        try:
+            await ctx.room.local_participant.publish_data(
+                json.dumps({"type": "agent_ready"}).encode("utf-8"),
+                reliable=True, topic="agent_ready")
+        except Exception as e:
+            logger.warning("failed to publish agent_ready: %s", e)
+
     async def publish_moment(payload: dict) -> None:
         """Send a logged workout moment back to the iOS app (topic 'moment').
         Only while a workout is active, so normal Voice-tab chat isn't logged."""
@@ -3018,6 +3031,10 @@ async def entrypoint(ctx: agents.JobContext):
     # coach greets fast on a normal open (#34).
     await asyncio.sleep(0.2)
     pending["greeted"] = True
+    # The session is live and listening now — signal the app so it stops holding
+    # early speech in the warm-up gap (issue #29). Emitted just before the greeting
+    # so the client flips to "ready" exactly when the coach can actually hear.
+    await publish_agent_ready()
     if pending["ask"]:
         ask, pending["ask"] = pending["ask"], None
         await _deliver_ask(ask)

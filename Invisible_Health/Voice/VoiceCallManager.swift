@@ -107,9 +107,13 @@ final class VoiceCallManager: ObservableObject, RoomDelegate {
         }
     }
 
-    /// The agent (a remote participant) joined → it's now listening.
+    /// The agent (a remote participant) joined the room. NOTE: this fires before
+    /// the realtime session is actually consuming audio, so it is TOO EARLY to
+    /// declare readiness (issue #29) — early speech would still be lost. We wait
+    /// for the agent's explicit "agent_ready" data signal instead (with the 5s
+    /// fallback in start() as a safety net), so we don't gate on this.
     nonisolated func room(_ room: Room, participantDidConnect participant: RemoteParticipant) {
-        Task { @MainActor in self.agentReady = true }
+        // Intentionally no agentReady flip here — see note above.
     }
 
     /// Leave the room and tear the call down.
@@ -321,6 +325,11 @@ final class VoiceCallManager: ObservableObject, RoomDelegate {
                           didReceiveData data: Data, forTopic topic: String,
                           encryptionType: EncryptionType) {
         switch topic {
+        case "agent_ready":
+            // The realtime session is live and listening now (issue #29). This is
+            // the authoritative "ready" — the agent participant joining the room
+            // fires earlier, before the model consumes audio, so we gate on THIS.
+            Task { @MainActor in self.agentReady = true }
         case "moment":
             guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let transcript = obj["transcript"] as? String,
