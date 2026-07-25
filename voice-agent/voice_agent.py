@@ -234,12 +234,17 @@ class SessionStore:
     (SUPABASE_URL + SUPABASE_SERVICE_KEY). No-ops safely if those env vars are
     absent, so the agent runs unchanged until they're wired."""
 
-    def __init__(self) -> None:
+    def __init__(self, user_id: str = "ishwar") -> None:
+        # The Supabase user_id every read/write is keyed by. Set once from the
+        # joining participant's identity (see entrypoint); the per-method user_id
+        # params default to this instance value so call sites don't thread it
+        # through. Defaults to "ishwar" for single-user back-compat.
+        self.user_id = user_id or "ishwar"
         self.url = (os.environ.get("SUPABASE_URL") or "").rstrip("/")
         self.key = os.environ.get("SUPABASE_SERVICE_KEY") or ""
         self.enabled = bool(self.url and self.key)
         if self.enabled:
-            logger.info("SessionStore enabled")
+            logger.info("SessionStore enabled (user_id=%s)", self.user_id)
 
     def _headers(self, extra=None):
         h = {"apikey": self.key, "Authorization": f"Bearer {self.key}",
@@ -264,7 +269,8 @@ class SessionStore:
         except Exception as e:
             logger.warning("session save error: %s", e)
 
-    async def recent(self, user_id: str = "ishwar", limit: int = 5) -> list:
+    async def recent(self, user_id: str = "", limit: int = 5) -> list:
+        user_id = user_id or self.user_id
         if not self.enabled:
             return []
         try:
@@ -281,8 +287,9 @@ class SessionStore:
             logger.warning("session fetch error: %s", e)
         return []
 
-    async def save_profile(self, profile: dict, user_id: str = "ishwar") -> None:
+    async def save_profile(self, profile: dict, user_id: str = "") -> None:
         """Upsert the user's profile (Tier 3 #11) into Supabase user_profiles."""
+        user_id = user_id or self.user_id
         if not self.enabled:
             return
         record = {**profile, "user_id": user_id}
@@ -321,8 +328,9 @@ class SessionStore:
             logger.warning("meal log error: %s", e)
             return False
 
-    async def update_last_meal(self, patch: dict, user_id: str = "ishwar") -> bool:
+    async def update_last_meal(self, patch: dict, user_id: str = "") -> bool:
         """Edit the MOST RECENT logged meal (correct a mislog — issue #23)."""
+        user_id = user_id or self.user_id
         if not self.enabled or not patch:
             return False
         try:
@@ -346,8 +354,9 @@ class SessionStore:
             logger.warning("update_last_meal failed: %s", e)
             return False
 
-    async def delete_meal_matching(self, text: str, user_id: str = "ishwar") -> bool:
+    async def delete_meal_matching(self, text: str, user_id: str = "") -> bool:
         """Delete the most recent recently-logged meal matching `text` (issue #23)."""
+        user_id = user_id or self.user_id
         if not self.enabled:
             return False
         try:
@@ -374,8 +383,9 @@ class SessionStore:
             logger.warning("delete_meal failed: %s", e)
             return False
 
-    async def recent_meals(self, days: int = 7, user_id: str = "ishwar") -> list:
+    async def recent_meals(self, days: int = 7, user_id: str = "") -> list:
         """Meals logged in the last `days` (for the weekly nutritionist summary)."""
+        user_id = user_id or self.user_id
         if not self.enabled:
             return []
         try:
@@ -402,7 +412,7 @@ class SessionStore:
             import aiohttp
             headers = {**self._headers(), "Content-Type": "application/json",
                        "Prefer": "return=minimal"}
-            row = {"user_id": record.get("user_id", "ishwar"),
+            row = {"user_id": record.get("user_id") or self.user_id,
                    "category": record.get("category"),
                    "fact": record.get("fact"),
                    "confidence": record.get("confidence", "medium"),
@@ -431,8 +441,9 @@ class SessionStore:
         except Exception as e:
             logger.warning("save_conversation failed: %s", e)
 
-    async def recent_conversations(self, limit: int = 5, user_id: str = "ishwar") -> list:
+    async def recent_conversations(self, limit: int = 5, user_id: str = "") -> list:
         """The most recent past conversations (for the coach to recall)."""
+        user_id = user_id or self.user_id
         if not self.enabled:
             return []
         try:
@@ -464,9 +475,10 @@ class SessionStore:
         except Exception as e:
             logger.warning("save_rule_gap failed: %s", e)
 
-    async def recent_facts(self, limit: int = 60, user_id: str = "ishwar") -> list:
+    async def recent_facts(self, limit: int = 60, user_id: str = "") -> list:
         """Everything the coach has learned about the user (active facts), newest
         first — loaded into the coach's context at the start of each session."""
+        user_id = user_id or self.user_id
         if not self.enabled:
             return []
         try:
@@ -501,7 +513,8 @@ class SessionStore:
         except Exception as e:
             logger.warning("planned save error: %s", e)
 
-    async def get_profile(self, user_id: str = "ishwar") -> dict:
+    async def get_profile(self, user_id: str = "") -> dict:
+        user_id = user_id or self.user_id
         if not self.enabled:
             return {}
         try:
@@ -518,10 +531,11 @@ class SessionStore:
             logger.warning("profile fetch error: %s", e)
         return {}
 
-    async def get_schedules(self, kind: str = "", user_id: str = "ishwar") -> list:
+    async def get_schedules(self, kind: str = "", user_id: str = "") -> list:
         """Schedules the user has SHOWN us (user_schedules) — login-gated class
         timetables / diet charts extracted by Gemini vision, still within their
         validity window (valid_to today-or-later, or open-ended). Newest first."""
+        user_id = user_id or self.user_id
         if not self.enabled:
             return []
         try:
@@ -1500,7 +1514,7 @@ class CoachAgent(Agent):
         if decision.get("fired"):
             logger.info("📏 rules fired: %s (ctx=%s)",
                         [f["source"] for f in decision["fired"]], ctx)
-            await self._rules.log_firing(ctx, decision)
+            await self._rules.log_firing(ctx, decision, user_id=self._store.user_id)
         return RulesEngine.to_prompt(decision)
 
     @function_tool
@@ -1547,7 +1561,7 @@ class CoachAgent(Agent):
                     except (TypeError, ValueError):
                         return None
                 saved = await self._store.log_meal({
-                    "user_id": "ishwar", "description": description, "meal": meal or None,
+                    "user_id": self._store.user_id, "description": description, "meal": meal or None,
                     "flags": flags, "verdict": verdict or None,
                     "local_date": local_date_for(self._tod.tz),
                     "calories": _num(calories), "protein_g": _num(protein_g),
@@ -1933,7 +1947,7 @@ class CoachAgent(Agent):
         become a real rule. Call it right after giving such an un-ruled answer.
         domain = nutrition | coach | sports_science | general."""
         await self._store.save_rule_gap({
-            "user_id": "ishwar", "domain": domain, "question": question,
+            "user_id": self._store.user_id, "domain": domain, "question": question,
             "coach_answer": coach_answer[:400],
             "local_date": local_date_for(self._tod.tz),
         })
@@ -2235,7 +2249,7 @@ class CoachAgent(Agent):
             suggested = self._planstate.get("suggested") or []
             discussion = "\n".join(self._get_turns()) if self._get_turns else ""
             await self._store.save_planned({
-                "user_id": "ishwar",
+                "user_id": self._store.user_id,
                 "decided": label,
                 "suggested": json.dumps(suggested),
                 "discussion": discussion,
@@ -2409,8 +2423,35 @@ class CoachAgent(Agent):
         return s or "No Whoop data has come through for this session yet."
 
 
+def _user_id_from_identity(identity: str) -> str:
+    """Derive the Supabase user_id from the joining participant's LiveKit identity.
+    The iOS app joins as "<user>-ios" (a per-surface client suffix); strip a known
+    client suffix to get the stable per-user id (so "uday-ios" -> "uday"). Falls
+    back to "ishwar" for an empty/unknown identity, keeping single-user behaviour
+    intact until per-user identities ship in the app."""
+    ident = (identity or "").strip()
+    for suffix in ("-ios", "-watch", "-web"):
+        if ident.endswith(suffix):
+            ident = ident[: -len(suffix)]
+            break
+    return ident or "ishwar"
+
+
 async def entrypoint(ctx: agents.JobContext):
     await ctx.connect()
+
+    # Multi-user: derive the user_id from the participant that triggered this job,
+    # so every read/write below is keyed to whoever is actually talking. The token
+    # server mints each client a token whose identity is "<user>-ios"; we normalise
+    # that to the stable user_id here. Back-compat: unknown/empty -> "ishwar".
+    try:
+        participant = await asyncio.wait_for(ctx.wait_for_participant(), timeout=10)
+        uid = _user_id_from_identity(getattr(participant, "identity", ""))
+        logger.info("👤 session user_id=%s (identity=%s)", uid,
+                    getattr(participant, "identity", ""))
+    except Exception as e:
+        uid = "ishwar"
+        logger.warning("user_id derivation failed (%s); defaulting to %s", e, uid)
 
     # Live workout context streamed from the iOS app over the data channel.
     # The agent reads it on demand via the get_current_heart_rate tool; later the
@@ -2422,7 +2463,7 @@ async def entrypoint(ctx: agents.JobContext):
     tod = TimeContext()
     loc = LocationContext()
     wake = WakeController()
-    store = SessionStore()
+    store = SessionStore(user_id=uid)
 
     # Load the saved profile so the coach knows it from the first word (no need
     # for the app to re-send it every session).
@@ -2461,7 +2502,7 @@ async def entrypoint(ctx: agents.JobContext):
 
     tracer = SessionTracer(
         session_id=getattr(ctx.job, "id", None) or ctx.room.name,
-        user_id="ishwar",  # single-user for now; becomes per-user with accounts
+        user_id=uid,  # per-user, derived from the joining participant's identity
         metadata={"room": ctx.room.name},
     )
 
@@ -2772,7 +2813,7 @@ async def entrypoint(ctx: agents.JobContext):
             data = {}
         # Save the session (Tier 3 #8 memory)
         await store.save({
-            "user_id": "ishwar",
+            "user_id": uid,
             "started_at": _iso(started_at),
             "ended_at": _iso(time.time()),
             "local_date": local_date_for(tod.tz),
@@ -2900,7 +2941,7 @@ async def entrypoint(ctx: agents.JobContext):
         if turns:
             try:
                 await asyncio.wait_for(store.save_conversation({
-                    "user_id": "ishwar",
+                    "user_id": uid,
                     "turns": "\n".join(turns[-120:]),
                     "local_date": local_date_for(tod.tz),
                 }), timeout=8)
