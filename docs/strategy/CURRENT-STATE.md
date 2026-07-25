@@ -172,7 +172,11 @@ Design direction is agreed. **Voice is THE interface; buttons are the exception.
       *Still open: migration `#16` `013_local_dates.sql` needs running in Supabase.*
 - [x] **Coach craft** — DONE (`b08b52d`). In-workout delivery block in the STYLE prompt
       (presence/arc/peak/"seen"). Taste-dependent — **listen when dogfooding**; 1-commit revert.
-- [ ] iOS (LAPTOP): **workout-only scoping** (hide nutrition/eating surfaces) — not yet done.
+- [x] iOS: **workout-only scoping** — DONE (2026-07-25, `main`). NUTRITION tab hidden in
+      `ContentView` (view code kept for act-2). Also added `NSAppleMusicUsageDescription` to the
+      app build settings (so the MusicKit connect step doesn't trap on device). Full app
+      **compiles** (simulator build green). **Left for MusicKit:** enable the MusicKit + Sign in
+      with Apple capabilities in Xcode Signing & Capabilities, then build on device.
 - [~] **Connect Apple Music / Spotify at onboarding** (Ishwar, 2026-07-25) — music is part of the
       immersive experience (coach voice + world soundscape + **music** over AirPods, §2).
       **DONE (cloud, `93d524b`):** `MusicConnectionManager` + `MusicConnectView` (tappable step in the
