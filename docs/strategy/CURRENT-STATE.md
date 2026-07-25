@@ -10,7 +10,7 @@
 ---
 
 ## ⏭️ LAST SESSION HANDOFF (2026-07-25, cloud) — READ THIS TO REVIEW & TAKE OVER
-**Branch:** `claude/travel-base-branch-visibility-xayckv` (based on `travel-base`). **Nothing merged, nothing deployed.** 7 code/doc commits on top of `travel-base`, grouped by theme:
+**Branch:** `claude/travel-base-branch-visibility-xayckv` (based on `travel-base`). **Nothing merged, nothing deployed.** Code/doc commits on top of `travel-base`, grouped by theme:
 
 | Theme | Commit(s) | What | Risk |
 |---|---|---|---|
@@ -19,7 +19,8 @@
 | **VET tool** | `88a66ad` | `vet_workout` function-tool + `RulesEngine.vet_prompt` → ENDORSE/MODIFY/SWAP verdict on a brought plan, off the same rules. Surfaced in the coach prompt. | Low — net-new. |
 | **#29 warm-up race** | `85a9616` | Agent emits `agent_ready` when the session is truly live; iOS gates `agentReady` on that (not premature participant-join). 5s fallback kept. | Low. |
 | **Coach craft** | `b08b52d` | In-workout delivery guidance (presence/arc/peak/"seen") in the STYLE prompt. | **Review the voice** — taste-dependent, but 1-commit revert. |
-| **Docs** | `c131e51`, `852bb09`, (this) | This file. | None. |
+| **Music at onboarding** | `93d524b` | `MusicConnectionManager` + `MusicConnectView` (tappable onboarding step); Apple Music auth via MusicKit; `music_service` streamed to the coach. Spotify = preference only. | Med — **needs Xcode** (MusicKit capability + `NSAppleMusicUsageDescription`); playback engine not built. |
+| **Docs** | `c131e51`, `852bb09`, … | This file. | None. |
 
 **Verified in-cloud:** `py_compile` agent + rules_engine ✅; identity logic 7/7 ✅; `vet_prompt` all 4 shapes ✅. Swift read carefully (can't compile in cloud). **Not run:** real agent / LiveKit / OpenAI / Supabase (no prod touch).
 
@@ -27,10 +28,11 @@
 
 **✅ YOUR PARTS (start here):**
 1. **Review + merge** → your `deploy.yml` ships agent+token-server. Dogfood: *"my trainer wants 5x5 heavy squats today, should I?"* (→ VET); confirm a normal session still saves under you; check the coach voice feels right (coach-craft); confirm no warm-up speech loss (#29).
-2. **iOS (Xcode) — build the multi-user client** (code is written, you build+verify):
+2. **iOS (Xcode) — build the written client code** (build + verify on device):
    - Enable the **Sign in with Apple** capability (Signing & Capabilities) so provisioning carries the entitlement.
+   - Enable the **MusicKit capability** + add an **`NSAppleMusicUsageDescription`** (build settings) so Apple Music connect works.
    - **Continuity call:** set `VoiceConfig.devUserIdOverride = "ishwar"` on your build to keep your history + skip the gate; leave `nil` for the shared TestFlight build (Uday/Jasmine sign in and get their own ids). If you sign in fresh instead, tell me your Apple `user` id and I'll write a one-time Supabase remap of your `"ishwar"` rows.
-   - New `AuthManager.swift` auto-includes (synchronized group).
+   - New `AuthManager.swift` + `MusicConnectionManager.swift` auto-include (synchronized group).
 3. **Run migration** `infra/migrations/013_local_dates.sql` in Supabase (still pending, unrelated; phone-doable).
 
 ---
@@ -171,24 +173,20 @@ Design direction is agreed. **Voice is THE interface; buttons are the exception.
 - [x] **Coach craft** — DONE (`b08b52d`). In-workout delivery block in the STYLE prompt
       (presence/arc/peak/"seen"). Taste-dependent — **listen when dogfooding**; 1-commit revert.
 - [ ] iOS (LAPTOP): **workout-only scoping** (hide nutrition/eating surfaces) — not yet done.
-- [ ] **Connect Apple Music / Spotify at onboarding** (Ishwar, 2026-07-25) — music is part of the
-      immersive experience (coach voice + world soundscape + **music** over AirPods, §2). Let the
-      user link a music service during onboarding so the experience can drive it in-session.
-      **Design:**
-      - Add a `musicService` choice to onboarding (`apple_music` | `spotify` | `none`) → store on
-        `UserProfile` + stream to the coach (so it knows what to control) — this slice is pure
-        cloud-doable, no external setup.
-      - **Apple Music = the easier first target** (self-contained, no external account): **MusicKit**
-        `MusicAuthorization.request()` at onboarding; in-session playback via `ApplicationMusicPlayer`.
-        *Needs (Xcode/laptop):* the **MusicKit capability** + an **`NSAppleMusicUsageDescription`**
-        (the app has no checked-in Info.plist — it's generated from build settings, so this is set in
-        Xcode's Info tab / build settings, not a file a cloud session can add).
-      - **Spotify = more setup, later:** register a **Spotify Developer app** (client ID + redirect
-        URI), add the **Spotify iOS SDK** (SPM) + a URL scheme + `LSApplicationQueriesSchemes`; control
-        playback via **`SPTAppRemote`** (drives the installed Spotify app; requires Spotify installed +
-        Premium for full control). None of this can be added/compiled from a cloud session.
-      - **Open design call:** do we CONTROL playback in-app (Apple Music can; Spotify only via App
-        Remote hand-off), or just deep-link/hand off to their app during a workout? Decides the engine.
+- [~] **Connect Apple Music / Spotify at onboarding** (Ishwar, 2026-07-25) — music is part of the
+      immersive experience (coach voice + world soundscape + **music** over AirPods, §2).
+      **DONE (cloud, `93d524b`):** `MusicConnectionManager` + `MusicConnectView` (tappable step in the
+      onboarding form); captures the choice + requests Apple Music auth via **MusicKit**; `UserProfile`
+      streams `music_service` and the agent surfaces it to the coach. Spotify records the preference only.
+      **STILL NEEDS (you):**
+      - **Xcode:** add the **MusicKit capability** + an **`NSAppleMusicUsageDescription`** (build
+        settings — the app has no checked-in Info.plist), else `MusicAuthorization.request()` traps.
+        New `MusicConnectionManager.swift` auto-includes.
+      - **Spotify (later):** register a **Spotify Developer app** (client id + redirect URI), add the
+        **Spotify iOS SDK** (SPM) + URL scheme + `LSApplicationQueriesSchemes`; connect via `SPTAppRemote`.
+      - **Design call → then the engine:** control playback **in-app** (Apple Music can; the experience
+        picks/adapts music) vs **hand off** to their app. I scaffolded toward in-app control; playback
+        itself (choosing/adapting tracks in-session) is not built yet.
 - Parked: Show-Me screen-recording (code exists, off-surface), nutrition concierge/wallet, the
   broadcast extension `ShowMeBroadcast`.
 
