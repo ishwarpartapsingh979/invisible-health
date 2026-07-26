@@ -30,14 +30,33 @@ monitored ship.** **Built by extracting the method from Track A** (the fitness a
 implementation / case study). As each fitness artifact is produced, generalise it into a reusable
 `templates/` version — so the repo assembles itself ~80% for free.
 
+**The realistic team flow it must model (this is the core insight — not a naive waterfall):**
+How real product teams actually ship — **parallel with staggered locks, not sequential:**
+1. **All three start together, in parallel:** PRD (product), UXD (design), and **Eng design
+   thinking** (architecture / tech-design / feasibility) work **concurrently from day 1**,
+   informing each other — eng flags what's cheap vs expensive, design shapes the PRD, PRD
+   frames both.
+2. **PRD locks first (~almost-final).** Once the PRD is *almost* finalised, it stops moving.
+3. **Then UXD finalises** against the near-final PRD, **and Eng design starts finalising** in
+   parallel (architecture, data model, integrations, task breakdown) — these two overlap.
+4. **Only once all three are locked (PRD + UXD + Eng design) do the engineering agents start
+   execution.** Execution never starts on a moving spec.
+   The builder-agent must **orchestrate these three parallel workstreams with the staggered
+   lock-gates**, not run a rigid 1→2→3→4 pipeline. The "define/design/strategy" stages below run
+   *concurrently* and gate on locks; a `LOCKS.md`/status file tracks which of the three are frozen,
+   and `03-execute` refuses to start until all three are locked.
+
 **"What it entails" — the scoping to do next week (in parallel):**
 - **Form factor / distribution (decide first):** clone-and-run template repo (Claude Code config
   baked in) vs GitHub App vs GitHub Action vs MCP server vs CLI installer.
-- **The 5 stages as code:** `00-define` (guided PRD interview) · `01-design` (UX principles +
-  design-prompt library → clickable prototypes, voice-editable via Wispr Flow) · `02-strategy`
-  (analyze PRD+UX+budget/keys → cost-personalized model mix + reuse-what-exists map + BACKLOG +
-  loop config) · `03-execute` (self-running loop: schedule→build→verify→PR) · `04-monitor` (daily
-  digest + phone PR-review + budget guard + kill switch).
+- **The stages as code (three run concurrently, gated by locks):** `00-define` (guided PRD
+  interview → **PRD lock**) ‖ `01-design` (UX principles + design-prompt library → clickable
+  prototypes, voice-editable via Wispr Flow → **UXD lock**, starts finalising once PRD near-final) ‖
+  `02-eng-design` (architecture / data model / integrations / feasibility + cost-personalized
+  model mix + reuse-what-exists map + BACKLOG + loop config → **Eng lock**, finalises alongside UXD).
+  Then — **only after all three locks** — `03-execute` (self-running loop: schedule→build→verify→PR)
+  and `04-monitor` (daily digest + phone PR-review + budget guard + kill switch).
+  A lightweight **`LOCKS`/status tracker** is the gate the whole thing hinges on.
 - **Model routing / cost-personalization:** BYO keys/budget; route across OpenRouter / open-source /
   Kimi / Claude (LiteLLM; the `ANTHROPIC_BASE_URL` trick for Kimi via its Anthropic-compatible endpoint).
 - **Reuse-first map:** what to build ON (Claude Code, OpenHands, aider, SWE-agent, LiteLLM…) vs build.
