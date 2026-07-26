@@ -10,8 +10,9 @@
 > **📄 Canonical companion docs (read these):** `PRD.md` (the full product spec — source of
 > truth) · `EXECUTION-STRATEGY.md` (how agents run the autonomous week: hybrid models —
 > Kimi/Sonnet grind + Claude/Fable review — token safeguards, the loop, build order) ·
-> `prd-features.html` (Google-Docs-friendly feature tables) · `ux-prototype.html` / `ux-designs.html`
-> (locked voice-first UX + flows-in-progress).
+> `NEXT-WEEK-PLAN.md` (the two parallel tracks: fitness app + the open-source builder-agent
+> byproduct + the OSS→company/YC notes) · `prd-features.html` (Google-Docs-friendly feature
+> tables) · `ux-prototype.html` / `ux-designs.html` (locked voice-first UX + flows-in-progress).
 >
 > **⚠️ NEXT-WEEKEND UI OVERHAUL — voice-first:** the current UI has too many screens. Collapse
 > toward voice-first — **onboarding = ONE voice screen** where the coach *interviews* the user and
