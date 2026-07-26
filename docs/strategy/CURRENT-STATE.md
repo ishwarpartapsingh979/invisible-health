@@ -195,6 +195,27 @@ Design direction is agreed. **Voice is THE interface; buttons are the exception.
       - **Design call → then the engine:** control playback **in-app** (Apple Music can; the experience
         picks/adapts music) vs **hand off** to their app. I scaffolded toward in-app control; playback
         itself (choosing/adapting tracks in-session) is not built yet.
+- [ ] **Wind-Down / Sleep experience** (Ishwar, 2026-07-25) — extends the app into the **recovery**
+      pillar (feel-good north star). An evening decompression flow, almost entirely **audio with the
+      screen dark** — squarely the locked UX. **The arc:** evening walk (coach winds you *down*, slower
+      cadence) → home/sit → **guided breathing** → screen goes dark, calm soundscape **fades over ~20
+      min** → hand off to iOS Sleep Focus → phone face-down, asleep.
+      - **TODAY (iOS, cloud-writable Swift):** calm soundscape + **fade-out sleep timer**; **paced
+        breathing** guide three ways — audio (voice/tones, box / 4-7-8 / coherent ~6 bpm), a visual
+        expand/contract **orb**, and **Core Haptics** inhale/exhale (works eyes-closed); the wind-down
+        **walk→breathe arc**; an in-app **SleepMode** (near-black UI, lower `UIScreen.brightness`, strip
+        stimulation, then **screen-off background audio** keeps guiding); log a HealthKit **Mindfulness**
+        session.
+      - **SOON (needs HR):** HR/HRV **biofeedback breathing** (pace the breath to actually lower HR,
+        show it working); **adaptive fade** when it detects you've settled (HR down / stillness).
+      - **NOT POSSIBLE (iOS sandbox) → workaround:** an app can't system-wide dim the phone, kill the
+        display, silence all notifications, or stop OTHER apps. **Hand off to Sleep Focus / Wind Down**
+        via a one-time **Shortcuts automation** ("when I open the wind-down, turn on Sleep Focus") — we
+        provide the Shortcut, user enables once. The on-brand answer is **audio-only + screen dark +
+        "put the phone down"** — stop stimulating *them*, don't fight the OS.
+      - **Reusable components to build:** a `Breathing` guide (pattern + audio/orb/haptic drivers) and a
+        `SleepMode` dim-screen/background-audio wrapper — both reusable beyond sleep (warm-ups, rest).
+      - *Playback of licensed music applies here too (calm playlists) under the same MusicController.*
 - Parked: Show-Me screen-recording (code exists, off-surface), nutrition concierge/wallet, the
   broadcast extension `ShowMeBroadcast`.
 
