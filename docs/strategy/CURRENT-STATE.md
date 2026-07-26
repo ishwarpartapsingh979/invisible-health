@@ -7,6 +7,18 @@
 > **Keep this file updated at the end of every session** so the next session is oriented
 > (it's our shared, in-repo memory — replaces the local machine memory cloud sessions can't see).
 
+> **📄 Canonical companion docs (read these):** `PRD.md` (the full product spec — source of
+> truth) · `EXECUTION-STRATEGY.md` (how agents run the autonomous week: hybrid models —
+> Kimi/Sonnet grind + Claude/Fable review — token safeguards, the loop, build order) ·
+> `prd-features.html` (Google-Docs-friendly feature tables) · `ux-prototype.html` / `ux-designs.html`
+> (locked voice-first UX + flows-in-progress).
+>
+> **⚠️ NEXT-WEEKEND UI OVERHAUL — voice-first:** the current UI has too many screens. Collapse
+> toward voice-first — **onboarding = ONE voice screen** where the coach *interviews* the user and
+> files answers into Profile/Workout/History (not a multi-step form); same "remove screens, ask by
+> voice, store to the right tab" rule everywhere. (The stepped onboarding in `ux-designs.html` is a
+> placeholder to be replaced by the one-screen voice version.)
+
 ---
 
 ## ⏭️ LAST SESSION HANDOFF (2026-07-25, cloud) — READ THIS TO REVIEW & TAKE OVER

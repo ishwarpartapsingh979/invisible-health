@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>PRD — Feature Summary & Details</title>
+<style>
+  body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:1000px;margin:32px auto;padding:0 24px;color:#1f2328;line-height:1.5}
+  h1{font-size:26px;border-bottom:2px solid #ddd;padding-bottom:8px}
+  h2{font-size:20px;margin-top:34px;border-bottom:1px solid #eee;padding-bottom:6px}
+  h3{font-size:16px;margin-top:22px;color:#111}
+  h3 .pri{font-size:12px;color:#fff;background:#3b7d4f;border-radius:5px;padding:2px 7px;margin-left:8px;vertical-align:middle}
+  h3 .pri.p1{background:#b8862f}h3 .pri.p3{background:#8a8a8a}
+  table{border-collapse:collapse;width:100%;margin:12px 0 20px;font-size:14px}
+  th,td{border:1px solid #ccc;padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:#f2f4f5}
+  td.pri{white-space:nowrap;font-weight:600}
+  .lead{font-size:15px;background:#f6f8fa;border-left:3px solid #3b7d4f;padding:12px 16px;border-radius:4px}
+  ul{margin:6px 0 14px}li{margin:3px 0}
+  .note{background:#fff8e6;border-left:3px solid #b8862f;padding:12px 16px;border-radius:4px;margin-top:20px;font-size:14px}
+  code{background:#eef1f2;padding:1px 5px;border-radius:4px;font-size:13px}
+</style>
+</head>
+<body>
+
+<h1>PRD — Feature Summary &amp; Feature Details</h1>
+<p style="color:#666">Priority by user value · integrations mapped · login-first with “Continue without login”.</p>
+
+<h1>Feature Summary</h1>
+<p class="lead"><b>The product:</b> the hyper-personalization of a personal trainer × the sensory pull of a group class, <b>voice-first</b> — so a high-stress professional actually <i>shows up</i> every day. Every session is grounded in a pro-athlete coach’s system, tuned to your context and the time you have, and wrapped in a <b>live, adaptive audio experience</b> (coach + music + vibe) you <i>crave</i>.</p>
+<p><b>Priority = how central it is to why the user uses the app</b> (the experience <i>is</i> the product → P0 even where hardest to build). <b>User #1 (Fitness) is primary; User #2 (Steps) is the low-friction wedge; meditative is low.</b></p>
+
+<h2>Foundational — shared by all users</h2>
+<table>
+<tr><th>Feature</th><th>What it delivers</th><th>Pri</th><th>Key integrations</th></tr>
+<tr><td><b>Frictionless Start</b></td><td>Login-first screen (Sign in with Apple, encouraged) with a secondary “Continue without login”; anon profile; link Apple Health without login; sign in anytime → data transfers + syncs.</td><td class="pri">P0</td><td>Sign in with Apple · HealthKit · Supabase (/claim) · Keychain</td></tr>
+<tr><td><b>Multimodal Everywhere</b></td><td>Every interaction by voice, text, or picture.</td><td class="pri">P0</td><td>LiveKit + OpenAI Realtime · Gemini (vision)</td></tr>
+<tr><td><b>Knows You</b> (context)</td><td>Level, goals, loves/dislikes, equipment, motivators; music taste; live biometrics.</td><td class="pri">P0</td><td>HealthKit · Whoop · MusicKit/Spotify · Supabase</td></tr>
+<tr><td><b>The Vibe</b> (adaptive sensory audio)</td><td>Coach voice intertwined with music + a vibe, adapting push/hold/ramp-down; voice-controlled (“any vibe, or stop it”).</td><td class="pri">P0</td><td>ElevenLabs · stem music + CoreMotion · Steam Audio · LiveKit</td></tr>
+<tr><td><b>Music</b> (their taste)</td><td>Their Apple Music/Spotify soundtrack, sequenced + adapted to the session.</td><td class="pri">P0</td><td>Apple MusicKit · Spotify SDK/Web API</td></tr>
+<tr><td><b>Exercise Video Library</b></td><td>A demo clip for every exercise, mapped from any workout (ours, or one captured/brought) to a licensed exercise-video provider we host; we don't store or recreate others' copyrighted clips.</td><td class="pri">P0</td><td>licensed exercise-video provider/API · built-in exercise DB (fallback) · Gemini (name match)</td></tr>
+<tr><td><b>Deliver-with-what-we-have</b> (principle)</td><td>Always give value from what we know; ask for more only to sharpen, never to gate.</td><td class="pri">P0</td><td>—</td></tr>
+<tr><td><b>Pro-Coach Backing</b> (trust)</td><td>Grounded in a real pro-athlete coach’s system — the “why not ChatGPT.”</td><td class="pri">P0</td><td>Supabase rules engine</td></tr>
+<tr><td><b>Gets Smarter</b> (memory/learning)</td><td>Full searchable coach chat; everything feeds the model → tailors workouts, music, vibes, coach.</td><td class="pri">P1</td><td>Supabase (user_facts) · Langfuse</td></tr>
+</table>
+
+<h2>Admin / Content — behind the scenes</h2>
+<table>
+<tr><th>Feature</th><th>What it delivers</th><th>Pri</th><th>Key integrations</th></tr>
+<tr><td><b>Admin: Reference Workout Ingestion</b></td><td>Admin uploads reference training recordings; the system extracts the <b>workout structure + coaching approach</b> (not the video) into our DB as templates/knowledge that inform coach-authored sessions. Admin-only.</td><td class="pri">P0</td><td>Gemini (video understanding) · Supabase (templates/knowledge) · Show Me capture</td></tr>
+</table>
+
+<h2>User #1 — Fitness (running / functional / gym) — primary segment</h2>
+<table>
+<tr><th>Feature</th><th>What it delivers</th><th>Pri</th><th>Key integrations</th></tr>
+<tr><td><b>Your Daily Session</b></td><td>Pro-coach 60-min workout, gist, video per exercise (from the Exercise Video Library); chat to tailor to time/state.</td><td class="pri">P0</td><td>Supabase · Gemini · Exercise Video Library (licensed)</td></tr>
+<tr><td><b>The Coach</b> (real-time)</td><td>Context start; you control it; silent HR + check-ins; video on “starting X”; times exercises + rests; per-exercise HR; earned/not-too-frequent motivation; cool-down shift.</td><td class="pri">P0</td><td>LiveKit + OpenAI Realtime · Whoop/Apple Watch</td></tr>
+<tr><td><b>Bring Your Own Workout</b></td><td>Tell us your plan (voice/text/photo/screen-recording); progressive, non-blocking detail; saved/reusable; vet-not-override; wrapped in the full experience.</td><td class="pri">P1</td><td>Gemini vision · Show Me capture · LiveKit+Realtime · Supabase</td></tr>
+<tr><td><b>Hype Film</b></td><td>Short video generated daily from context + past workouts to get you starting.</td><td class="pri">P1</td><td>video-assembly (TTS+music+visuals) · Supabase</td></tr>
+<tr><td><b>The Wrap</b> (recap)</td><td>Every exercise, HR + indicators, progress + ending motivation.</td><td class="pri">P1</td><td>Supabase · Whoop/HealthKit</td></tr>
+</table>
+
+<h2>User #2 — Steps / Walk — strategic wedge (ships earliest; each P0 within the wedge)</h2>
+<table>
+<tr><th>Feature</th><th>What it delivers</th><th>Pri</th><th>Key integrations</th></tr>
+<tr><td><b>Your Step Goal</b></td><td>Personalized, adaptive target (not blanket 10k).</td><td class="pri">P0</td><td>HealthKit/Health Connect · Supabase</td></tr>
+<tr><td><b>All-Day Gap Tracking</b></td><td>Passive count, works signed-out; always knows the gap; pull-not-push on open.</td><td class="pri">P0</td><td>HealthKit / Health Connect (Google Fit)</td></tr>
+<tr><td><b>Gap-Close Offer</b></td><td>A delightful walk calibrated to steps + time + mood — invite, never shame.</td><td class="pri">P0</td><td>LiveKit+Realtime · ElevenLabs · MusicKit</td></tr>
+<tr><td><b>Walk Coach</b></td><td>Paces you to hit the target in your time; live steps/pace/HR; feel-good milestones; full voice control.</td><td class="pri">P0</td><td>CoreLocation/GPS · HealthKit · Whoop · LiveKit+Realtime</td></tr>
+<tr><td><b>Finish &amp; Streak</b></td><td>Celebration on hitting it; shame-free miss + top-up; recap + streak.</td><td class="pri">P0</td><td>HealthKit · Supabase</td></tr>
+</table>
+
+<h2>Future / low</h2>
+<table>
+<tr><th>Feature</th><th>What it delivers</th><th>Pri</th><th>Integrations</th></tr>
+<tr><td><b>Wind-Down / meditative</b></td><td>Evening sensory audio → Sleep Focus hand-off.</td><td class="pri">P3 (low)</td><td>App Intents/Shortcuts · Core Haptics · ElevenLabs</td></tr>
+<tr><td><b>Visual Layer</b></td><td>The vibe you hear, on AI glasses.</td><td class="pri">P3</td><td>AI-glasses SDK</td></tr>
+</table>
+
+<h1>Feature Details</h1>
+
+<h2>Foundational (shared)</h2>
+
+<h3>Frictionless Start <span class="pri">P0</span></h3>
+<ul>
+<li><b>Login-first, non-blocking:</b> the first screen leads with <b>“Sign in with Apple”</b> as the primary, encouraged action (framed with the benefit — <i>save your progress &amp; sync across devices</i>), and a clear <b>secondary “Continue without login.”</b> We nudge toward login, but never force it.</li>
+<li><b>Continue-without-login → anonymous identity:</b> device UUID in Keychain (survives delete/reinstall); app fully usable; profile + facts build under the anon id from session one.</li>
+<li><b>Apple Health without login:</b> HealthKit read is a system permission, not an account — available on either path; one tap → today’s steps + history on-device.</li>
+<li><b>Sign in anytime later:</b> re-offered contextually; on sign-in, <code>/claim</code> transfers all anon data to the account. Existing-account case keeps the account + folds in recent anon activity.</li>
+<li><b>Integrations:</b> Sign in with Apple · HealthKit · Supabase (/claim) · Keychain.</li>
+<li><b>Acceptance:</b> a new user reaches a full session via “Continue without login” (one tap past the sign-in screen, no account); signing in brings 100% of the anon profile/history into the account; reinstall (signed-out) retains it.</li>
+</ul>
+
+<h3>Multimodal Everywhere <span class="pri">P0</span></h3>
+<ul>
+<li>Speak, type, or send a photo (form / equipment / a plan) — combinable in one input.</li>
+<li><b>Integrations:</b> LiveKit + OpenAI Realtime · Gemini (vision).</li>
+<li><b>Acceptance:</b> every core action is reachable by voice; photo + a spoken note is one input.</li>
+</ul>
+
+<h3>Knows You (context engine) <span class="pri">P0</span></h3>
+<ul>
+<li>Captures level, goals, loves/dislikes, equipment, motivators at onboarding and continuously from conversation.</li>
+<li>Music taste from Apple Music/Spotify history; live biometrics (Whoop/Apple Watch) shaping the plan.</li>
+<li><b>Integrations:</b> HealthKit · Whoop · MusicKit/Spotify · Supabase.</li>
+<li><b>Acceptance:</b> the coach references goal + a disliked movement + equipment + recovery in one recommendation.</li>
+</ul>
+
+<h3>The Vibe (adaptive sensory audio) <span class="pri">P0</span> — the differentiator</h3>
+<ul>
+<li><b>Live mix:</b> coach voice intertwined with music + ambient vibe (underground/forest party, stadium, calm sea…), ducked/layered as one experience.</li>
+<li><b>Real-time adaptation:</b> push (rally, tempo up), hold (steady), ramp-down (calm) — the coach decides to match or shift the user’s state.</li>
+<li><b>Voice control:</b> “give me a forest vibe,” “change the music,” “stop the vibe.” Phone pocketed, all audio.</li>
+<li><b>Integrations:</b> ElevenLabs (SFX worlds) · stem adaptive-music + CoreMotion (cadence→BPM) · Steam Audio (spatial “pack”) · LiveKit (mix/duck).</li>
+<li><b>Acceptance:</b> the user swaps world + music by voice mid-session with the coach still clear over the mix.</li>
+</ul>
+
+<h3>Music (their taste) <span class="pri">P0</span></h3>
+<ul>
+<li>Connect Apple Music / Spotify; use their tracks sequenced to the session arc (banger at the peak) and adapted with the vibe.</li>
+<li><b>Integrations:</b> Apple MusicKit (connect + playback) · Spotify SDK/Web API.</li>
+<li><b>Acceptance:</b> their own music plays, paced to the session, controllable by voice.</li>
+</ul>
+
+<h3>Exercise Video Library <span class="pri">P0</span></h3>
+<ul>
+<li><b>What:</b> guarantees the coach’s “you’re starting X → here’s the video” for <b>any</b> session — designed, captured, or brought.</li>
+<li><b>How:</b> normalize each exercise name → look it up in a <b>licensed exercise-video provider</b> (several license demo clips/animations to fitness apps) that permits hosting; store the licensed clip in our DB; <b>fall back</b> to the built-in exercise DB or a still + a form cue if there’s no match.</li>
+<li><b>Shared:</b> one library powers Your Daily Session, Bring Your Own Workout, and admin-ingested templates.</li>
+<li><b>IP boundary:</b> we <b>license</b> the demo content and host it; we <b>do not store, redistribute, or AI-recreate</b> copyrighted clips (e.g. from another app). A captured/brought workout gives us the <b>structure</b>; the clip shown is always the <b>licensed provider’s</b>.</li>
+<li><b>Licensing must-check:</b> pick a provider whose license explicitly allows (a) <b>storing the files in our DB</b> and (b) <b>redistribution in a commercial app</b> — some allow stream-only. Candidates: a 3D-animation licensor (premium, host-and-own) for consistency; an exercise API (broad, fast) for MVP; own filmed footage later (moat).</li>
+<li><b>Integrations:</b> licensed exercise-video provider/API · built-in exercise DB (fallback) · Gemini (name match).</li>
+<li><b>Acceptance:</b> every exercise in a session resolves to a demo (or degrades to an image + cue); identical for designed, captured, and brought workouts.</li>
+</ul>
+
+<h3>Deliver-with-what-we-have (principle) <span class="pri">P0</span></h3>
+<ul>
+<li>Value from current knowledge; ask only to sharpen, never to block; precision compounds as it learns. Applies product-wide.</li>
+</ul>
+
+<h3>Pro-Coach Backing (trust) <span class="pri">P0</span></h3>
+<ul>
+<li>All guidance grounded in the pro-athlete coach’s rules; surfaced in-app + in the coach’s framing.</li>
+<li><b>Integrations:</b> Supabase rules engine.</li>
+</ul>
+
+<h3>Gets Smarter (memory + learning) <span class="pri p1">P1</span></h3>
+<ul>
+<li>Full searchable in-session chat; all data tailors workouts, music, vibes, coach over time.</li>
+<li><b>Integrations:</b> Supabase (user_facts) · Langfuse.</li>
+<li><b>Acceptance:</b> a preference stated once is honored later without repeating.</li>
+</ul>
+
+<h2>Admin / Content (behind the scenes)</h2>
+
+<h3>Admin: Reference Workout Ingestion <span class="pri">P0</span> (admin-only)</h3>
+<ul>
+<li><b>What:</b> an admin-only tool to turn reference training material into <b>structured, reusable programming knowledge</b> that makes our coach’s original designs sharper.</li>
+<li><b>How:</b> admin uploads a screen recording → <b>Gemini</b> segments it and extracts the <b>structure</b> — exercise sequence, sets/reps/tempo, rest intervals, coaching cues, progression — stored in Supabase as <b>workout templates + coaching knowledge</b>.</li>
+<li><b>What is stored:</b> the <b>structure/metadata only</b>, used as reference the coach designs from (blended with dad’s system + sports science). <b>The source video clips are never stored or served.</b> Each exercise maps to the licensed Exercise Video Library for its demo.</li>
+<li><b>Framing:</b> ingested programming is <b>internal reference to inform original coach-authored workouts</b>, not 1:1 clones — defensible and on-brand (“designed by your coach,” not “copied from an app”).</li>
+<li><b>Admin-gated:</b> restricted to the admin; not a user feature. Reuses the Show Me capture/upload mechanism.</li>
+<li><b>Integrations:</b> Gemini (video understanding/segmentation) · Supabase (templates/knowledge) · Show Me capture · admin tool.</li>
+<li><b>Acceptance:</b> an uploaded recording yields a structured template (exercises + sets + rest + cues) in the DB; a session played from it shows <b>licensed</b> demos per exercise; no source video is retained.</li>
+</ul>
+
+<h2>User #1 — Fitness</h2>
+
+<h3>Your Daily Session <span class="pri">P0</span></h3>
+<ul>
+<li>Daily 60-min from the coach rules × the user’s arc; spoken gist + structured list; <b>a video per exercise from the Exercise Video Library</b>; chat to tailor (“30 min,” “I’m wiped”) while respecting progression.</li>
+<li><b>Integrations:</b> Supabase · Gemini (segmentation) · Exercise Video Library (licensed provider); own filmed footage is a later moat upgrade.</li>
+<li><b>Acceptance:</b> by morning a session + gist exists; a change request updates it in one turn, rules-grounded.</li>
+</ul>
+
+<h3>The Coach (real-time) <span class="pri">P0</span></h3>
+<ul>
+<li>Context start; control it (“speed up intro,” “skip to exercise,” “how am I doing”); silent HR + welcome check-ins that override the number; video on “starting X”; times exercises + rests; per-exercise HR; specific, earned, not-too-frequent motivation; cool-down tone shift.</li>
+<li><b>Integrations:</b> LiveKit + OpenAI Realtime · Whoop/Apple Watch (live HR).</li>
+<li><b>Dependency:</b> the structured-workout model (exercises→sets→rest) — the linchpin.</li>
+<li><b>Acceptance:</b> each exercise + rest timed, HR tracked per exercise, video cued on request, tone shifts for cool-down.</li>
+</ul>
+
+<h3>Bring Your Own Workout <span class="pri p1">P1</span></h3>
+<ul>
+<li>Multimodal intake (voice / text / photo / <b>screen-recording</b>, parsed — reuses the Show Me capture). Progressive, non-blocking detail — runs on whatever it has: rich → precise timing/HR/videos/cool-down; sparse (“legs, ~45 min”) → infers defaults from profile + typical patterns; light follow-ups, freely declined, fillable later.</li>
+<li>Save/reuse/edit (“your Tuesday push day”); vet, don’t override (the plan stays theirs); full experience wrap.</li>
+<li><b>Integrations:</b> Gemini vision (parse) · LiveKit+Realtime (dialogue) · Supabase (save).</li>
+<li><b>Acceptance:</b> minimal info still yields a full experience; more detail visibly improves precision; a saved workout returns next week needing only what changed.</li>
+</ul>
+
+<h3>Hype Film <span class="pri p1">P1</span></h3>
+<ul>
+<li>Short video generated daily from context + past workouts to attack starting; assembly pipeline (LLM script → TTS → music → visuals), personalized + in the coach’s voice.</li>
+<li><b>Integrations:</b> video-assembly (TTS + music + visuals) · Supabase.</li>
+</ul>
+
+<h3>The Wrap (recap) <span class="pri p1">P1</span></h3>
+<ul>
+<li>End-of-session breakdown — every exercise, HR + indicators, progress vs before — + ending motivation.</li>
+<li><b>Integrations:</b> Supabase · Whoop/HealthKit.</li>
+<li><b>Acceptance:</b> the recap lists per-exercise detail + HR and ends on a lift.</li>
+</ul>
+
+<h2>User #2 — Steps / Walk (wedge — ships earliest, lowest dependency)</h2>
+
+<h3>Your Step Goal <span class="pri">P0</span></h3>
+<ul>
+<li>Personalized from baseline + schedule + level; adapts over time; consistency-and-delight over a hero number.</li>
+<li><b>Integrations:</b> HealthKit/Health Connect · Supabase.</li>
+</ul>
+
+<h3>All-Day Gap Tracking <span class="pri">P0</span></h3>
+<ul>
+<li>Passive count (Apple Health/Google Fit); incidental steps count; works fully signed-out; always knows the gap; surfaced on open (pull), notifications off unless opted-in; immediate on grant; fresh via background delivery.</li>
+<li><b>Integrations:</b> HealthKit / Health Connect (Google Fit).</li>
+<li><b>Acceptance:</b> a signed-out user allows Apple Health and sees the live gap within seconds, then gets an offered walk — no account.</li>
+</ul>
+
+<h3>Gap-Close Offer <span class="pri">P0</span></h3>
+<ul>
+<li>A specific, delightful walk sized to gap + time + mood (“1,500 → a 12-min beach walk”); always positive framing; mood by spoken word/tap/inferred.</li>
+<li><b>Integrations:</b> LiveKit+Realtime · ElevenLabs · MusicKit.</li>
+<li><b>Acceptance:</b> the offer would plausibly close the gap; declining is frictionless and un-nagged.</li>
+</ul>
+
+<h3>Walk Coach <span class="pri">P0</span></h3>
+<ul>
+<li>Context start, then paces to hit the target in the available time via live steps, pace (GPS), HR; welcome check-ins that override numbers; feel-good milestones; you control it (shorter, quieter, “just walk with me”). Companion, not pusher.</li>
+<li><b>Integrations:</b> CoreLocation/GPS · HealthKit · Whoop/Apple Watch · LiveKit+Realtime.</li>
+<li><b>Acceptance:</b> on a timed walk the coach keeps the user on track for the goal within their window.</li>
+</ul>
+
+<h3>Finish &amp; Streak <span class="pri">P0</span></h3>
+<ul>
+<li>Celebration on hitting it (audio + afterglow); shame-free miss with a small top-up; recap (steps/distance/pace/HR) + streak framed as a win; calm close.</li>
+<li><b>Integrations:</b> HealthKit · Supabase.</li>
+<li><b>Acceptance:</b> hitting the goal feels rewarding; missing produces an encouraging, low-pressure response — never a red “failed.”</li>
+</ul>
+
+<h2>Future / low</h2>
+
+<h3>Wind-Down / meditative <span class="pri p3">P3 (low)</span></h3>
+<ul>
+<li>Evening decompress (walk → breathe → dark screen + fading soundscape → hand off to Sleep Focus); reusable Breathing + SleepMode components.</li>
+<li><b>Integrations:</b> App Intents/Shortcuts (Sleep Focus) · Core Haptics (breathing) · ElevenLabs (soundscape).</li>
+</ul>
+
+<h3>Visual Layer <span class="pri p3">P3</span></h3>
+<ul>
+<li>On AI glasses, the vibe becomes visual atop the audio.</li>
+<li><b>Integrations:</b> AI-glasses SDK.</li>
+</ul>
+
+<div class="note"><b>Two anchors for the build:</b><br>
+• The P0 gap is the <b>Vibe stack + music playback</b> (ElevenLabs · adaptive music/CoreMotion · Steam Audio · MusicKit/Spotify) — the integrations that create the <i>experience</i>, the P0 the user cares about most. Brain/transport/data/biometrics/vision are already built.<br>
+• The <b>structured-workout model</b> is the recurring linchpin (daily session · per-exercise HR/timing · recap · bring-your-own) — build it first; and <b>HealthKit steps</b> single-handedly unlocks the entire Steps wedge (so it can ship earliest).</div>
+
+</body>
+</html>
