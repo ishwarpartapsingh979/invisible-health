@@ -64,6 +64,30 @@ How real product teams actually ship — **parallel with staggered locks, not se
 - **Instrument from day 1 (critical, see below):** usage counters + a "Hosted version — join
   waitlist" hook.
 
+**Open question for next-week review — model REAL multi-role, multi-round ideation (Ishwar, 2026-07-26):**
+PRD + UX + Eng-design don't converge in one pass — real teams iterate through several rounds of cross-role
+debate (Product proposes → Eng flags cost/feasibility → UX reshapes for delight/friction → Product revises…).
+The builder-agent should model this *ideation loop*, not a single define→design→build pass — AND capturing the
+debate is itself Track B's "journey" asset (the versioned reasoning trail is the shareable story, and it's what
+makes the output good). **Process transparency is the product.** Ideas to evaluate:
+- **Specs-as-code, versioned in PRs:** `PRD.md`/`UX-SPEC.md`/`ENG-DESIGN.md` in the repo; each round = a PR
+  editing them; the **PR review thread IS the cross-role debate** — evolution (who pushed back, why) preserved.
+- **Role-agents as reviewers:** a Product agent opens the spec PR; **Eng + UX agents auto-requested as
+  reviewers** critique from their lens; Product revises. Rounds of review = rounds of ideation, all threaded.
+- **Round-based convergence loop:** each round every role-agent critiques via its lens (Product=desirability,
+  UX=usability, Eng=feasibility/cost); a synthesizer merges; repeat until **no new substantive objection OR a
+  round cap** → that's the lock (feeds the LOCKS gate above).
+- **RFC/ADR trail:** open Qs as Issues/Discussions (`proposed→in-debate→converging→locked`); decisions +
+  **rejected alternatives + why** in `DECISIONS.md`/ADRs — nothing lost.
+- **Prototype-in-the-loop for UX:** each UX round outputs an updated **clickable prototype** (versioned HTML via
+  Pages) — "multiple UX ideations" = prototypes you can click through.
+- **Human tiebreaker checkpoints:** after agents converge, **Ishwar reviews from phone** → lock, or send back
+  with a comment (= next round's input). MVP scope/taste stays his call.
+- **Traceability + ripple:** PRD feature ↔ UX section ↔ Eng section ↔ BACKLOG task linked; changing one
+  **auto-flags the others for re-review** (models how a change ripples across roles).
+- **Ship as `templates/`:** role-agent prompts + round-orchestration config + spec/RFC/ADR templates + the
+  LOCKS state machine + review-bot Actions — so any user's idea runs the same ideation loop.
+
 ## If the repo takes off → company / YC path
 - **The repo is the funnel; the company is a layer on top.** Natural business: a **managed/hosted
   version** (free to self-host + BYO-keys, or pay us to run it — we handle keys/billing/orchestration
