@@ -88,6 +88,36 @@ makes the output good). **Process transparency is the product.** Ideas to evalua
 - **Ship as `templates/`:** role-agent prompts + round-orchestration config + spec/RFC/ADR templates + the
   LOCKS state machine + review-bot Actions — so any user's idea runs the same ideation loop.
 
+**Open question for next-week review — Slack as a first-class INPUT channel for the ideation loop (Track B
+builder-agent, Ishwar 2026-07-26):**
+Real discussion + reviews happen in **Slack, outside the terminal/GitHub.** For the **open-source builder-agent
+(Track B)** — *not* the fitness app — Slack should be a first-class input to the ideation loop above: the
+builder-agent **listens** to Slack, **captures** the debate into durable versioned artifacts, and optionally
+lets agents **act** from there. Two directions + ideas:
+- **GitHub → Slack (visibility):** the official **GitHub for Slack** app mirrors PRs/reviews/issues/deploys
+  into channels + lets you act from Slack. Zero code; do first.
+- **Slack → repo/agents (the real "listen"):**
+  - **Claude in Slack** — team **@Claude** in a channel to summarize a thread, capture a decision, open an
+    issue, answer against the repo. Most direct bridge for out-of-terminal discussion.
+  - **Slack Events API bot** — subscribe `app_mention` / `message.channels` / `reaction_added`; a webhook
+    wakes the orchestrator on relevant activity.
+  - **Slack MCP server** — give the builder-agent read/search/post so it can pull "what did #product decide
+    about X," summarize threads, and post back — on demand or on trigger.
+  - **OpenClaw** already speaks Slack (ready-made listener/actor, with the shell-access caveats).
+- **The key pattern — Slack thread → durable artifact (feeds the ideation loop's versioned journey):** trigger
+  on explicit signals, NOT the firehose. **Emoji-reaction triggers** (`:adr:`→ADR PR, `:issue:`→GitHub issue,
+  `:spec:`→PRD/UX edit PR), **slash commands** (`/decision`, `/idea`, `/spec`), or **@mention** ("summarise this
+  thread into an ADR"). Converts cross-role Slack debate into the versioned ADRs/issues/spec-PRs Track B keeps
+  as the journey.
+- **Reviews:** mirror each PR into a channel; on a trigger, **consolidate the Slack thread into ONE PR review
+  comment** so the decision lands on GitHub (the system of record).
+- **Safeguards:** trigger on explicit signals (mention/reaction/slash), not the firehose (cheaper, safer);
+  **Slack is untrusted input** → prompt-injection risk for an agent with repo/shell access, so let Slack
+  **draft** issues/PRs and **never merge/deploy** (keep the human gate); mind **privacy** (what reaches a
+  *public* repo — the public/private split); least-privilege channel scopes.
+- **Start:** GitHub Slack app + Claude in Slack (no/low code) → add a reaction/slash capture bot (Events API or
+  a Slack MCP server) that turns tagged threads into ADRs/issues.
+
 ## If the repo takes off → company / YC path
 - **The repo is the funnel; the company is a layer on top.** Natural business: a **managed/hosted
   version** (free to self-host + BYO-keys, or pay us to run it — we handle keys/billing/orchestration
