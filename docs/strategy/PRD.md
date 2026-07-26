@@ -42,6 +42,19 @@ What we provide:
 - **User #2:** fitness goal = **# steps**. *(low-friction wedge)*
 - **Low priority:** meditative experiences (already served by meditation apps).
 
+## Roadmap — **TBD (to be finalised next week)**
+> **Status: PLACEHOLDER — not yet decided.** Ishwar owns the MVP scope + which users to target
+> first. He is reading the PRD over the week and will draw the MVP line himself; this section
+> gets filled in next week.
+>
+> - **MVP (v1) — for Ishwar + Uday + Jasmine:** _TBD_
+> - **Fast-follow:** _TBD_
+> - **Beyond / later:** _TBD_
+>
+> When finalising, the reference material is in this doc: feature **priorities + integrations**
+> are in the Feature Summary; the two build dependencies are called out at the end
+> (**structured-workout model** = the linchpin; **HealthKit steps** = unlocks the Steps wedge).
+
 ## Core UX principle (do not drift)
 **Voice is THE interface.** Minimise screens. The app asks and confirms **by voice**, and stores
 answers into the relevant tabs (Profile / Workout / History). Buttons are the exception, only
